@@ -14,7 +14,15 @@ interface InputKeys {
   right: Phaser.Input.Keyboard.Key;
   jumpKeys: Phaser.Input.Keyboard.Key[];
   downKeys: Phaser.Input.Keyboard.Key[];
+  attackKeys: Phaser.Input.Keyboard.Key[];
+  dashKeys: Phaser.Input.Keyboard.Key[];
 }
+
+const ATTACK_ACTIVE_MS = 120;
+const ATTACK_COOLDOWN_MS = 260;
+const DASH_DURATION_MS = 135;
+const DASH_COOLDOWN_MS = 650;
+const DASH_SPEED = 390;
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   readonly fsm: StateMachine<Player>;
@@ -33,6 +41,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly levelBadge: LevelBadge;
   private touchingClimbZone = false;
   private isClimbing = false;
+  private attackActiveUntil = 0;
+  private attackReadyAt = 0;
+  private dashUntil = 0;
+  private dashReadyAt = 0;
+  private attackId = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -59,7 +72,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       downKeys: [
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S)
-      ]
+      ],
+      attackKeys: [keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J), keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X)],
+      dashKeys: [keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C)]
     };
     this.leftKeyA = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     this.rightKeyD = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
@@ -97,6 +112,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.isClimbing;
   }
 
+  get facingDirection(): 1 | -1 {
+    return this.flipX ? -1 : 1;
+  }
+
+  get currentAttackId(): number {
+    return this.attackId;
+  }
+
+  get isAttackActive(): boolean {
+    return this.scene.time.now < this.attackActiveUntil;
+  }
+
+  get isDashInvulnerable(): boolean {
+    return this.scene.time.now < this.dashUntil;
+  }
+
+  getAttackBounds(): Phaser.Geom.Rectangle {
+    const reach = 34;
+    const left = this.facingDirection > 0 ? this.x + 5 : this.x - reach - 5;
+    return new Phaser.Geom.Rectangle(left, this.y - 31, reach, 27);
+  }
+
   private get moveLeftHeld(): boolean {
     return this.keys.left.isDown || this.leftKeyA.isDown;
   }
@@ -121,12 +158,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
 
-    this.updateClimbTransitions(body);
-    if (this.isClimbing) {
-      this.updateClimbMovement(body);
+    this.updateActions(time, body);
+    if (this.isDashInvulnerable) {
+      this.setMaxVelocity(DASH_SPEED, PHYSICS.maxFallSpeed);
+      body.setAcceleration(0, 0);
+      body.setVelocityY(0);
     } else {
-      this.updateHorizontalMovement(body);
-      this.updateJump(body, dt);
+      this.setMaxVelocity(PHYSICS.moveSpeed, PHYSICS.maxFallSpeed);
+      body.setAllowGravity(!this.isClimbing);
+      this.updateClimbTransitions(body);
+      if (this.isClimbing) {
+        this.updateClimbMovement(body);
+      } else {
+        this.updateHorizontalMovement(body);
+        this.updateJump(body, dt);
+      }
     }
     this.updateStateMachine(body);
 
@@ -143,6 +189,38 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.updateVisualJuice(time, delta);
     this.touchingClimbZone = false;
+  }
+
+  private updateActions(time: number, body: Phaser.Physics.Arcade.Body): void {
+    const attackPressed = this.keys.attackKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
+    if (attackPressed && time >= this.attackReadyAt && !this.isClimbing) {
+      this.attackId += 1;
+      this.attackActiveUntil = time + ATTACK_ACTIVE_MS;
+      this.attackReadyAt = time + ATTACK_COOLDOWN_MS;
+      this.showAttackArc();
+    }
+
+    const dashPressed = this.keys.dashKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
+    if (dashPressed && time >= this.dashReadyAt && !this.isClimbing) {
+      this.dashUntil = time + DASH_DURATION_MS;
+      this.dashReadyAt = time + DASH_COOLDOWN_MS;
+      body.setAllowGravity(false);
+      body.setVelocity(this.facingDirection * DASH_SPEED, 0);
+      this.emitDust(0.8);
+    }
+  }
+
+  private showAttackArc(): void {
+    const direction = this.facingDirection;
+    const arc = this.scene.add
+      .graphics()
+      .setPosition(this.x, this.y)
+      .lineStyle(4, 0xd8ffe8, 0.9)
+      .beginPath()
+      .arc(direction * 5, -18, 27, direction > 0 ? -0.9 : Math.PI - 0.9, direction > 0 ? 0.9 : Math.PI + 0.9, direction < 0)
+      .strokePath()
+      .setDepth(11);
+    this.scene.tweens.add({ targets: arc, alpha: 0, scale: 1.2, duration: ATTACK_ACTIVE_MS, onComplete: () => arc.destroy() });
   }
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {

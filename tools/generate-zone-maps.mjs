@@ -172,6 +172,20 @@ function marker(kind, name, col, row, extra = []) {
   };
 }
 
+function regionObject(type, name, col, row, widthCols, heightRows, extra = []) {
+  return {
+    id: nextObjectId(),
+    name,
+    type,
+    x: col * TILE,
+    y: row * TILE,
+    width: widthCols * TILE,
+    height: heightRows * TILE,
+    visible: true,
+    properties: extra
+  };
+}
+
 // Places a marker resting on whatever surface is topmost at that column,
 // instead of a manually guessed row — markers are static images with no
 // physics to "settle" them, so a wrong row leaves them floating unreachable.
@@ -260,75 +274,84 @@ function loot(item) {
 // ---------------------------------------------------------------------------
 {
   objectIdSeq = 1;
-  const W = 160;
-  const H = 32;
+  const W = 180;
+  const H = 48;
   const R = H;
   const grid = emptyGrid(W, H);
 
   fillRect(grid, 0, R - 3, W, 3, W, H);
-  carve(grid, 20, R - 3, 4, 2); // first gap, safety floor beneath stays solid
+  carve(grid, 24, R - 3, 6, 2); // shallow thorn bed: jump or take the upper route
+  carve(grid, 76, R - 3, 15, 2); // central underroot crossing
+  carve(grid, 132, R - 3, 7, 2); // final hazard before the guardian clearing
 
-  // Rising platforms — wide enough for a patrolling mob to actually patrol,
-  // not just twitch at both edges of a 4-tile strip.
-  fillRect(grid, 30, R - 7, 9, 2, W, H);
-  fillRect(grid, 50, R - 13, 9, 2, W, H);
+  // Ground route: readable terraces, recovery ledges, and enemy-sized patrol
+  // spaces instead of one unbroken horizontal floor.
+  fillRect(grid, 31, R - 5, 5, 2, W, H);
+  fillRect(grid, 36, R - 8, 13, 5, W, H);
+  fillRect(grid, 57, R - 6, 12, 3, W, H);
+  fillRect(grid, 76, R - 7, 5, 2, W, H);
+  fillRect(grid, 84, R - 11, 5, 2, W, H);
+  fillRect(grid, 94, R - 7, 11, 4, W, H);
+  fillRect(grid, 116, R - 6, 10, 3, W, H);
+  fillRect(grid, 131, R - 7, 4, 2, W, H);
+  fillRect(grid, 138, R - 5, 5, 2, W, H);
 
-  fillRect(grid, 15, R - 6, 3, 2, W, H); // ledge up to the locked vault door
-  fillRect(grid, 1, 4, 5, 1, W, H); // isolated vault room, teleport-only
+  // Canopy route: a genuine optional high line that loops over the dangerous
+  // floor and reveals rewards before dropping back near the checkpoint.
+  fillRect(grid, 12, 39, 9, 2, W, H);
+  fillRect(grid, 27, 34, 10, 2, W, H);
+  fillRect(grid, 42, 29, 10, 2, W, H);
+  fillRect(grid, 54, 20, 15, 2, W, H);
+  fillRect(grid, 73, 24, 11, 2, W, H);
+  fillRect(grid, 91, 28, 12, 2, W, H);
+  fillRect(grid, 107, 22, 12, 2, W, H);
+  fillRect(grid, 121, 15, 15, 2, W, H);
+  fillRect(grid, 141, 21, 11, 2, W, H);
 
-  carve(grid, 66, R - 3, 6, 2); // second, wider gap — a real running jump
-  // Canopy chain: a zig-zag route above the gap, distinct from the low platforms.
-  fillRect(grid, 78, R - 6, 9, 2, W, H);
-  fillRect(grid, 92, R - 11, 9, 2, W, H);
-  fillRect(grid, 108, R - 6, 9, 2, W, H);
-
-  // Boss arena: wide open clearing before the exit door.
-  // (floor already continuous here — kept deliberately obstacle-free)
-
-  // Climbable root-wall set piece: a tall climbable trunk (biosphere-climb-1
-  // art, cols 119-123) leading up to a reward landing (cols 124-133, right
-  // where the trunk ends — nothing solid sits above the climb column itself,
-  // or the player collides with the landing's underside partway up), plus a
-  // jumpable stepped mound (biosphere-terrain-1 art, cols 145-151) — real
-  // hand-placed terrain, not auto-tiled.
-  fillRect(grid, 124, 11, 10, 2, W, H); // climb-wall reward landing
-  fillRect(grid, 145, 26, 7, 6, W, H); // terrain-piece plateau (steps up from the floor)
-
-  const decor = scatterDecor(grid, W, H, 9, ['bush', 'rock'], 11);
+  // Biosphere deliberately has no scattered asset-pack decor. The panorama,
+  // shaped terrain, vines, enemies, beacons, and hazards now form one visual
+  // language; random bushes/rocks were what read as green debris.
+  const decor = [];
 
   const doors = [
-    doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' }),
-    doorObject({
-      col: 17,
-      rowBottom: R - 6,
-      name: 'vaultDoor',
-      targetZone: 'biosphere',
-      targetSpawn: 'vault',
-      requiredLevel: 5
-    })
+    doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' })
   ];
 
   const spawns = [
     spawnPoint('start', 3, R - 8),
     spawnPoint('fromEast', W - 6, R - 8),
-    spawnPoint('vault', 3, 4)
+    spawnPoint('heartwood', 101, R - 10)
   ];
 
   const encounters = [
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 25),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 34),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 82),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 130),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 140)
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 8),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 42),
+    marker('encounter', 'turtle', 59, 19),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 63),
+    marker('encounter', 'turtle', 95, 27),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 121),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 160)
   ];
 
   const interactables = [
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('The biosphere dome cracked a decade before anyone logged a workout for it.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 3, loot('Fern-Wrapped Charm')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 96, lore('Something in the canopy still keeps the old irrigation rhythm.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Sapling Core')),
-    marker('interactable', 'chest', 127, 10, loot('Canopy-View Charm'))
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('The dome still breathes. Follow the roots when the floor turns hostile.')),
+    marker('interactable', 'chest', 31, 33, loot('Fern-Wrapped Charm')),
+    marker('interactable', 'lore', 78, 23, lore('The canopy path belonged to keepers who never touched the forest floor.')),
+    markerOnSurface(grid, W, H, 'interactable', 'chest', 99, loot('Sapling Core')),
+    marker('interactable', 'chest', 128, 14, loot('Heartwood Sigil')),
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 151, lore('The eastern guardian wakes for anything carrying warm blood.'))
   ];
+
+  const climbables = [
+    regionObject('climbable', 'westVine', 52, 20, 2, 25),
+    regionObject('climbable', 'heartVine', 119, 15, 2, 30)
+  ];
+  const hazards = [
+    regionObject('hazard', 'thornBedWest', 24, R - 2, 6, 1),
+    regionObject('hazard', 'thornBedHeart', 76, R - 2, 15, 1),
+    regionObject('hazard', 'thornBedEast', 132, R - 2, 7, 1)
+  ];
+  const checkpoints = [marker('checkpoint', 'heartwood', 101, R - 8)];
 
   writeZone(
     'biosphere.json',
@@ -342,6 +365,9 @@ function loot(item) {
         { type: 'objects', name: 'spawns', objects: spawns },
         { type: 'objects', name: 'encounters', objects: encounters },
         { type: 'objects', name: 'interactables', objects: interactables },
+        { type: 'objects', name: 'climbables', objects: climbables },
+        { type: 'objects', name: 'hazards', objects: hazards },
+        { type: 'objects', name: 'checkpoints', objects: checkpoints },
         { type: 'objects', name: 'decor', objects: decor }
       ]
     })

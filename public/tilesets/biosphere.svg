@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="48" viewBox="0 0 80 48">
+  <defs>
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#355d43"/>
+      <stop offset="1" stop-color="#183a2b"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fbe69"/>
+      <stop offset="1" stop-color="#4b8059"/>
+    </linearGradient>
+  </defs>
+
+  <!-- top-left, top, top-right, center -->
+  <g stroke="#133327" stroke-width="1" stroke-linejoin="round">
+    <path d="M1 16V5Q3 2 6 4Q9 0 12 4Q14 2 16 3V16Z" fill="url(#soil)"/>
+    <path d="M1 6Q3 2 6 4Q9 0 12 4Q14 2 16 3" fill="none" stroke="#b0d276" stroke-width="2"/>
+    <path d="M16 16V3Q19 1 22 4Q25 0 28 4Q30 1 32 3V16Z" fill="url(#soil)"/>
+    <path d="M16 4Q19 1 22 4Q25 0 28 4Q30 1 32 3" fill="none" stroke="#b0d276" stroke-width="2"/>
+    <path d="M32 16V3Q35 1 38 4Q41 0 44 4Q47 1 47 6V16Z" fill="url(#soil)"/>
+    <path d="M32 3Q35 1 38 4Q41 0 44 4Q47 1 47 6" fill="none" stroke="#b0d276" stroke-width="2"/>
+    <path d="M48 16H64V32H48Z" fill="url(#soil)"/>
+    <path d="M52 20l2 2m5 4 2 1m-10 2 3 1" stroke="#52775b" stroke-width="1"/>
+
+    <!-- bottom-left, bottom, bottom-right -->
+    <path d="M1 32H16V45Q14 48 11 45Q8 48 5 45Q2 47 1 44Z" fill="url(#soil)"/>
+    <path d="M16 32H32V45Q29 48 26 45Q23 48 20 45Q18 47 16 45Z" fill="url(#soil)"/>
+    <path d="M32 32H47V44Q46 47 43 45Q40 48 37 45Q34 47 32 44Z" fill="url(#soil)"/>
+
+    <!-- floating platform caps and single -->
+    <path d="M1 37Q3 33 7 35Q10 31 14 35L16 38V43Q12 46 9 43Q5 46 1 42Z" fill="url(#leaf)"/>
+    <path d="M16 32Q20 29 24 33Q28 29 32 32V42Q28 45 24 42Q20 45 16 42Z" fill="url(#leaf)"/>
+    <path d="M32 32Q36 29 40 33Q44 30 47 34V42Q44 46 40 43Q36 46 32 42Z" fill="url(#leaf)"/>
+    <path d="M49 36Q51 31 55 34Q58 29 62 34Q65 31 67 36V42Q64 46 59 43Q54 47 49 42Z" fill="url(#leaf)"/>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
 # Third-party art
 
-Placeholder tiles, parallax backgrounds, and encounter/interactable marker
-icons are built from Kenney's **New Platformer Pack**
+Rustsea, Forge, and Crystal placeholder tiles, parallax backgrounds, and
+encounter/interactable marker icons are built from Kenney's **New Platformer Pack**
 (https://kenney.nl/assets/new-platformer-pack), licensed
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (public domain,
 no attribution required).
@@ -17,3 +17,7 @@ This is still placeholder art standing in for Phase 5's real custom pipeline
 — swap `public/tilesets`, `public/backgrounds`, and `public/sprites/markers`
 for finished art when it's ready; the zone JSON and `ZoneScene` don't need to
 change, only the registered image paths in `src/zones/ZoneRegistry.ts`.
+
+The Biosphere now uses the project-authored `public/tilesets/biosphere.svg`.
+Its illustrated shapes and palette are designed to sit beside the panorama;
+it intentionally replaces the previous pixel-art grass tiles in that zone.
