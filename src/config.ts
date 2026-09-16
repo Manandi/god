@@ -3,6 +3,8 @@ export const GAME_HEIGHT = 540;
 
 export const TILE_SIZE = 16;
 
+export const PARTICLE_TEXTURE_KEY = 'particle';
+
 export const PHYSICS = {
   gravityY: 900,
   moveSpeed: 180,

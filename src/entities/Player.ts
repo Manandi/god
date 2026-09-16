@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
-import { PHYSICS } from '../config';
+import { PHYSICS, PARTICLE_TEXTURE_KEY } from '../config';
 import { StateMachine } from '../fsm/StateMachine';
 import { IdleState, RunState, JumpState, FallState } from './PlayerStates';
+
+const LANDING_SQUASH_MS = 150;
+const FOOTSTEP_INTERVAL_MS = 220;
 
 interface InputKeys {
   left: Phaser.Input.Keyboard.Key;
@@ -17,6 +20,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly rightKeyD: Phaser.Input.Keyboard.Key;
   private coyoteTimer = 0;
   private jumpBufferTimer = 0;
+  private animPhase = 0;
+  private wasGrounded = true;
+  private landingSquashUntil = 0;
+  private footstepTimer = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -69,7 +76,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.keys.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
   }
 
-  update(_time: number, delta: number): void {
+  update(time: number, delta: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
 
@@ -78,6 +85,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.updateStateMachine(body);
 
     this.fsm.update(delta);
+    this.updateVisualJuice(time, delta);
   }
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {
@@ -127,5 +135,58 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     } else if (grounded) {
       this.fsm.transition('idle');
     }
+  }
+
+  private updateVisualJuice(time: number, delta: number): void {
+    const grounded = this.isGrounded;
+    this.animPhase += delta;
+
+    if (!this.wasGrounded && grounded) {
+      this.landingSquashUntil = time + LANDING_SQUASH_MS;
+      this.emitDust(1);
+      this.scene.cameras.main.shake(80, 0.0015);
+    }
+    this.wasGrounded = grounded;
+
+    if (time < this.landingSquashUntil) {
+      const t = 1 - (this.landingSquashUntil - time) / LANDING_SQUASH_MS;
+      const ease = Phaser.Math.Easing.Back.Out(t);
+      this.setScale(1 + 0.25 * (1 - ease), 1 - 0.25 * (1 - ease));
+      return;
+    }
+
+    switch (this.fsm.currentName) {
+      case 'idle':
+        this.setScale(1, 1 + Math.sin(this.animPhase * 0.003) * 0.02);
+        break;
+      case 'run':
+        this.setScale(1 + Math.sin(this.animPhase * 0.02) * 0.05, 1 - Math.sin(this.animPhase * 0.02) * 0.05);
+        this.footstepTimer -= delta;
+        if (grounded && this.footstepTimer <= 0) {
+          this.footstepTimer = FOOTSTEP_INTERVAL_MS;
+          this.emitDust(0.4);
+        }
+        break;
+      case 'jump':
+        this.setScale(0.9, 1.15);
+        break;
+      case 'fall':
+        this.setScale(1.05, 0.92);
+        break;
+    }
+  }
+
+  private emitDust(intensity: number): void {
+    if (!this.scene.textures.exists(PARTICLE_TEXTURE_KEY)) return;
+    const emitter = this.scene.add.particles(this.x, this.y - 2, PARTICLE_TEXTURE_KEY, {
+      speed: { min: 20, max: 40 + 40 * intensity },
+      angle: { min: 200, max: 340 },
+      scale: { start: 0.2 + 0.3 * intensity, end: 0 },
+      alpha: { start: 0.6, end: 0 },
+      lifespan: 300,
+      quantity: Math.max(2, Math.round(4 * intensity))
+    });
+    emitter.explode();
+    this.scene.time.delayedCall(400, () => emitter.destroy());
   }
 }
