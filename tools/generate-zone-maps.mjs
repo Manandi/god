@@ -96,17 +96,24 @@ function findSurfaceRow(grid, col, width, height) {
 }
 
 // Scatters decorative props (rocks/bushes/torches/gems — cosmetic only, no
-// collision) along whatever surface is topmost in each sampled column, so
-// platforms stop reading as one flat stamped tile repeated end to end.
+// collision) along broad ground, so platforms stop reading as one flat
+// stamped tile repeated end to end. Skips narrow platforms (a lone prop
+// perched on a 3-tile stepping stone reads as clutter, not scenery) and
+// keeps a minimum gap between props so they read as placed, not sprayed.
 function scatterDecor(grid, width, height, step, kinds, seed) {
+  const isSolidAt = (r, c) => r >= 0 && r < height && c >= 0 && c < width && grid[r][c] !== 0;
   const objects = [];
-  for (let col = 3; col < width - 3; col += step) {
+  let lastCol = -Infinity;
+  for (let col = 4; col < width - 4; col += step) {
     const jitter = hash(col + seed) % 3;
-    const c = Math.min(width - 3, col + jitter);
+    const c = Math.min(width - 4, col + jitter);
+    if (c - lastCol < Math.max(4, step - 2)) continue;
     const row = findSurfaceRow(grid, c, width, height);
     if (row <= 0) continue;
+    if (!isSolidAt(row, c - 2) || !isSolidAt(row, c + 2)) continue; // needs a wide surface either side
     const kind = kinds[hash(col + seed + 97) % kinds.length];
     objects.push(marker('decor', kind, c, row - 1));
+    lastCol = c;
   }
   return objects;
 }
@@ -261,23 +268,23 @@ function loot(item) {
   fillRect(grid, 0, R - 3, W, 3, W, H);
   carve(grid, 20, R - 3, 4, 2); // first gap, safety floor beneath stays solid
 
-  fillRect(grid, 30, R - 7, 4, 1, W, H);
-  fillRect(grid, 36, R - 11, 4, 1, W, H);
-  fillRect(grid, 42, R - 15, 4, 1, W, H);
+  fillRect(grid, 30, R - 7, 4, 2, W, H);
+  fillRect(grid, 36, R - 11, 4, 2, W, H);
+  fillRect(grid, 42, R - 15, 4, 2, W, H);
 
-  fillRect(grid, 15, R - 6, 3, 1, W, H); // ledge up to the locked vault door
+  fillRect(grid, 15, R - 6, 3, 2, W, H); // ledge up to the locked vault door
   fillRect(grid, 1, 4, 5, 1, W, H); // isolated vault room, teleport-only
 
   carve(grid, 55, R - 3, 5, 2); // second, wider gap — a real running jump
   // Canopy chain: a zig-zag route above the gap, distinct from the low stepping stones.
-  fillRect(grid, 62, R - 6, 4, 1, W, H);
-  fillRect(grid, 70, R - 10, 4, 1, W, H);
-  fillRect(grid, 78, R - 6, 4, 1, W, H);
+  fillRect(grid, 62, R - 6, 4, 2, W, H);
+  fillRect(grid, 70, R - 10, 4, 2, W, H);
+  fillRect(grid, 78, R - 6, 4, 2, W, H);
 
   // Boss arena: wide open clearing before the exit door.
   // (floor already continuous here — kept deliberately obstacle-free)
 
-  const decor = scatterDecor(grid, W, H, 5, ['bush', 'mushroom_red', 'mushroom_brown'], 11);
+  const decor = scatterDecor(grid, W, H, 9, ['bush', 'mushroom_red', 'mushroom_brown'], 11);
 
   const doors = [
     doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' }),
@@ -343,20 +350,20 @@ function loot(item) {
   fillRect(grid, 0, R - 3, W, 3, W, H);
   carve(grid, 25, R - 3, 6, 2); // wide gap right out of the gate
 
-  fillRect(grid, 40, R - 6, 5, 1, W, H);
-  fillRect(grid, 50, R - 10, 5, 1, W, H);
-  fillRect(grid, 60, R - 6, 5, 1, W, H);
+  fillRect(grid, 40, R - 6, 5, 2, W, H);
+  fillRect(grid, 50, R - 10, 5, 2, W, H);
+  fillRect(grid, 60, R - 6, 5, 2, W, H);
 
   // Tide terraces: alternating step heights instead of one flat run.
   carve(grid, 75, R - 3, 25, 2);
-  fillRect(grid, 75, R - 6, 4, 1, W, H);
-  fillRect(grid, 82, R - 9, 4, 1, W, H);
-  fillRect(grid, 89, R - 6, 4, 1, W, H);
+  fillRect(grid, 75, R - 6, 4, 2, W, H);
+  fillRect(grid, 82, R - 9, 4, 2, W, H);
+  fillRect(grid, 89, R - 6, 4, 2, W, H);
   fillRect(grid, 96, R - 3, 4, 3, W, H); // rejoins full floor height
 
   carve(grid, 115, R - 3, 5, 2); // late gap before the boss arena
 
-  const decor = scatterDecor(grid, W, H, 6, ['rock', 'cactus', 'fence_broken'], 23);
+  const decor = scatterDecor(grid, W, H, 10, ['rock', 'cactus', 'fence_broken'], 23);
 
   const doors = [
     doorObject({ col: 0, rowBottom: R - 3, name: 'toBiosphere', targetZone: 'biosphere', targetSpawn: 'fromEast' }),
@@ -422,7 +429,7 @@ function loot(item) {
       chimneyPlatforms.push({ x: 10, y, rest: true });
     } else {
       const x = i % 2 === 0 ? 8 : 2;
-      fillRect(grid, x, y, 5, 1, W, H);
+      fillRect(grid, x, y, 5, 2, W, H);
       chimneyPlatforms.push({ x, y, rest: false });
     }
   }
@@ -432,7 +439,7 @@ function loot(item) {
   // Top landing leading right to the exit.
   fillRect(grid, 2, landingTopRow, W - 2, 3, W, H);
 
-  const decor = scatterDecor(grid, W, H, 4, ['rock', 'chain', 'torch_on_a', 'torch_on_b'], 37);
+  const decor = scatterDecor(grid, W, H, 8, ['rock', 'chain', 'torch_on_a', 'torch_on_b'], 37);
 
   const doors = [
     doorObject({ col: 0, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromEast' }),
@@ -502,7 +509,7 @@ function loot(item) {
     const x = i % 2 === 0 ? 16 : 22;
     const y = R - 6 - i * 3;
     const w = i % 3 === 2 ? 3 : 4;
-    fillRect(grid, x, y, w, 1, W, H);
+    fillRect(grid, x, y, w, 2, W, H);
     spirePlatforms.push({ x, y, w });
   }
   const topSpire = spirePlatforms[SEGMENTS - 1];
@@ -510,7 +517,7 @@ function loot(item) {
 
   fillRect(grid, 40, plateauTopRow, W - 40, 3, W, H); // final plateau
 
-  const decor = scatterDecor(grid, W, H, 4, ['gem_green', 'gem_red', 'gem_yellow', 'rock'], 59);
+  const decor = scatterDecor(grid, W, H, 8, ['gem_green', 'gem_red', 'gem_yellow', 'rock'], 59);
 
   const doors = [doorObject({ col: 0, rowBottom: R - 3, name: 'toForge', targetZone: 'forge', targetSpawn: 'fromEast' })];
 

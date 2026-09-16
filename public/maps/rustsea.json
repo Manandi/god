@@ -10,7 +10,7 @@
   "tileheight": 16,
   "infinite": false,
   "nextlayerid": 7,
-  "nextobjectid": 37,
+  "nextobjectid": 22,
   "tilesets": [
     {
       "firstgid": 1,
@@ -3448,11 +3448,11 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        12,
-        13,
+        1,
+        2,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -3588,6 +3588,11 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3615,15 +3620,15 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -3755,6 +3760,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3989,6 +3998,11 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -3998,17 +4012,17 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        12,
-        13,
         0,
         0,
         0,
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -4018,12 +4032,11 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        12,
-        13,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -4033,11 +4046,11 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -4047,10 +4060,6 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -4129,6 +4138,11 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -4144,6 +4158,11 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -4154,6 +4173,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -4164,33 +4187,10 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -4811,7 +4811,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 24,
+          "id": 9,
           "name": "toBiosphere",
           "type": "door",
           "x": 0,
@@ -4838,7 +4838,7 @@
           ]
         },
         {
-          "id": 25,
+          "id": 10,
           "name": "toForge",
           "type": "door",
           "x": 2224,
@@ -4877,7 +4877,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 26,
+          "id": 11,
           "name": "fromWest",
           "type": "spawn",
           "point": true,
@@ -4889,7 +4889,7 @@
           "properties": []
         },
         {
-          "id": 27,
+          "id": 12,
           "name": "fromEast",
           "type": "spawn",
           "point": true,
@@ -4913,7 +4913,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 28,
+          "id": 13,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4931,7 +4931,7 @@
           ]
         },
         {
-          "id": 29,
+          "id": 14,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4949,7 +4949,7 @@
           ]
         },
         {
-          "id": 30,
+          "id": 15,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4967,7 +4967,7 @@
           ]
         },
         {
-          "id": 31,
+          "id": 16,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4985,7 +4985,7 @@
           ]
         },
         {
-          "id": 32,
+          "id": 17,
           "name": "boss",
           "type": "encounter",
           "point": true,
@@ -5015,7 +5015,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 33,
+          "id": 18,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5038,7 +5038,7 @@
           ]
         },
         {
-          "id": 34,
+          "id": 19,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5061,7 +5061,7 @@
           ]
         },
         {
-          "id": 35,
+          "id": 20,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5084,7 +5084,7 @@
           ]
         },
         {
-          "id": 36,
+          "id": 21,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5123,7 +5123,7 @@
           "name": "rock",
           "type": "decor",
           "point": true,
-          "x": 64,
+          "x": 80,
           "y": 480,
           "width": 0,
           "height": 0,
@@ -5138,24 +5138,6 @@
         },
         {
           "id": 2,
-          "name": "fence_broken",
-          "type": "decor",
-          "point": true,
-          "x": 160,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "fence_broken"
-            }
-          ]
-        },
-        {
-          "id": 3,
           "name": "rock",
           "type": "decor",
           "point": true,
@@ -5173,12 +5155,12 @@
           ]
         },
         {
-          "id": 4,
+          "id": 3,
           "name": "fence_broken",
           "type": "decor",
           "point": true,
-          "x": 336,
-          "y": 480,
+          "x": 400,
+          "y": 512,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -5187,16 +5169,34 @@
               "name": "kind",
               "type": "string",
               "value": "fence_broken"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "name": "cactus",
+          "type": "decor",
+          "point": true,
+          "x": 576,
+          "y": 480,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "cactus"
             }
           ]
         },
         {
           "id": 5,
-          "name": "cactus",
+          "name": "fence_broken",
           "type": "decor",
           "point": true,
-          "x": 464,
-          "y": 512,
+          "x": 1696,
+          "y": 480,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -5204,17 +5204,17 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "cactus"
+              "value": "fence_broken"
             }
           ]
         },
         {
           "id": 6,
-          "name": "cactus",
+          "name": "rock",
           "type": "decor",
           "point": true,
-          "x": 560,
-          "y": 480,
+          "x": 1840,
+          "y": 512,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -5222,17 +5222,17 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "cactus"
+              "value": "rock"
             }
           ]
         },
         {
           "id": 7,
-          "name": "cactus",
+          "name": "rock",
           "type": "decor",
           "point": true,
-          "x": 640,
-          "y": 432,
+          "x": 2000,
+          "y": 480,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -5240,286 +5240,16 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "cactus"
+              "value": "rock"
             }
           ]
         },
         {
           "id": 8,
-          "name": "rock",
-          "type": "decor",
-          "point": true,
-          "x": 736,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "rock"
-            }
-          ]
-        },
-        {
-          "id": 9,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 816,
-          "y": 368,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 10,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 928,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 11,
-          "name": "rock",
-          "type": "decor",
-          "point": true,
-          "x": 1024,
-          "y": 432,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "rock"
-            }
-          ]
-        },
-        {
-          "id": 12,
           "name": "fence_broken",
           "type": "decor",
           "point": true,
-          "x": 1120,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "fence_broken"
-            }
-          ]
-        },
-        {
-          "id": 13,
-          "name": "rock",
-          "type": "decor",
-          "point": true,
-          "x": 1232,
-          "y": 432,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "rock"
-            }
-          ]
-        },
-        {
-          "id": 14,
-          "name": "rock",
-          "type": "decor",
-          "point": true,
-          "x": 1312,
-          "y": 384,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "rock"
-            }
-          ]
-        },
-        {
-          "id": 15,
-          "name": "fence_broken",
-          "type": "decor",
-          "point": true,
-          "x": 1424,
-          "y": 432,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "fence_broken"
-            }
-          ]
-        },
-        {
-          "id": 16,
-          "name": "fence_broken",
-          "type": "decor",
-          "point": true,
-          "x": 1504,
-          "y": 512,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "fence_broken"
-            }
-          ]
-        },
-        {
-          "id": 17,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 1600,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 18,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 1680,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 19,
-          "name": "rock",
-          "type": "decor",
-          "point": true,
-          "x": 1776,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "rock"
-            }
-          ]
-        },
-        {
-          "id": 20,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 1872,
-          "y": 512,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 21,
-          "name": "cactus",
-          "type": "decor",
-          "point": true,
-          "x": 1968,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "cactus"
-            }
-          ]
-        },
-        {
-          "id": 22,
-          "name": "fence_broken",
-          "type": "decor",
-          "point": true,
-          "x": 2096,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "fence_broken"
-            }
-          ]
-        },
-        {
-          "id": 23,
-          "name": "fence_broken",
-          "type": "decor",
-          "point": true,
-          "x": 2176,
+          "x": 2160,
           "y": 480,
           "width": 0,
           "height": 0,

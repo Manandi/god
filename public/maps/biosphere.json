@@ -10,7 +10,7 @@
   "tileheight": 16,
   "infinite": false,
   "nextlayerid": 7,
-  "nextobjectid": 38,
+  "nextobjectid": 26,
   "tilesets": [
     {
       "firstgid": 1,
@@ -2120,10 +2120,10 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -2240,6 +2240,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -2590,14 +2594,14 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -2710,6 +2714,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -2740,6 +2748,10 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -2748,10 +2760,6 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -2860,6 +2868,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3056,6 +3068,10 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -3068,10 +3084,6 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -3161,6 +3173,9 @@
         0,
         0,
         0,
+        1,
+        2,
+        3,
         0,
         0,
         0,
@@ -3173,9 +3188,10 @@
         0,
         0,
         0,
-        11,
-        12,
-        13,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3204,6 +3220,10 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -3216,14 +3236,14 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        3,
         0,
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -3236,10 +3256,6 @@
         0,
         0,
         0,
-        11,
-        12,
-        12,
-        13,
         0,
         0,
         0,
@@ -3277,6 +3293,9 @@
         0,
         0,
         0,
+        6,
+        7,
+        8,
         0,
         0,
         0,
@@ -3321,6 +3340,10 @@
         0,
         0,
         0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3333,33 +3356,10 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        6,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -3891,7 +3891,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 24,
+          "id": 12,
           "name": "toRustsea",
           "type": "door",
           "x": 1904,
@@ -3918,7 +3918,7 @@
           ]
         },
         {
-          "id": 25,
+          "id": 13,
           "name": "vaultDoor",
           "type": "door",
           "x": 272,
@@ -3957,7 +3957,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 26,
+          "id": 14,
           "name": "start",
           "type": "spawn",
           "point": true,
@@ -3969,7 +3969,7 @@
           "properties": []
         },
         {
-          "id": 27,
+          "id": 15,
           "name": "fromEast",
           "type": "spawn",
           "point": true,
@@ -3981,7 +3981,7 @@
           "properties": []
         },
         {
-          "id": 28,
+          "id": 16,
           "name": "vault",
           "type": "spawn",
           "point": true,
@@ -4005,7 +4005,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 29,
+          "id": 17,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4023,7 +4023,7 @@
           ]
         },
         {
-          "id": 30,
+          "id": 18,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4041,7 +4041,7 @@
           ]
         },
         {
-          "id": 31,
+          "id": 19,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4059,7 +4059,7 @@
           ]
         },
         {
-          "id": 32,
+          "id": 20,
           "name": "enemy",
           "type": "encounter",
           "point": true,
@@ -4077,7 +4077,7 @@
           ]
         },
         {
-          "id": 33,
+          "id": 21,
           "name": "boss",
           "type": "encounter",
           "point": true,
@@ -4107,7 +4107,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 34,
+          "id": 22,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -4130,7 +4130,7 @@
           ]
         },
         {
-          "id": 35,
+          "id": 23,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -4153,7 +4153,7 @@
           ]
         },
         {
-          "id": 36,
+          "id": 24,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -4176,7 +4176,7 @@
           ]
         },
         {
-          "id": 37,
+          "id": 25,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -4212,42 +4212,6 @@
       "objects": [
         {
           "id": 1,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 80,
-          "y": 48,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 2,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
-          "x": 160,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 3,
           "name": "mushroom_red",
           "type": "decor",
           "point": true,
@@ -4265,11 +4229,47 @@
           ]
         },
         {
+          "id": 2,
+          "name": "mushroom_red",
+          "type": "decor",
+          "point": true,
+          "x": 368,
+          "y": 480,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "mushroom_red"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "mushroom_red",
+          "type": "decor",
+          "point": true,
+          "x": 640,
+          "y": 448,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "mushroom_red"
+            }
+          ]
+        },
+        {
           "id": 4,
           "name": "mushroom_red",
           "type": "decor",
           "point": true,
-          "x": 304,
+          "x": 784,
           "y": 448,
           "width": 0,
           "height": 0,
@@ -4287,132 +4287,6 @@
           "name": "mushroom_red",
           "type": "decor",
           "point": true,
-          "x": 384,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 6,
-          "name": "mushroom_brown",
-          "type": "decor",
-          "point": true,
-          "x": 448,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_brown"
-            }
-          ]
-        },
-        {
-          "id": 7,
-          "name": "mushroom_brown",
-          "type": "decor",
-          "point": true,
-          "x": 528,
-          "y": 384,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_brown"
-            }
-          ]
-        },
-        {
-          "id": 8,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 640,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 9,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 704,
-          "y": 256,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 10,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
-          "x": 800,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 11,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
-          "x": 880,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 12,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
           "x": 944,
           "y": 480,
           "width": 0,
@@ -4427,48 +4301,12 @@
           ]
         },
         {
-          "id": 13,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
-          "x": 1008,
-          "y": 400,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 14,
-          "name": "mushroom_red",
+          "id": 6,
+          "name": "bush",
           "type": "decor",
           "point": true,
           "x": 1104,
           "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 15,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1168,
-          "y": 336,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -4481,12 +4319,30 @@
           ]
         },
         {
-          "id": 16,
+          "id": 7,
+          "name": "bush",
+          "type": "decor",
+          "point": true,
+          "x": 1216,
+          "y": 448,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "bush"
+            }
+          ]
+        },
+        {
+          "id": 8,
           "name": "mushroom_brown",
           "type": "decor",
           "point": true,
-          "x": 1264,
-          "y": 400,
+          "x": 1376,
+          "y": 448,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -4499,11 +4355,11 @@
           ]
         },
         {
-          "id": 17,
-          "name": "mushroom_red",
+          "id": 9,
+          "name": "mushroom_brown",
           "type": "decor",
           "point": true,
-          "x": 1344,
+          "x": 1520,
           "y": 448,
           "width": 0,
           "height": 0,
@@ -4512,66 +4368,12 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "mushroom_red"
+              "value": "mushroom_brown"
             }
           ]
         },
         {
-          "id": 18,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1424,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 19,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1504,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 20,
-          "name": "mushroom_red",
-          "type": "decor",
-          "point": true,
-          "x": 1568,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "mushroom_red"
-            }
-          ]
-        },
-        {
-          "id": 21,
+          "id": 10,
           "name": "bush",
           "type": "decor",
           "point": true,
@@ -4589,29 +4391,11 @@
           ]
         },
         {
-          "id": 22,
+          "id": 11,
           "name": "bush",
           "type": "decor",
           "point": true,
-          "x": 1744,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 23,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1808,
+          "x": 1792,
           "y": 448,
           "width": 0,
           "height": 0,
