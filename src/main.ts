@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from './config';
-import { PlayScene } from './scenes/PlayScene';
+import { ZoneScene } from './scenes/ZoneScene';
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -16,5 +16,5 @@ new Phaser.Game({
       debug: false
     }
   },
-  scene: [PlayScene]
+  scene: [ZoneScene]
 });
