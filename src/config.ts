@@ -14,5 +14,6 @@ export const PHYSICS = {
   jumpVelocity: -420,
   maxFallSpeed: 700,
   coyoteTimeMs: 100,
-  jumpBufferMs: 120
+  jumpBufferMs: 120,
+  climbSpeed: 110
 } as const;

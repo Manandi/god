@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { PHYSICS, PARTICLE_TEXTURE_KEY } from '../config';
 import { StateMachine } from '../fsm/StateMachine';
-import { IdleState, RunState, JumpState, FallState } from './PlayerStates';
+import { IdleState, RunState, JumpState, FallState, ClimbState } from './PlayerStates';
 import { PlayerProgress } from '../progress/PlayerProgress';
 import { LevelBadge } from '../ui/LevelBadge';
 
@@ -13,6 +13,7 @@ interface InputKeys {
   left: Phaser.Input.Keyboard.Key;
   right: Phaser.Input.Keyboard.Key;
   jumpKeys: Phaser.Input.Keyboard.Key[];
+  downKeys: Phaser.Input.Keyboard.Key[];
 }
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -30,6 +31,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hurtUntil = 0;
   private wasHurt = false;
   private readonly levelBadge: LevelBadge;
+  private touchingClimbZone = false;
+  private isClimbing = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -52,6 +55,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       jumpKeys: [
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W)
+      ],
+      downKeys: [
+        keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
+        keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S)
       ]
     };
     this.leftKeyA = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
@@ -62,7 +69,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .add(new IdleState())
       .add(new RunState())
       .add(new JumpState())
-      .add(new FallState());
+      .add(new FallState())
+      .add(new ClimbState());
     this.fsm.transition('idle');
 
     this.levelBadge = new LevelBadge(scene, PlayerProgress.level, '#38bdf8');
@@ -79,6 +87,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hurtUntil = this.scene.time.now + durationMs;
   }
 
+  /** Called every frame the player overlaps a climbable zone — reset happens
+   * at the end of update() so it must be reconfirmed each frame. */
+  markTouchingClimbZone(): void {
+    this.touchingClimbZone = true;
+  }
+
+  get isClimbingWall(): boolean {
+    return this.isClimbing;
+  }
+
   private get moveLeftHeld(): boolean {
     return this.keys.left.isDown || this.leftKeyA.isDown;
   }
@@ -91,12 +109,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.keys.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
   }
 
+  private get upHeld(): boolean {
+    return this.keys.jumpKeys.some((key) => key.isDown);
+  }
+
+  private get downHeld(): boolean {
+    return this.keys.downKeys.some((key) => key.isDown);
+  }
+
   update(time: number, delta: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
 
-    this.updateHorizontalMovement(body);
-    this.updateJump(body, dt);
+    this.updateClimbTransitions(body);
+    if (this.isClimbing) {
+      this.updateClimbMovement(body);
+    } else {
+      this.updateHorizontalMovement(body);
+      this.updateJump(body, dt);
+    }
     this.updateStateMachine(body);
 
     this.fsm.update(delta);
@@ -111,6 +142,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.wasHurt = isHurt;
 
     this.updateVisualJuice(time, delta);
+    this.touchingClimbZone = false;
   }
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {
@@ -146,7 +178,42 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  /** Grabs on when touching a climbable zone and pressing up, lets go on
+   * jump (pushing off away from the wall) or on leaving the zone. */
+  private updateClimbTransitions(body: Phaser.Physics.Arcade.Body): void {
+    if (!this.isClimbing && this.touchingClimbZone && this.upHeld) {
+      this.isClimbing = true;
+      body.setAllowGravity(false);
+      body.setVelocity(0, 0);
+      return;
+    }
+
+    if (this.isClimbing && (!this.touchingClimbZone || this.jumpJustPressed)) {
+      const pushOff = this.isClimbing && this.touchingClimbZone && this.jumpJustPressed;
+      this.isClimbing = false;
+      body.setAllowGravity(true);
+      if (pushOff) {
+        const dir = this.flipX ? 1 : -1;
+        body.setVelocity(dir * 200, PHYSICS.jumpVelocity * 0.7);
+      } else {
+        // Climbed out the top/bottom of the zone — drop any residual climb
+        // velocity so gravity doesn't carry a leftover upward "bounce".
+        body.setVelocity(0, 0);
+      }
+    }
+  }
+
+  private updateClimbMovement(body: Phaser.Physics.Arcade.Body): void {
+    const vy = this.upHeld ? -PHYSICS.climbSpeed : this.downHeld ? PHYSICS.climbSpeed : 0;
+    body.setVelocity(0, vy);
+  }
+
   private updateStateMachine(body: Phaser.Physics.Arcade.Body): void {
+    if (this.isClimbing) {
+      this.fsm.transition('climb');
+      return;
+    }
+
     const grounded = this.isGrounded;
     const vy = body.velocity.y;
     const vx = body.velocity.x;

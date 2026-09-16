@@ -1922,6 +1922,16 @@
         0,
         0,
         0,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -2072,26 +2082,16 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        6,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        8,
         0,
         0,
         0,
@@ -4343,13 +4343,13 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
         0,
         0,
         0,
@@ -4503,6 +4503,13 @@
         0,
         0,
         0,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
         0,
         0,
         0,
@@ -4656,20 +4663,13 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
         0,
         0,
         0,
@@ -4823,13 +4823,13 @@
         2,
         2,
         2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
-        2,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
         2,
         2,
         2,
@@ -5171,7 +5171,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 16,
+          "id": 15,
           "name": "toRustsea",
           "type": "door",
           "x": 2544,
@@ -5198,7 +5198,7 @@
           ]
         },
         {
-          "id": 17,
+          "id": 16,
           "name": "vaultDoor",
           "type": "door",
           "x": 272,
@@ -5237,7 +5237,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 18,
+          "id": 17,
           "name": "start",
           "type": "spawn",
           "point": true,
@@ -5249,7 +5249,7 @@
           "properties": []
         },
         {
-          "id": 19,
+          "id": 18,
           "name": "fromEast",
           "type": "spawn",
           "point": true,
@@ -5261,7 +5261,7 @@
           "properties": []
         },
         {
-          "id": 20,
+          "id": 19,
           "name": "vault",
           "type": "spawn",
           "point": true,
@@ -5285,7 +5285,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 21,
+          "id": 20,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5303,7 +5303,7 @@
           ]
         },
         {
-          "id": 22,
+          "id": 21,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5321,7 +5321,7 @@
           ]
         },
         {
-          "id": 23,
+          "id": 22,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5339,12 +5339,12 @@
           ]
         },
         {
-          "id": 24,
+          "id": 23,
           "name": "turtle",
           "type": "encounter",
           "point": true,
           "x": 2080,
-          "y": 448,
+          "y": 160,
           "width": 0,
           "height": 0,
           "visible": true,
@@ -5357,7 +5357,7 @@
           ]
         },
         {
-          "id": 25,
+          "id": 24,
           "name": "turtle-boss",
           "type": "encounter",
           "point": true,
@@ -5387,7 +5387,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 26,
+          "id": 25,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5410,7 +5410,7 @@
           ]
         },
         {
-          "id": 27,
+          "id": 26,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5433,7 +5433,7 @@
           ]
         },
         {
-          "id": 28,
+          "id": 27,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5456,7 +5456,7 @@
           ]
         },
         {
-          "id": 29,
+          "id": 28,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5475,6 +5475,29 @@
               "name": "item",
               "type": "string",
               "value": "Sapling Core"
+            }
+          ]
+        },
+        {
+          "id": 29,
+          "name": "chest",
+          "type": "interactable",
+          "point": true,
+          "x": 2032,
+          "y": 160,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "chest"
+            },
+            {
+              "name": "item",
+              "type": "string",
+              "value": "Canopy-View Charm"
             }
           ]
         }
@@ -5711,7 +5734,7 @@
           "name": "bush",
           "type": "decor",
           "point": true,
-          "x": 2112,
+          "x": 2256,
           "y": 448,
           "width": 0,
           "height": 0,
@@ -5729,26 +5752,8 @@
           "name": "bush",
           "type": "decor",
           "point": true,
-          "x": 2256,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 15,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
           "x": 2384,
-          "y": 448,
+          "y": 400,
           "width": 0,
           "height": 0,
           "visible": true,

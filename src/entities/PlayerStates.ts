@@ -35,3 +35,11 @@ export class FallState implements State<Player> {
     player.setTint(0xfb923c);
   }
 }
+
+export class ClimbState implements State<Player> {
+  readonly name = 'climb';
+
+  enter(player: Player): void {
+    player.setTint(0x22c55e);
+  }
+}

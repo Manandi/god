@@ -49,6 +49,13 @@ const DECOR_KEYS = [
   'fence_broken',
   'hill_top'
 ] as const;
+const BIOSPHERE_CLIMB_KEY = 'biosphere-climb-1';
+const BIOSPHERE_TERRAIN_KEY = 'biosphere-terrain-1';
+// World-pixel placement for the biosphere's hand-placed climb/terrain set
+// piece — matches the plateau/landing tiles hand-carved in
+// tools/generate-zone-maps.mjs (cols 119-123, 124-133, 145-151).
+const BIOSPHERE_CLIMB_ZONE = { x: 1904, yTop: 176, width: 80, groundY: 464 };
+const BIOSPHERE_TERRAIN_PIECE = { centerX: 2376, groundY: 464, displayWidth: 150, displayHeight: 186 };
 
 export class ZoneScene extends Phaser.Scene {
   private zoneKey = FIRST_ZONE;
@@ -96,6 +103,14 @@ export class ZoneScene extends Phaser.Scene {
     }
     if (!this.textures.exists(PARTICLE_TEXTURE_KEY)) {
       this.load.image(PARTICLE_TEXTURE_KEY, 'sprites/decor/particle.png');
+    }
+    if (this.zoneKey === 'biosphere') {
+      if (!this.textures.exists(BIOSPHERE_CLIMB_KEY)) {
+        this.load.image(BIOSPHERE_CLIMB_KEY, 'sprites/biosphere/climb-1.png');
+      }
+      if (!this.textures.exists(BIOSPHERE_TERRAIN_KEY)) {
+        this.load.image(BIOSPHERE_TERRAIN_KEY, 'sprites/biosphere/terrain-1.png');
+      }
     }
   }
 
@@ -151,6 +166,9 @@ export class ZoneScene extends Phaser.Scene {
     this.createDoors(map);
     this.createEncounters(map, groundLayer);
     this.createInteractables(map);
+    if (this.zoneKey === 'biosphere') {
+      this.createBiosphereSetPieces();
+    }
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, mapWidthPx, mapHeightPx);
@@ -365,6 +383,30 @@ export class ZoneScene extends Phaser.Scene {
       if (!this.textures.exists(key)) continue;
       this.add.image(obj.x ?? 0, obj.y ?? 0, key).setDepth(4);
     }
+  }
+
+  // First real "hand-placed terrain" set piece: a climbable root-wall and a
+  // jumpable stepped mound, both real painted art with real (if approximate)
+  // collision — matches the plateau/landing tiles hand-carved for biosphere
+  // in tools/generate-zone-maps.mjs, not the usual auto-tiled grid.
+  private createBiosphereSetPieces(): void {
+    const climb = BIOSPHERE_CLIMB_ZONE;
+    this.add
+      .image(climb.x + climb.width / 2, climb.groundY, BIOSPHERE_CLIMB_KEY)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(climb.width, climb.groundY - climb.yTop)
+      .setDepth(4);
+
+    const climbZone = this.add.zone(climb.x + climb.width / 2, (climb.yTop + climb.groundY) / 2, climb.width, climb.groundY - climb.yTop);
+    this.physics.add.existing(climbZone, true);
+    this.physics.add.overlap(this.player, climbZone, () => this.player.markTouchingClimbZone());
+
+    const terrain = BIOSPHERE_TERRAIN_PIECE;
+    this.add
+      .image(terrain.centerX, terrain.groundY, BIOSPHERE_TERRAIN_KEY)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(terrain.displayWidth, terrain.displayHeight)
+      .setDepth(4);
   }
 
   private createParallax(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {

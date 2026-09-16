@@ -285,6 +285,15 @@ function loot(item) {
   // Boss arena: wide open clearing before the exit door.
   // (floor already continuous here — kept deliberately obstacle-free)
 
+  // Climbable root-wall set piece: a tall climbable trunk (biosphere-climb-1
+  // art, cols 119-123) leading up to a reward landing (cols 124-133, right
+  // where the trunk ends — nothing solid sits above the climb column itself,
+  // or the player collides with the landing's underside partway up), plus a
+  // jumpable stepped mound (biosphere-terrain-1 art, cols 145-151) — real
+  // hand-placed terrain, not auto-tiled.
+  fillRect(grid, 124, 11, 10, 2, W, H); // climb-wall reward landing
+  fillRect(grid, 145, 26, 7, 6, W, H); // terrain-piece plateau (steps up from the floor)
+
   const decor = scatterDecor(grid, W, H, 9, ['bush', 'rock'], 11);
 
   const doors = [
@@ -317,7 +326,8 @@ function loot(item) {
     markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('The biosphere dome cracked a decade before anyone logged a workout for it.')),
     markerOnSurface(grid, W, H, 'interactable', 'chest', 3, loot('Fern-Wrapped Charm')),
     markerOnSurface(grid, W, H, 'interactable', 'lore', 96, lore('Something in the canopy still keeps the old irrigation rhythm.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Sapling Core'))
+    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Sapling Core')),
+    marker('interactable', 'chest', 127, 10, loot('Canopy-View Charm'))
   ];
 
   writeZone(
