@@ -260,7 +260,7 @@ function loot(item) {
 // ---------------------------------------------------------------------------
 {
   objectIdSeq = 1;
-  const W = 120;
+  const W = 160;
   const H = 32;
   const R = H;
   const grid = emptyGrid(W, H);
@@ -268,23 +268,24 @@ function loot(item) {
   fillRect(grid, 0, R - 3, W, 3, W, H);
   carve(grid, 20, R - 3, 4, 2); // first gap, safety floor beneath stays solid
 
-  fillRect(grid, 30, R - 7, 4, 2, W, H);
-  fillRect(grid, 36, R - 11, 4, 2, W, H);
-  fillRect(grid, 42, R - 15, 4, 2, W, H);
+  // Rising platforms — wide enough for a patrolling mob to actually patrol,
+  // not just twitch at both edges of a 4-tile strip.
+  fillRect(grid, 30, R - 7, 9, 2, W, H);
+  fillRect(grid, 50, R - 13, 9, 2, W, H);
 
   fillRect(grid, 15, R - 6, 3, 2, W, H); // ledge up to the locked vault door
   fillRect(grid, 1, 4, 5, 1, W, H); // isolated vault room, teleport-only
 
-  carve(grid, 55, R - 3, 5, 2); // second, wider gap — a real running jump
-  // Canopy chain: a zig-zag route above the gap, distinct from the low stepping stones.
-  fillRect(grid, 62, R - 6, 4, 2, W, H);
-  fillRect(grid, 70, R - 10, 4, 2, W, H);
-  fillRect(grid, 78, R - 6, 4, 2, W, H);
+  carve(grid, 66, R - 3, 6, 2); // second, wider gap — a real running jump
+  // Canopy chain: a zig-zag route above the gap, distinct from the low platforms.
+  fillRect(grid, 78, R - 6, 9, 2, W, H);
+  fillRect(grid, 92, R - 11, 9, 2, W, H);
+  fillRect(grid, 108, R - 6, 9, 2, W, H);
 
   // Boss arena: wide open clearing before the exit door.
   // (floor already continuous here — kept deliberately obstacle-free)
 
-  const decor = scatterDecor(grid, W, H, 9, ['bush', 'mushroom_red', 'mushroom_brown'], 11);
+  const decor = scatterDecor(grid, W, H, 9, ['bush', 'rock'], 11);
 
   const doors = [
     doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' }),
@@ -306,17 +307,17 @@ function loot(item) {
 
   const encounters = [
     markerOnSurface(grid, W, H, 'encounter', 'turtle', 25),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 44),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 63),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 100),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 106)
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 34),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 82),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 130),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 140)
   ];
 
   const interactables = [
     markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('The biosphere dome cracked a decade before anyone logged a workout for it.')),
     markerOnSurface(grid, W, H, 'interactable', 'chest', 3, loot('Fern-Wrapped Charm')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 72, lore('Something in the canopy still keeps the old irrigation rhythm.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 80, loot('Sapling Core'))
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 96, lore('Something in the canopy still keeps the old irrigation rhythm.')),
+    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Sapling Core'))
   ];
 
   writeZone(
@@ -342,7 +343,7 @@ function loot(item) {
 // ---------------------------------------------------------------------------
 {
   objectIdSeq = 1;
-  const W = 140;
+  const W = 160;
   const H = 34;
   const R = H;
   const grid = emptyGrid(W, H);
@@ -350,18 +351,18 @@ function loot(item) {
   fillRect(grid, 0, R - 3, W, 3, W, H);
   carve(grid, 25, R - 3, 6, 2); // wide gap right out of the gate
 
-  fillRect(grid, 40, R - 6, 5, 2, W, H);
-  fillRect(grid, 50, R - 10, 5, 2, W, H);
-  fillRect(grid, 60, R - 6, 5, 2, W, H);
+  fillRect(grid, 40, R - 6, 9, 2, W, H);
+  fillRect(grid, 54, R - 10, 9, 2, W, H);
+  fillRect(grid, 68, R - 6, 9, 2, W, H);
 
   // Tide terraces: alternating step heights instead of one flat run.
-  carve(grid, 75, R - 3, 25, 2);
-  fillRect(grid, 75, R - 6, 4, 2, W, H);
-  fillRect(grid, 82, R - 9, 4, 2, W, H);
-  fillRect(grid, 89, R - 6, 4, 2, W, H);
-  fillRect(grid, 96, R - 3, 4, 3, W, H); // rejoins full floor height
+  carve(grid, 90, R - 3, 39, 2);
+  fillRect(grid, 90, R - 6, 8, 2, W, H);
+  fillRect(grid, 106, R - 9, 8, 2, W, H);
+  fillRect(grid, 122, R - 6, 8, 2, W, H);
+  fillRect(grid, 130, R - 3, 4, 3, W, H); // rejoins full floor height
 
-  carve(grid, 115, R - 3, 5, 2); // late gap before the boss arena
+  carve(grid, 140, R - 3, 5, 2); // late gap before the boss arena
 
   const decor = scatterDecor(grid, W, H, 10, ['rock', 'cactus', 'fence_broken'], 23);
 
@@ -374,17 +375,17 @@ function loot(item) {
 
   const encounters = [
     markerOnSurface(grid, W, H, 'encounter', 'enemy', 34),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 52),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 84),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 108),
-    markerOnSurface(grid, W, H, 'encounter', 'boss', 130)
+    markerOnSurface(grid, W, H, 'encounter', 'enemy', 44),
+    markerOnSurface(grid, W, H, 'encounter', 'enemy', 72),
+    markerOnSurface(grid, W, H, 'encounter', 'enemy', 110),
+    markerOnSurface(grid, W, H, 'encounter', 'boss', 150)
   ];
 
   const interactables = [
     markerOnSurface(grid, W, H, 'interactable', 'lore', 10, lore('The sea rusted first, then the machines that watched it.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 62, loot('Corroded Gear Fragment')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 76, lore('High-tide marks are scored into the terrace, a decade apart.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Salt-Etched Locket'))
+    markerOnSurface(grid, W, H, 'interactable', 'chest', 58, loot('Corroded Gear Fragment')),
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 94, lore('High-tide marks are scored into the terrace, a decade apart.')),
+    markerOnSurface(grid, W, H, 'interactable', 'chest', 134, loot('Salt-Etched Locket'))
   ];
 
   writeZone(
@@ -421,6 +422,7 @@ function loot(item) {
   // landing partway up so the climb has a breather instead of one long grind.
   const SEGMENTS = 12;
   const MID_REST_INDEX = 6;
+  const WIDE_INDICES = new Set([2, 4, 9]); // these get a patrolling enemy — give it real room
   const chimneyPlatforms = [];
   for (let i = 0; i < SEGMENTS; i++) {
     const y = R - 7 - i * 4;
@@ -429,7 +431,8 @@ function loot(item) {
       chimneyPlatforms.push({ x: 10, y, rest: true });
     } else {
       const x = i % 2 === 0 ? 8 : 2;
-      fillRect(grid, x, y, 5, 2, W, H);
+      const width = WIDE_INDICES.has(i) ? 9 : 5;
+      fillRect(grid, x, y, width, 2, W, H);
       chimneyPlatforms.push({ x, y, rest: false });
     }
   }
@@ -502,13 +505,15 @@ function loot(item) {
 
   fillRect(grid, 0, R - 3, 14, 3, W, H);
 
-  // Spire climb: asymmetric jutting platforms, narrower every third segment.
+  // Spire climb: asymmetric jutting platforms, narrower every third segment
+  // — except where a patrolling enemy stands, which gets real room instead.
   const SEGMENTS = 13;
+  const WIDE_INDICES = new Set([3, 7]);
   const spirePlatforms = [];
   for (let i = 0; i < SEGMENTS; i++) {
     const x = i % 2 === 0 ? 16 : 22;
     const y = R - 6 - i * 3;
-    const w = i % 3 === 2 ? 3 : 4;
+    const w = WIDE_INDICES.has(i) ? 8 : i % 3 === 2 ? 3 : 4;
     fillRect(grid, x, y, w, 2, W, H);
     spirePlatforms.push({ x, y, w });
   }

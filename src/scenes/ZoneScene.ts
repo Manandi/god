@@ -38,8 +38,6 @@ const TURTLE_WALK_ANIM = 'turtle-walk';
 const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1', 'turtle_walk_2', 'turtle_walk_3', 'turtle_walk_4'];
 const DECOR_KEYS = [
   'bush',
-  'mushroom_red',
-  'mushroom_brown',
   'cactus',
   'rock',
   'torch_on_a',
@@ -247,20 +245,29 @@ export class ZoneScene extends Phaser.Scene {
 
       if (kind === 'turtle') {
         this.enemies.push(
-          new Enemy(this, x, y, 'turtle_idle', groundLayer, { patrols: true, animKey: TURTLE_WALK_ANIM })
+          new Enemy(this, x, y, 'turtle_idle', groundLayer, {
+            patrols: true,
+            animKey: TURTLE_WALK_ANIM,
+            level: 1
+          })
         );
         continue;
       }
       if (kind === 'turtle-boss') {
         if (this.textures.exists('turtle_boss')) {
-          this.enemies.push(new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: false }));
+          this.enemies.push(
+            new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: false, level: 3, isBoss: true })
+          );
         }
         continue;
       }
 
       const key = `marker-${kind}`;
       if (!this.textures.exists(key)) continue;
-      this.enemies.push(new Enemy(this, x, y, key, groundLayer, { patrols: kind !== 'boss' }));
+      const isBoss = kind === 'boss';
+      this.enemies.push(
+        new Enemy(this, x, y, key, groundLayer, { patrols: !isBoss, level: isBoss ? 3 : 1, isBoss })
+      );
     }
 
     if (this.enemies.length > 0) {

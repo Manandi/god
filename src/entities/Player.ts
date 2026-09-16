@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { PHYSICS, PARTICLE_TEXTURE_KEY } from '../config';
 import { StateMachine } from '../fsm/StateMachine';
 import { IdleState, RunState, JumpState, FallState } from './PlayerStates';
+import { PlayerProgress } from '../progress/PlayerProgress';
+import { LevelBadge } from '../ui/LevelBadge';
 
 const LANDING_SQUASH_MS = 150;
 const FOOTSTEP_INTERVAL_MS = 220;
@@ -27,6 +29,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private footstepTimer = 0;
   private hurtUntil = 0;
   private wasHurt = false;
+  private readonly levelBadge: LevelBadge;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -61,6 +64,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .add(new JumpState())
       .add(new FallState());
     this.fsm.transition('idle');
+
+    this.levelBadge = new LevelBadge(scene, PlayerProgress.level, '#38bdf8');
   }
 
   get isGrounded(): boolean {
@@ -95,6 +100,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.updateStateMachine(body);
 
     this.fsm.update(delta);
+    this.levelBadge.follow(this.x, this.y, this.displayHeight + 6);
 
     const isHurt = time < this.hurtUntil;
     if (isHurt) {

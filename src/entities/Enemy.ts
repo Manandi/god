@@ -1,18 +1,24 @@
 import Phaser from 'phaser';
+import { LevelBadge } from '../ui/LevelBadge';
 
 const PATROL_SPEED = 40;
 const PROBE_AHEAD = 12;
 const DEATH_TWEEN_MS = 150;
+const REGULAR_BADGE_COLOR = '#facc15';
+const BOSS_BADGE_COLOR = '#ef4444';
 
 export interface EnemyOptions {
   patrols: boolean;
   animKey?: string;
+  level: number;
+  isBoss?: boolean;
 }
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private direction: 1 | -1 = 1;
   private readonly patrols: boolean;
   private readonly groundLayer: Phaser.Tilemaps.TilemapLayer;
+  private readonly levelBadge: LevelBadge;
   private defeated = false;
 
   constructor(
@@ -35,6 +41,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (options.animKey) {
       this.play(options.animKey);
     }
+
+    this.levelBadge = new LevelBadge(scene, options.level, options.isBoss ? BOSS_BADGE_COLOR : REGULAR_BADGE_COLOR);
+    this.levelBadge.follow(x, y, this.displayHeight + 6);
   }
 
   get isDefeated(): boolean {
@@ -47,6 +56,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (!this.patrols) {
       body.setVelocityX(0);
+      this.levelBadge.follow(this.x, this.y, this.displayHeight + 6);
       return;
     }
 
@@ -61,6 +71,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!groundTile || wallTile || blocked) {
       this.direction = this.direction === 1 ? -1 : 1;
     }
+
+    this.levelBadge.follow(this.x, this.y, this.displayHeight + 6);
   }
 
   defeat(): void {
@@ -71,6 +83,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     body.enable = false;
     this.anims.stop();
     this.setTint(0x888888);
+    this.levelBadge.destroy();
     this.scene.tweens.add({
       targets: this,
       scaleY: 0.15,
