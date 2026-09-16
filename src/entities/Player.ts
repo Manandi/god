@@ -5,6 +5,7 @@ import { IdleState, RunState, JumpState, FallState } from './PlayerStates';
 
 const LANDING_SQUASH_MS = 150;
 const FOOTSTEP_INTERVAL_MS = 220;
+const HURT_TINT = 0xff5555;
 
 interface InputKeys {
   left: Phaser.Input.Keyboard.Key;
@@ -24,6 +25,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private wasGrounded = true;
   private landingSquashUntil = 0;
   private footstepTimer = 0;
+  private hurtUntil = 0;
+  private wasHurt = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -64,6 +67,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.body?.blocked.down ?? false;
   }
 
+  /** Flashes a hurt tint for durationMs, overriding the state-driven tint
+   * (idle/run/jump/fall each set their own) until it expires, then restores
+   * whatever tint the current state should show. */
+  setHurtFlash(durationMs: number): void {
+    this.hurtUntil = this.scene.time.now + durationMs;
+  }
+
   private get moveLeftHeld(): boolean {
     return this.keys.left.isDown || this.leftKeyA.isDown;
   }
@@ -85,6 +95,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.updateStateMachine(body);
 
     this.fsm.update(delta);
+
+    const isHurt = time < this.hurtUntil;
+    if (isHurt) {
+      this.setTint(HURT_TINT);
+    } else if (this.wasHurt) {
+      this.fsm.refresh();
+    }
+    this.wasHurt = isHurt;
+
     this.updateVisualJuice(time, delta);
   }
 

@@ -39,4 +39,11 @@ export class StateMachine<TOwner> {
   update(delta: number): void {
     this.current?.execute?.(this.owner, delta);
   }
+
+  /** Re-fires the current state's enter() without changing state — used to
+   * restore state-driven visuals (e.g. tint) after something else overrode
+   * them temporarily. */
+  refresh(): void {
+    this.current?.enter?.(this.owner, this.current.name);
+  }
 }

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PHYSICS, TILE_SIZE, PARTICLE_TEXTURE_KEY } from '../config';
 import { Player } from '../entities/Player';
+import { Enemy } from '../entities/Enemy';
 import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistry';
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
@@ -31,6 +32,7 @@ const TRANSITION_COOLDOWN_MS = 400;
 const LOCKED_MESSAGE_MS = 1800;
 const COLLECT_MESSAGE_MS = 2600;
 const INTERACT_RADIUS = 30;
+const PLAYER_INVULNERABLE_MS = 800;
 const MARKER_KEYS = ['enemy', 'boss', 'chest', 'lore'] as const;
 const TURTLE_WALK_ANIM = 'turtle-walk';
 const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1', 'turtle_walk_2', 'turtle_walk_3', 'turtle_walk_4'];
@@ -59,6 +61,8 @@ export class ZoneScene extends Phaser.Scene {
   private promptText?: Phaser.GameObjects.Text;
   private interactKey!: Phaser.Input.Keyboard.Key;
   private interactables: InteractableEntry[] = [];
+  private enemies: Enemy[] = [];
+  private playerInvulnerableUntil = 0;
 
   constructor() {
     super('ZoneScene');
@@ -101,6 +105,8 @@ export class ZoneScene extends Phaser.Scene {
     const config = ZONES[this.zoneKey];
 
     this.interactables = [];
+    this.enemies = [];
+    this.playerInvulnerableUntil = 0;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     this.transitionLocked = true;
@@ -145,7 +151,7 @@ export class ZoneScene extends Phaser.Scene {
 
     this.createDecor(map);
     this.createDoors(map);
-    this.createEncounters(map);
+    this.createEncounters(map, groundLayer);
     this.createInteractables(map);
 
     const camera = this.cameras.main;
@@ -171,6 +177,9 @@ export class ZoneScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     this.player.update(time, delta);
     this.updateInteractions();
+    for (const enemy of this.enemies) {
+      if (!enemy.isDefeated) enemy.update();
+    }
   }
 
   private findSpawnPosition(map: Phaser.Tilemaps.Tilemap, spawnName: string): { x: number; y: number } {
@@ -225,32 +234,61 @@ export class ZoneScene extends Phaser.Scene {
     });
   }
 
-  private createEncounters(map: Phaser.Tilemaps.Tilemap): void {
+  private createEncounters(map: Phaser.Tilemaps.Tilemap, groundLayer: Phaser.Tilemaps.TilemapLayer): void {
     const layer = map.getObjectLayer('encounters');
     for (const obj of layer?.objects ?? []) {
       const props = getObjectProperties(obj);
       const kind = String(props.kind ?? '');
       const x = obj.x ?? 0;
       // markerOnSurface anchors icons a tile above the surface for the
-      // generic 16px markers; character-height sprites use a bottom origin
-      // instead so their feet actually touch the ground, hence the +TILE_SIZE.
+      // generic 16px markers; physics sprites use a bottom origin instead so
+      // their feet actually touch the ground, hence the +TILE_SIZE.
       const y = (obj.y ?? 0) + TILE_SIZE;
 
       if (kind === 'turtle') {
-        this.add.sprite(x, y, 'turtle_idle').setOrigin(0.5, 1).setDepth(5).play(TURTLE_WALK_ANIM);
+        this.enemies.push(
+          new Enemy(this, x, y, 'turtle_idle', groundLayer, { patrols: true, animKey: TURTLE_WALK_ANIM })
+        );
         continue;
       }
       if (kind === 'turtle-boss') {
         if (this.textures.exists('turtle_boss')) {
-          this.add.image(x, y, 'turtle_boss').setOrigin(0.5, 1).setDepth(5);
+          this.enemies.push(new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: false }));
         }
         continue;
       }
 
       const key = `marker-${kind}`;
       if (!this.textures.exists(key)) continue;
-      this.add.image(obj.x ?? 0, obj.y ?? 0, key).setDepth(5);
+      this.enemies.push(new Enemy(this, x, y, key, groundLayer, { patrols: kind !== 'boss' }));
     }
+
+    if (this.enemies.length > 0) {
+      this.physics.add.collider(this.enemies, groundLayer);
+      this.physics.add.overlap(this.player, this.enemies, (_player, enemyObj) => {
+        this.handleEnemyOverlap(enemyObj as Enemy);
+      });
+    }
+  }
+
+  private handleEnemyOverlap(enemy: Enemy): void {
+    if (enemy.isDefeated) return;
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const isStomp = body.velocity.y > 0 && this.player.y <= enemy.y - enemy.displayHeight * 0.6;
+
+    if (isStomp) {
+      enemy.defeat();
+      body.setVelocityY(PHYSICS.jumpVelocity * 0.6);
+      this.cameras.main.shake(60, 0.002);
+      return;
+    }
+
+    if (this.time.now < this.playerInvulnerableUntil) return;
+    this.playerInvulnerableUntil = this.time.now + PLAYER_INVULNERABLE_MS;
+    const pushDir = this.player.x < enemy.x ? -1 : 1;
+    body.setVelocity(pushDir * 200, -200);
+    this.player.setHurtFlash(600);
+    this.cameras.main.shake(100, 0.003);
   }
 
   private createInteractables(map: Phaser.Tilemaps.Tilemap): void {
