@@ -83,6 +83,9 @@ export class ZoneScene extends Phaser.Scene {
     this.load.tilemapTiledJSON(this.zoneKey, config.mapPath);
     this.load.image(`tileset-${this.zoneKey}`, config.tilesetPath);
     this.load.image(`bg-${this.zoneKey}`, config.backgroundPath);
+    if (config.heroBackgroundPath && !this.textures.exists(`hero-${this.zoneKey}`)) {
+      this.load.image(`hero-${this.zoneKey}`, config.heroBackgroundPath);
+    }
     for (const key of MARKER_KEYS) {
       if (!this.textures.exists(`marker-${key}`)) {
         this.load.image(`marker-${key}`, `sprites/markers/${key}.png`);
@@ -414,6 +417,9 @@ export class ZoneScene extends Phaser.Scene {
     const width = mapWidthPx + 2000;
     const height = mapHeightPx + 400;
 
+    // Tinted repeating texture as a guaranteed-full-coverage base layer —
+    // keeps working at the level's far edges even where a hero painting
+    // (below) doesn't reach.
     this.add
       .tileSprite(mapWidthPx / 2, mapHeightPx / 2, width, height, bgKey)
       .setScrollFactor(0.15)
@@ -425,6 +431,23 @@ export class ZoneScene extends Phaser.Scene {
       .setScrollFactor(0.4)
       .setTint(config.backgroundTintNear)
       .setDepth(-10);
+
+    if (config.heroBackgroundPath) {
+      const heroKey = `hero-${this.zoneKey}`;
+      const source = this.textures.get(heroKey).getSourceImage();
+      // Centered and scrolling slower than the camera (scrollFactor < 1),
+      // the image has to be as wide as the whole map or the untouched edges
+      // peek out from behind it as the camera nears either end — see the
+      // parallax-coverage math this replaced for the derivation.
+      const displayWidth = mapWidthPx;
+      const displayHeight = displayWidth * (source.height / source.width);
+      this.add
+        .image(mapWidthPx / 2, mapHeightPx, heroKey)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(displayWidth, displayHeight)
+        .setScrollFactor(0.45)
+        .setDepth(-9);
+    }
   }
 
   private createAmbientParticles(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {

@@ -5,6 +5,9 @@ export interface ZoneConfig {
   backgroundPath: string;
   backgroundTintFar: number;
   backgroundTintNear: number;
+  /** Optional single large painted scene, shown once (not tiled) instead of
+   * the tinted repeating backgroundPath — for real hand-painted key art. */
+  heroBackgroundPath?: string;
 }
 
 export const ZONES: Record<string, ZoneConfig> = {
@@ -14,7 +17,8 @@ export const ZONES: Record<string, ZoneConfig> = {
     tilesetPath: 'tilesets/biosphere.png',
     backgroundPath: 'backgrounds/biosphere.png',
     backgroundTintFar: 0x1b3a2a,
-    backgroundTintNear: 0x2f6b47
+    backgroundTintNear: 0x2f6b47,
+    heroBackgroundPath: 'backgrounds/biosphere-panorama-hero.jpg'
   },
   rustsea: {
     key: 'rustsea',
