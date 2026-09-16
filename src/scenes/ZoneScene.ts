@@ -77,6 +77,9 @@ export class ZoneScene extends Phaser.Scene {
         this.load.image(`marker-${key}`, `sprites/markers/${key}.png`);
       }
     }
+    if (!this.textures.exists('marker-turtle')) {
+      this.load.image('marker-turtle', 'sprites/enemies/turtle_idle.png');
+    }
     for (const key of DECOR_KEYS) {
       if (!this.textures.exists(`decor-${key}`)) {
         this.load.image(`decor-${key}`, `sprites/decor/${key}.png`);

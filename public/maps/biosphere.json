@@ -4006,7 +4006,7 @@
       "objects": [
         {
           "id": 17,
-          "name": "enemy",
+          "name": "turtle",
           "type": "encounter",
           "point": true,
           "x": 400,
@@ -4018,13 +4018,13 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "enemy"
+              "value": "turtle"
             }
           ]
         },
         {
           "id": 18,
-          "name": "enemy",
+          "name": "turtle",
           "type": "encounter",
           "point": true,
           "x": 704,
@@ -4036,13 +4036,13 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "enemy"
+              "value": "turtle"
             }
           ]
         },
         {
           "id": 19,
-          "name": "enemy",
+          "name": "turtle",
           "type": "encounter",
           "point": true,
           "x": 1008,
@@ -4054,13 +4054,13 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "enemy"
+              "value": "turtle"
             }
           ]
         },
         {
           "id": 20,
-          "name": "enemy",
+          "name": "turtle",
           "type": "encounter",
           "point": true,
           "x": 1600,
@@ -4072,7 +4072,7 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "enemy"
+              "value": "turtle"
             }
           ]
         },

@@ -305,10 +305,10 @@ function loot(item) {
   ];
 
   const encounters = [
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 25),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 44),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 63),
-    markerOnSurface(grid, W, H, 'encounter', 'enemy', 100),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 25),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 44),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 63),
+    markerOnSurface(grid, W, H, 'encounter', 'turtle', 100),
     markerOnSurface(grid, W, H, 'encounter', 'boss', 106)
   ];
 
