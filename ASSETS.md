@@ -18,6 +18,8 @@ This is still placeholder art standing in for Phase 5's real custom pipeline
 for finished art when it's ready; the zone JSON and `ZoneScene` don't need to
 change, only the registered image paths in `src/zones/ZoneRegistry.ts`.
 
-The Biosphere now uses the project-authored `public/tilesets/biosphere.svg`.
-Its illustrated shapes and palette are designed to sit beside the panorama;
-it intentionally replaces the previous pixel-art grass tiles in that zone.
+The Biosphere's visible terrain is now rendered directly from its collision
+grid by `src/zones/BiosphereTerrain.ts`: continuous moss-topped stone spans,
+highlighted traversable edges and subtle rock strata. The earlier SVG sheet
+is retained for map compatibility but is not the visible terrain renderer.
+The supplied forest panorama and creature artwork are preserved.

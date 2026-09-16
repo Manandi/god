@@ -6,6 +6,7 @@ import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistr
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
 import { CollectedItems } from '../progress/CollectedItems';
+import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
   zoneKey?: string;
@@ -77,6 +78,13 @@ export class ZoneScene extends Phaser.Scene {
   private checkpoints: CheckpointEntry[] = [];
   private activeCheckpoint = FIRST_SPAWN;
   private enemyAttackIds = new WeakMap<Enemy, number>();
+  private guardian?: Enemy;
+  private regionText?: Phaser.GameObjects.Text;
+  private mapDot?: Phaser.GameObjects.Arc;
+  private mapWidth = 1;
+  private mapHeight = 1;
+  private regions: {x:number; name:string}[] = [];
+  private dying = false;
 
   constructor() {
     super('ZoneScene');
@@ -131,6 +139,8 @@ export class ZoneScene extends Phaser.Scene {
     this.enemyAttackIds = new WeakMap<Enemy, number>();
     this.playerInvulnerableUntil = 0;
     this.health = MAX_HEALTH;
+    this.dying = false;
+    this.guardian = undefined;
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
@@ -159,9 +169,13 @@ export class ZoneScene extends Phaser.Scene {
       throw new Error(`Failed to create ground layer for zone "${this.zoneKey}"`);
     }
     groundLayer.setCollisionByExclusion([-1, 0]);
+    if (this.zoneKey === 'biosphere') drawBiosphereTerrain(this, map, groundLayer);
 
     const mapWidthPx = map.widthInPixels;
     const mapHeightPx = map.heightInPixels;
+    this.mapWidth = mapWidthPx;
+    this.mapHeight = mapHeightPx;
+    this.regions = (map.getObjectLayer('regions')?.objects ?? []).map(o=>({x:o.x ?? 0,name:o.name}));
 
     this.createParallax(config, mapWidthPx, mapHeightPx);
     this.createAmbientParticles(config, mapWidthPx, mapHeightPx);
@@ -188,7 +202,7 @@ export class ZoneScene extends Phaser.Scene {
     camera.startFollow(this.player, true, 0.1, 0.1);
 
     this.messageText = this.add
-      .text(16, 16, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ffe066', backgroundColor: '#00000099' })
+      .text(18, 108, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ffe066', backgroundColor: '#000000cc', wordWrap: {width:570} })
       .setPadding(6, 4, 6, 4)
       .setScrollFactor(0)
       .setDepth(100)
@@ -202,15 +216,21 @@ export class ZoneScene extends Phaser.Scene {
       .setVisible(false);
 
     this.createHud();
+    if(this.zoneKey === 'biosphere') this.createWorldMap(map,groundLayer);
+    this.cameras.main.fadeIn(500,6,17,14);
   }
 
   update(time: number, delta: number): void {
+    if(this.dying) return;
     this.player.update(time, delta);
     this.updateInteractions();
     for (const enemy of this.enemies) {
       if (!enemy.isDefeated) enemy.update(this.player.x, this.player.y);
     }
     this.updatePlayerAttacks();
+    this.mapDot?.setPosition(747 + this.player.x / this.mapWidth * 192, 20 + this.player.y / this.mapHeight * 57);
+    const region = [...this.regions].reverse().find(r=>this.player.x>=r.x);
+    this.regionText?.setText(region?.name.toUpperCase() ?? 'BIOSPHERE');
   }
 
   private findSpawnPosition(map: Phaser.Tilemaps.Tilemap, spawnName: string): { x: number; y: number } {
@@ -237,6 +257,10 @@ export class ZoneScene extends Phaser.Scene {
       const height = obj.height ?? TILE_SIZE;
       const zone = this.add.zone(obj.x! + width / 2, obj.y! + height / 2, width, height);
       this.physics.add.existing(zone, true);
+      if(this.zoneKey === 'biosphere') {
+        this.add.rectangle(obj.x!+width/2,obj.y!+height/2,12,height,0xb4d5a0,0.32).setStrokeStyle(2,0xe4e6bb,0.8).setDepth(4);
+        this.add.text(obj.x!-14,obj.y!-20,'RUSTSEA →',{fontFamily:'monospace',fontSize:'12px',color:'#f3d9a0'}).setOrigin(1,0).setDepth(4);
+      }
 
       this.physics.add.overlap(this.player, zone, () => this.handleDoorOverlap(meta));
     }
@@ -244,6 +268,10 @@ export class ZoneScene extends Phaser.Scene {
 
   private handleDoorOverlap(meta: DoorMeta): void {
     if (this.transitionLocked) return;
+    if(this.zoneKey === 'biosphere' && meta.targetZone === 'rustsea' && this.guardian && !this.guardian.isDefeated) {
+      this.showMessage('The keeper seals the eastern passage. Defeat it to continue.',1800);
+      return;
+    }
 
     if (PlayerProgress.level < meta.requiredLevel) {
       this.showMessage(`Locked — requires Level ${meta.requiredLevel} (you are Level ${PlayerProgress.level})`, LOCKED_MESSAGE_MS);
@@ -281,6 +309,7 @@ export class ZoneScene extends Phaser.Scene {
           new Enemy(this, x, y, 'turtle_idle', groundLayer, {
             patrols: true,
             animKey: TURTLE_WALK_ANIM,
+            elite: this.zoneKey === 'biosphere',
             level: 1
           })
         );
@@ -288,9 +317,8 @@ export class ZoneScene extends Phaser.Scene {
       }
       if (kind === 'turtle-boss') {
         if (this.textures.exists('turtle_boss')) {
-          this.enemies.push(
-            new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: true, level: 3, isBoss: true })
-          );
+          this.guardian = new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: true, level: 3, isBoss: true, elite: this.zoneKey === 'biosphere' });
+          this.enemies.push(this.guardian);
         }
         continue;
       }
@@ -328,7 +356,7 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private hurtPlayer(sourceX: number): void {
-    if (this.time.now < this.playerInvulnerableUntil || this.player.isDashInvulnerable) return;
+    if (this.dying || this.time.now < this.playerInvulnerableUntil || this.player.isDashInvulnerable) return;
     this.playerInvulnerableUntil = this.time.now + PLAYER_INVULNERABLE_MS;
     this.health = Math.max(0, this.health - 1);
     this.updateHealthHud();
@@ -338,6 +366,9 @@ export class ZoneScene extends Phaser.Scene {
     this.player.setHurtFlash(600);
     this.cameras.main.shake(100, 0.003);
     if (this.health === 0) {
+      this.dying = true;
+      body.setVelocity(0,0);
+      body.enable = false;
       this.cameras.main.fadeOut(350, 8, 12, 12);
       this.time.delayedCall(380, () => this.scene.restart({ zoneKey: this.zoneKey, spawnName: this.activeCheckpoint }));
     }
@@ -410,8 +441,12 @@ export class ZoneScene extends Phaser.Scene {
     entry.image.destroy();
     this.promptText?.setVisible(false);
     this.interactables = this.interactables.filter((e) => e !== entry);
+    if(entry.kind === 'chest') {
+      this.health = MAX_HEALTH;
+      this.updateHealthHud();
+    }
 
-    const message = entry.kind === 'chest' ? `Found: ${entry.item ?? 'something useful'}` : entry.text ?? '...';
+    const message = entry.kind === 'chest' ? `Relic recovered: ${entry.item ?? 'unknown'} • Vitality restored` : entry.text ?? '...';
     this.showMessage(message, COLLECT_MESSAGE_MS);
   }
 
@@ -438,6 +473,9 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, zone, () => this.player.markTouchingClimbZone());
 
       const vine = this.add.graphics().setDepth(3);
+      // Climb grips extend along a clearly bounded traverse shaft.
+      vine.lineStyle(2,0xd5d8a0,0.6);
+      for(let stepY=y+8;stepY<y+height;stepY+=16) vine.lineBetween(x+8,stepY,x+width-8,stepY);
       vine.lineStyle(4, 0x234e38, 0.95).beginPath().moveTo(x + width * 0.35, y).lineTo(x + width * 0.58, y + height).strokePath();
       vine.lineStyle(2, 0x62a66e, 0.9).beginPath().moveTo(x + width * 0.65, y).lineTo(x + width * 0.42, y + height).strokePath();
       for (let leafY = y + 12; leafY < y + height; leafY += 24) {
@@ -478,8 +516,10 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, zone, () => {
         if (this.activeCheckpoint === name) return;
         this.activeCheckpoint = name;
+        this.health = MAX_HEALTH;
+        this.updateHealthHud();
         light.setFillStyle(0xd9ffe8, 0.8).setScale(1.25);
-        this.showMessage('Root beacon awakened — checkpoint saved', 1800);
+        this.showMessage('Sanctuary awakened • Vitality restored • Return here after defeat', 2200);
       });
       this.tweens.add({ targets: light, alpha: { from: 0.55, to: 1 }, duration: 900, yoyo: true, repeat: -1 });
     }
@@ -502,6 +542,17 @@ export class ZoneScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '10px', color: '#d7e7dc', backgroundColor: '#07110baa'
     }).setPadding(6, 4, 6, 4).setOrigin(1, 1).setScrollFactor(0).setDepth(110);
     this.updateHealthHud();
+  }
+
+  private createWorldMap(map: Phaser.Tilemaps.Tilemap, layer: Phaser.Tilemaps.TilemapLayer): void {
+    this.add.rectangle(840,49,208,76,0x061510,0.9).setStrokeStyle(1,0x638275,0.6).setScrollFactor(0).setDepth(109);
+    const g=this.add.graphics().setScrollFactor(0).setDepth(110).fillStyle(0x47755a,0.8);
+    for(let y=0;y<map.height;y+=2) for(let x=0;x<map.width;x+=2) {
+      if(layer.getTileAt(x,y)?.collides) g.fillRect(747+x/map.width*192,20+y/map.height*57,1.6,1.6);
+    }
+    this.mapDot=this.add.circle(747,20,3,0xf6d898).setScrollFactor(0).setDepth(111);
+    this.regionText=this.add.text(18,78,'WAKING GROVE',{fontFamily:'monospace',fontSize:'13px',color:'#f0d8ab',letterSpacing:2}).setScrollFactor(0).setDepth(110);
+    this.add.text(18,496,'CLIMB  W/S + A/D     LEAP OFF  C     SANCTUARIES RESTORE HEALTH',{fontFamily:'monospace',fontSize:'11px',color:'#b7cabb',backgroundColor:'#07110baa'}).setPadding(5).setScrollFactor(0).setDepth(110);
   }
 
   private updateHealthHud(): void {
