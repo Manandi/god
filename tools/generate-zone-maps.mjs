@@ -294,7 +294,9 @@ function loot(item) {
   fillRect(grid, 124, 11, 10, 2, W, H); // climb-wall reward landing
   fillRect(grid, 145, 26, 7, 6, W, H); // terrain-piece plateau (steps up from the floor)
 
-  const decor = scatterDecor(grid, W, H, 9, ['bush', 'rock'], 11);
+  // No scattered decor icons here — the flat Kenney cutouts read as random
+  // debris against the painted panorama background, worse than nothing.
+  const decor = [];
 
   const doors = [
     doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' }),

@@ -10,7 +10,7 @@
   "tileheight": 16,
   "infinite": false,
   "nextlayerid": 7,
-  "nextobjectid": 30,
+  "nextobjectid": 16,
   "tilesets": [
     {
       "firstgid": 1,
@@ -5171,7 +5171,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 15,
+          "id": 1,
           "name": "toRustsea",
           "type": "door",
           "x": 2544,
@@ -5198,7 +5198,7 @@
           ]
         },
         {
-          "id": 16,
+          "id": 2,
           "name": "vaultDoor",
           "type": "door",
           "x": 272,
@@ -5237,7 +5237,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 17,
+          "id": 3,
           "name": "start",
           "type": "spawn",
           "point": true,
@@ -5249,7 +5249,7 @@
           "properties": []
         },
         {
-          "id": 18,
+          "id": 4,
           "name": "fromEast",
           "type": "spawn",
           "point": true,
@@ -5261,7 +5261,7 @@
           "properties": []
         },
         {
-          "id": 19,
+          "id": 5,
           "name": "vault",
           "type": "spawn",
           "point": true,
@@ -5285,7 +5285,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 20,
+          "id": 6,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5303,7 +5303,7 @@
           ]
         },
         {
-          "id": 21,
+          "id": 7,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5321,7 +5321,7 @@
           ]
         },
         {
-          "id": 22,
+          "id": 8,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5339,7 +5339,7 @@
           ]
         },
         {
-          "id": 23,
+          "id": 9,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -5357,7 +5357,7 @@
           ]
         },
         {
-          "id": 24,
+          "id": 10,
           "name": "turtle-boss",
           "type": "encounter",
           "point": true,
@@ -5387,7 +5387,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 25,
+          "id": 11,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5410,7 +5410,7 @@
           ]
         },
         {
-          "id": 26,
+          "id": 12,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5433,7 +5433,7 @@
           ]
         },
         {
-          "id": 27,
+          "id": 13,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -5456,7 +5456,7 @@
           ]
         },
         {
-          "id": 28,
+          "id": 14,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5479,7 +5479,7 @@
           ]
         },
         {
-          "id": 29,
+          "id": 15,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -5512,260 +5512,7 @@
       "visible": true,
       "x": 0,
       "y": 0,
-      "objects": [
-        {
-          "id": 1,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 208,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 2,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 368,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 3,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 528,
-          "y": 384,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 4,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 640,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 5,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 784,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 6,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 944,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 7,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1104,
-          "y": 480,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 8,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1216,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 9,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1520,
-          "y": 320,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 10,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1680,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 11,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1792,
-          "y": 400,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 12,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 1936,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 13,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 2256,
-          "y": 448,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        },
-        {
-          "id": 14,
-          "name": "bush",
-          "type": "decor",
-          "point": true,
-          "x": 2384,
-          "y": 400,
-          "width": 0,
-          "height": 0,
-          "visible": true,
-          "properties": [
-            {
-              "name": "kind",
-              "type": "string",
-              "value": "bush"
-            }
-          ]
-        }
-      ]
+      "objects": []
     }
   ]
 }

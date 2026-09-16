@@ -403,6 +403,10 @@ export class ZoneScene extends Phaser.Scene {
     const climbZone = this.add.zone(climb.x + climb.width / 2, (climb.yTop + climb.groundY) / 2, climb.width, climb.groundY - climb.yTop);
     this.physics.add.existing(climbZone, true);
     this.physics.add.overlap(this.player, climbZone, () => this.player.markTouchingClimbZone());
+    // Solid unless actively climbing, so it's a real obstacle you have to
+    // grab onto rather than a decoration you can walk or jump straight
+    // through.
+    this.physics.add.collider(this.player, climbZone, undefined, () => !this.player.isClimbingWall);
 
     const terrain = BIOSPHERE_TERRAIN_PIECE;
     this.add
