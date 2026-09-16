@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // One-off authoring tool: emits genuine Tiled-JSON maps (openable in the real
 // Tiled editor) for each zone, so level geometry lives in data files rather
-// than hand-coded JS. Placeholder tileset image; Phase 2 uses a runtime
-// solid-color texture per zone until real art (Phase 5) replaces it.
+// than hand-coded JS. Tile GIDs are picked by adjacency (classifyTiles) from a
+// small composed tileset per zone (see tools/compose-assets note in README),
+// built from Kenney's CC0 "New Platformer Pack".
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -10,6 +11,22 @@ import path from 'node:path';
 const TILE = 16;
 const OUT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'maps');
 mkdirSync(OUT_DIR, { recursive: true });
+
+// Matches the 5x3 grid baked by the asset-composition step into
+// public/tilesets/<zone>.png (GID = row * 5 + col + 1).
+const GID = {
+  topLeft: 1,
+  top: 2,
+  topRight: 3,
+  center: 4,
+  bottomLeft: 6,
+  bottom: 7,
+  bottomRight: 8,
+  cloudLeft: 11,
+  cloudMiddle: 12,
+  cloudRight: 13,
+  cloudSingle: 14
+};
 
 function emptyGrid(width, height) {
   return Array.from({ length: height }, () => new Array(width).fill(0));
@@ -31,6 +48,36 @@ function carve(grid, x, y, w, h) {
       grid[row][col] = 0;
     }
   }
+}
+
+// Picks a tile variant (top/bottom/interior/floating-platform, with left/right
+// caps) per solid cell based on its neighbors, so platforms and ground read as
+// real shaped terrain instead of one flat stamped tile.
+function classifyTiles(grid, width, height) {
+  const isSolid = (r, c) => r >= 0 && r < height && c >= 0 && c < width && grid[r][c] !== 0;
+  const out = grid.map((row) => row.slice());
+  for (let r = 0; r < height; r++) {
+    for (let c = 0; c < width; c++) {
+      if (!isSolid(r, c)) continue;
+      const above = isSolid(r - 1, c);
+      const below = isSolid(r + 1, c);
+      const left = isSolid(r, c - 1);
+      const right = isSolid(r, c + 1);
+
+      let gid;
+      if (!above && !below) {
+        gid = !left && !right ? GID.cloudSingle : !left ? GID.cloudLeft : !right ? GID.cloudRight : GID.cloudMiddle;
+      } else if (!above && below) {
+        gid = !left ? GID.topLeft : !right ? GID.topRight : GID.top;
+      } else if (above && !below) {
+        gid = !left ? GID.bottomLeft : !right ? GID.bottomRight : GID.bottom;
+      } else {
+        gid = GID.center;
+      }
+      out[r][c] = gid;
+    }
+  }
+  return out;
 }
 
 let objectIdSeq = 1;
@@ -87,7 +134,7 @@ function marker(kind, name, col, row, extra = []) {
   };
 }
 
-function buildTiledMap({ width, height, layers }) {
+function buildTiledMap({ width, height, layers, zoneKey }) {
   let layerId = 1;
   const tiledLayers = layers.map((layer) => {
     if (layer.type === 'tile') {
@@ -133,16 +180,16 @@ function buildTiledMap({ width, height, layers }) {
     tilesets: [
       {
         firstgid: 1,
-        name: 'placeholder',
+        name: 'terrain',
         tilewidth: TILE,
         tileheight: TILE,
-        tilecount: 1,
-        columns: 1,
+        tilecount: 15,
+        columns: 5,
         margin: 0,
         spacing: 0,
-        image: '../tilesets/placeholder.png',
-        imagewidth: TILE,
-        imageheight: TILE
+        image: `../tilesets/${zoneKey}.png`,
+        imagewidth: TILE * 5,
+        imageheight: TILE * 3
       }
     ],
     layers: tiledLayers
@@ -210,8 +257,9 @@ function writeZone(fileName, mapData) {
     buildTiledMap({
       width: W,
       height: H,
+      zoneKey: 'biosphere',
       layers: [
-        { type: 'tile', name: 'ground', grid },
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
         { type: 'objects', name: 'doors', objects: doors },
         { type: 'objects', name: 'spawns', objects: spawns },
         { type: 'objects', name: 'encounters', objects: encounters },
@@ -258,8 +306,9 @@ function writeZone(fileName, mapData) {
     buildTiledMap({
       width: W,
       height: H,
+      zoneKey: 'rustsea',
       layers: [
-        { type: 'tile', name: 'ground', grid },
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
         { type: 'objects', name: 'doors', objects: doors },
         { type: 'objects', name: 'spawns', objects: spawns },
         { type: 'objects', name: 'encounters', objects: encounters },
@@ -318,8 +367,9 @@ function writeZone(fileName, mapData) {
     buildTiledMap({
       width: W,
       height: H,
+      zoneKey: 'forge',
       layers: [
-        { type: 'tile', name: 'ground', grid },
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
         { type: 'objects', name: 'doors', objects: doors },
         { type: 'objects', name: 'spawns', objects: spawns },
         { type: 'objects', name: 'encounters', objects: encounters },
@@ -369,8 +419,9 @@ function writeZone(fileName, mapData) {
     buildTiledMap({
       width: W,
       height: H,
+      zoneKey: 'crystal',
       layers: [
-        { type: 'tile', name: 'ground', grid },
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
         { type: 'objects', name: 'doors', objects: doors },
         { type: 'objects', name: 'spawns', objects: spawns },
         { type: 'objects', name: 'encounters', objects: encounters },

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { PHYSICS, TILE_SIZE } from '../config';
 import { Player } from '../entities/Player';
-import { ZONES, FIRST_ZONE, FIRST_SPAWN } from '../zones/ZoneRegistry';
+import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistry';
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
 
@@ -18,6 +18,7 @@ interface DoorMeta {
 
 const TRANSITION_COOLDOWN_MS = 400;
 const LOCKED_MESSAGE_MS = 1800;
+const MARKER_KEYS = ['enemy', 'boss', 'chest', 'lore'] as const;
 
 export class ZoneScene extends Phaser.Scene {
   private zoneKey = FIRST_ZONE;
@@ -38,6 +39,13 @@ export class ZoneScene extends Phaser.Scene {
   preload(): void {
     const config = ZONES[this.zoneKey];
     this.load.tilemapTiledJSON(this.zoneKey, config.mapPath);
+    this.load.image(`tileset-${this.zoneKey}`, config.tilesetPath);
+    this.load.image(`bg-${this.zoneKey}`, config.backgroundPath);
+    for (const key of MARKER_KEYS) {
+      if (!this.textures.exists(`marker-${key}`)) {
+        this.load.image(`marker-${key}`, `sprites/markers/${key}.png`);
+      }
+    }
   }
 
   create(): void {
@@ -48,11 +56,10 @@ export class ZoneScene extends Phaser.Scene {
       this.transitionLocked = false;
     });
 
-    this.generateTileTexture(this.zoneKey, config.tileAccent);
     this.generatePlayerTexture();
 
     const map = this.make.tilemap({ key: this.zoneKey });
-    const tileset = map.addTilesetImage('placeholder', `tile-${this.zoneKey}`);
+    const tileset = map.addTilesetImage('terrain', `tileset-${this.zoneKey}`);
     if (!tileset) {
       throw new Error(`Failed to create tileset for zone "${this.zoneKey}"`);
     }
@@ -60,12 +67,12 @@ export class ZoneScene extends Phaser.Scene {
     if (!groundLayer) {
       throw new Error(`Failed to create ground layer for zone "${this.zoneKey}"`);
     }
-    groundLayer.setCollision(1);
+    groundLayer.setCollisionByExclusion([-1, 0]);
 
     const mapWidthPx = map.widthInPixels;
     const mapHeightPx = map.heightInPixels;
 
-    this.createParallax(mapWidthPx, mapHeightPx, config.backgroundLayers);
+    this.createParallax(config, mapWidthPx, mapHeightPx);
 
     this.physics.world.gravity.y = PHYSICS.gravityY;
     this.physics.world.setBounds(0, 0, mapWidthPx, mapHeightPx);
@@ -76,8 +83,8 @@ export class ZoneScene extends Phaser.Scene {
     this.physics.add.collider(this.player, groundLayer);
 
     this.createDoors(map);
-    this.createMarkers(map, 'encounters', 0xff5a5a);
-    this.createMarkers(map, 'interactables', 0xffe066);
+    this.createMarkers(map, 'encounters');
+    this.createMarkers(map, 'interactables');
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, mapWidthPx, mapHeightPx);
@@ -148,36 +155,33 @@ export class ZoneScene extends Phaser.Scene {
     });
   }
 
-  private createMarkers(map: Phaser.Tilemaps.Tilemap, layerName: string, color: number): void {
+  private createMarkers(map: Phaser.Tilemaps.Tilemap, layerName: string): void {
     const layer = map.getObjectLayer(layerName);
     for (const obj of layer?.objects ?? []) {
-      this.add.circle(obj.x ?? 0, obj.y ?? 0, 4, color).setDepth(5);
+      const props = getObjectProperties(obj);
+      const kind = String(props.kind ?? '');
+      const key = `marker-${kind}`;
+      if (!this.textures.exists(key)) continue;
+      this.add.image(obj.x ?? 0, obj.y ?? 0, key).setDepth(5);
     }
   }
 
-  private createParallax(
-    mapWidthPx: number,
-    mapHeightPx: number,
-    layers: { color: number; scrollFactor: number }[]
-  ): void {
-    layers.forEach((layer, index) => {
-      this.add
-        .rectangle(mapWidthPx / 2, mapHeightPx / 2, mapWidthPx + 2000, mapHeightPx + 2000, layer.color)
-        .setScrollFactor(layer.scrollFactor)
-        .setDepth(-10 + index);
-    });
-  }
+  private createParallax(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {
+    const bgKey = `bg-${this.zoneKey}`;
+    const width = mapWidthPx + 2000;
+    const height = mapHeightPx + 400;
 
-  private generateTileTexture(zoneKey: string, accent: number): void {
-    const key = `tile-${zoneKey}`;
-    if (this.textures.exists(key)) return;
-    const graphics = this.make.graphics({ x: 0, y: 0 });
-    graphics.fillStyle(0x24242f, 1);
-    graphics.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-    graphics.fillStyle(accent, 1);
-    graphics.fillRect(0, 0, TILE_SIZE, 3);
-    graphics.generateTexture(key, TILE_SIZE, TILE_SIZE);
-    graphics.destroy();
+    this.add
+      .tileSprite(mapWidthPx / 2, mapHeightPx / 2, width, height, bgKey)
+      .setScrollFactor(0.15)
+      .setTint(config.backgroundTintFar)
+      .setDepth(-11);
+
+    this.add
+      .tileSprite(mapWidthPx / 2, mapHeightPx / 2, width, height, bgKey)
+      .setScrollFactor(0.4)
+      .setTint(config.backgroundTintNear)
+      .setDepth(-10);
   }
 
   private generatePlayerTexture(): void {
