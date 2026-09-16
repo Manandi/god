@@ -32,6 +32,8 @@ const LOCKED_MESSAGE_MS = 1800;
 const COLLECT_MESSAGE_MS = 2600;
 const INTERACT_RADIUS = 30;
 const MARKER_KEYS = ['enemy', 'boss', 'chest', 'lore'] as const;
+const TURTLE_WALK_ANIM = 'turtle-walk';
+const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1', 'turtle_walk_2', 'turtle_walk_3', 'turtle_walk_4'];
 const DECOR_KEYS = [
   'bush',
   'mushroom_red',
@@ -77,8 +79,13 @@ export class ZoneScene extends Phaser.Scene {
         this.load.image(`marker-${key}`, `sprites/markers/${key}.png`);
       }
     }
-    if (!this.textures.exists('marker-turtle')) {
-      this.load.image('marker-turtle', 'sprites/enemies/turtle_idle.png');
+    for (const key of TURTLE_FRAME_KEYS) {
+      if (!this.textures.exists(key)) {
+        this.load.image(key, `sprites/enemies/${key}.png`);
+      }
+    }
+    if (!this.textures.exists('turtle_boss')) {
+      this.load.image('turtle_boss', 'sprites/enemies/turtle_boss.png');
     }
     for (const key of DECOR_KEYS) {
       if (!this.textures.exists(`decor-${key}`)) {
@@ -102,6 +109,14 @@ export class ZoneScene extends Phaser.Scene {
     });
 
     this.generatePlayerTexture();
+    if (!this.anims.exists(TURTLE_WALK_ANIM)) {
+      this.anims.create({
+        key: TURTLE_WALK_ANIM,
+        frames: TURTLE_FRAME_KEYS.map((key) => ({ key })),
+        frameRate: 4,
+        repeat: -1
+      });
+    }
 
     const map = this.make.tilemap({ key: this.zoneKey });
     const tileset = map.addTilesetImage('terrain', `tileset-${this.zoneKey}`);
@@ -215,6 +230,23 @@ export class ZoneScene extends Phaser.Scene {
     for (const obj of layer?.objects ?? []) {
       const props = getObjectProperties(obj);
       const kind = String(props.kind ?? '');
+      const x = obj.x ?? 0;
+      // markerOnSurface anchors icons a tile above the surface for the
+      // generic 16px markers; character-height sprites use a bottom origin
+      // instead so their feet actually touch the ground, hence the +TILE_SIZE.
+      const y = (obj.y ?? 0) + TILE_SIZE;
+
+      if (kind === 'turtle') {
+        this.add.sprite(x, y, 'turtle_idle').setOrigin(0.5, 1).setDepth(5).play(TURTLE_WALK_ANIM);
+        continue;
+      }
+      if (kind === 'turtle-boss') {
+        if (this.textures.exists('turtle_boss')) {
+          this.add.image(x, y, 'turtle_boss').setOrigin(0.5, 1).setDepth(5);
+        }
+        continue;
+      }
+
       const key = `marker-${kind}`;
       if (!this.textures.exists(key)) continue;
       this.add.image(obj.x ?? 0, obj.y ?? 0, key).setDepth(5);

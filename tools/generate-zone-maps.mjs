@@ -309,7 +309,7 @@ function loot(item) {
     markerOnSurface(grid, W, H, 'encounter', 'turtle', 44),
     markerOnSurface(grid, W, H, 'encounter', 'turtle', 63),
     markerOnSurface(grid, W, H, 'encounter', 'turtle', 100),
-    markerOnSurface(grid, W, H, 'encounter', 'boss', 106)
+    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 106)
   ];
 
   const interactables = [

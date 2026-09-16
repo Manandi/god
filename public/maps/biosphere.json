@@ -4078,7 +4078,7 @@
         },
         {
           "id": 21,
-          "name": "boss",
+          "name": "turtle-boss",
           "type": "encounter",
           "point": true,
           "x": 1696,
@@ -4090,7 +4090,7 @@
             {
               "name": "kind",
               "type": "string",
-              "value": "boss"
+              "value": "turtle-boss"
             }
           ]
         }
