@@ -37,7 +37,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       left: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
       right: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
       jumpKeys: [
-        keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W)
       ]
