@@ -39,7 +39,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hurtUntil = 0;
   private wasHurt = false;
   private readonly levelBadge: LevelBadge;
-  private touchingClimbZone = false;
+  private climbContactUntil = 0;
   private isClimbing = false;
   private attackActiveUntil = 0;
   private attackReadyAt = 0;
@@ -107,7 +107,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Called every frame the player overlaps a climbable zone — reset happens
    * at the end of update() so it must be reconfirmed each frame. */
   markTouchingClimbZone(centerX: number): void {
-    this.touchingClimbZone = true;
+    // Physics overlap callbacks can fall on either side of Scene.update().
+    // A short contact grace keeps climbing deterministic instead of
+    // alternating between gravity-on and gravity-off frames.
+    this.climbContactUntil = this.scene.time.now + 90;
     this.climbCenterX = centerX;
   }
 
@@ -194,7 +197,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.wasHurt = isHurt;
 
     this.updateVisualJuice(time, delta);
-    this.touchingClimbZone = false;
   }
 
   private updateActions(time: number, body: Phaser.Physics.Arcade.Body): void {
@@ -265,15 +267,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Grabs on when touching a climbable zone and pressing up, lets go on
    * jump (pushing off away from the wall) or on leaving the zone. */
   private updateClimbTransitions(body: Phaser.Physics.Arcade.Body): void {
-    if (!this.isClimbing && this.touchingClimbZone && this.upHeld && this.scene.time.now >= this.climbReleaseUntil) {
+    const touchingClimbZone = this.scene.time.now <= this.climbContactUntil;
+    if (!this.isClimbing && touchingClimbZone && this.upHeld && this.scene.time.now >= this.climbReleaseUntil) {
       this.isClimbing = true;
       body.setAllowGravity(false);
       body.setVelocity(0, 0);
+      this.x = this.climbCenterX;
+      body.updateFromGameObject();
       return;
     }
 
     const pushOff = this.isClimbing && this.keys.dashKeys.some(key => Phaser.Input.Keyboard.JustDown(key));
-    if (this.isClimbing && (!this.touchingClimbZone || pushOff)) {
+    if (this.isClimbing && (!touchingClimbZone || pushOff)) {
       this.isClimbing = false;
       this.climbReleaseUntil = this.scene.time.now + 300;
       body.setAllowGravity(true);
@@ -283,19 +288,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       } else {
         // Climbed out the top/bottom of the zone — drop any residual climb
         // velocity so gravity doesn't carry a leftover upward "bounce".
-        body.setVelocityY(Math.min(body.velocity.y, -80));
+        body.setVelocityY(0);
       }
     }
   }
 
   private updateClimbMovement(body: Phaser.Physics.Arcade.Body): void {
     const vy = this.upHeld ? -PHYSICS.climbSpeed : this.downHeld ? PHYSICS.climbSpeed : 0;
-    const centerPull = Phaser.Math.Clamp((this.climbCenterX - this.x) * 5, -90, 90);
-    const vx = this.moveRightHeld ? 95 : this.moveLeftHeld ? -95 : centerPull;
+    const vx = this.moveRightHeld ? 70 : this.moveLeftHeld ? -70 : 0;
     body.setAccelerationX(0);
     body.setVelocity(vx, vy);
     if(vx) this.setFlipX(vx < 0);
-    this.setAngle(Phaser.Math.Clamp(vx / 16, -6, 6));
+    this.setAngle(0);
   }
 
   private updateStateMachine(body: Phaser.Physics.Arcade.Body): void {

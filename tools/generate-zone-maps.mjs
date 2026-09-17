@@ -275,7 +275,7 @@ const layouts = [
   {key:'biosphere', title:'THE HOLLOW ROOTS', floor:60,
     profile:[[0,60],[20,60],[28,57],[44,57],[52,54],[96,54],[104,60],[126,60],[136,55],[164,55],[174,61],[200,61],[210,56],[240,56],[250,52],[270,52],[278,58],[340,58]],
     ridge:[52,40,44], cave:[128,66,68,11],
-    climb:[[52,40,4,20,'right'],[128,58,4,19,'center'],[192,59,4,18,'center']],
+    climb:[[49,40,3,14,'right','wall'],[132,58,4,19,'right','shaft'],[192,59,4,18,'right','shaft']],
     hazards:[[30,3],[146,3],[220,3]], names:['Waking grove','Hollow roots','Keeper overlook','Guardian court']},
 ];
 for (const [index, layout] of layouts.slice(0, 1).entries()) {
@@ -318,9 +318,9 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     const toothTop=cy+Math.round((Math.sin(t*Math.PI*3)+1)*0.7);
     fillRect(grid,toothX,toothTop,3,3,W,H);
   }
-  for(const [x,y,w,h] of layout.climb) carve(grid,x,y,w,h);
+  for(const [x,y,w,h,,mode] of layout.climb) if(mode !== 'wall') carve(grid,x,y,w,h);
   const spawns=[spawnPoint('start',5,surfaces[5]),spawnPoint('fromWest',5,surfaces[5]),spawnPoint('fromEast',W-6,surfaces[W-6])];
-  const checkpointCols=[264];
+  const checkpointCols=[286];
   const checkpoints=checkpointCols.map((x,i)=>{
     const name='rest'+i;
     const surface=findSurfaceRow(grid,x,W,H);
@@ -331,9 +331,8 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     markerOnSurface(grid,W,H,'encounter','turtle-boss',326)];
   const interactables=[
     marker('interactable','lore',10,surfaces[10]-1,lore(layout.names[0]+'. Hold W or ↑ to climb. Press C to leap away.')),
-    markerOnSurface(grid,W,H,'interactable','chest',82,loot('Overlook relic')),
     marker('interactable','chest',cx+cw/2,cy+ch-2,loot('Buried relic')),
-    markerOnSurface(grid,W,H,'interactable','lore',286,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
+    markerOnSurface(grid,W,H,'interactable','lore',300,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
   ];
   const doors=[];
   if(index>0) doors.push(doorObject({col:0,rowBottom:surfaces[0],name:'west',targetZone:layouts[index-1].key,targetSpawn:'fromEast'}));
@@ -461,111 +460,4 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
       rowBottom: landingTopRow,
       name: 'toCrystal',
       targetZone: 'crystal',
-      targetSpawn: 'fromWest'
-    })
-  ];
-
-  const spawns = [spawnPoint('fromWest', 4, R - 8), spawnPoint('fromEast', W - 6, landingTopRow - 3)];
-
-  // Segment platforms share columns across the two alternating families, so
-  // markers tied to a *specific* segment use its known y directly rather than
-  // a column-based surface lookup (which would find whichever segment in
-  // that column is topmost, not necessarily this one).
-  const enemySpots = [chimneyPlatforms[2], chimneyPlatforms[4], chimneyPlatforms[9]];
-  const encounters = [
-    ...enemySpots.map((p) => marker('encounter', 'enemy', p.x + 2, p.y - 1)),
-    markerOnSurface(grid, W, H, 'encounter', 'boss', 40)
-  ];
-
-  const midRest = chimneyPlatforms[MID_REST_INDEX];
-  const interactables = [
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 16, lore('The forge never went cold; it just ran out of things worth shaping.')),
-    marker('interactable', 'chest', midRest.x, midRest.y - 1, loot('Ember Core Shard')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('Whoever built the last landing meant to come back down.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', W - 10, loot('Slag-Forged Ring'))
-  ];
-
-  writeZone(
-    'forge.json',
-    buildTiledMap({
-      width: W,
-      height: H,
-      zoneKey: 'forge',
-      layers: [
-        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
-        { type: 'objects', name: 'doors', objects: doors },
-        { type: 'objects', name: 'spawns', objects: spawns },
-        { type: 'objects', name: 'encounters', objects: encounters },
-        { type: 'objects', name: 'interactables', objects: interactables },
-        { type: 'objects', name: 'decor', objects: decor }
-      ]
-    })
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Zone: crystal (current frontier — no forward door yet)
-// ---------------------------------------------------------------------------
-{
-  objectIdSeq = 1;
-  const W = 100;
-  const H = 50;
-  const R = H;
-  const grid = emptyGrid(W, H);
-
-  fillRect(grid, 0, R - 3, 14, 3, W, H);
-
-  // Spire climb: asymmetric jutting platforms, narrower every third segment
-  // — except where a patrolling enemy stands, which gets real room instead.
-  const SEGMENTS = 13;
-  const WIDE_INDICES = new Set([3, 7]);
-  const spirePlatforms = [];
-  for (let i = 0; i < SEGMENTS; i++) {
-    const x = i % 2 === 0 ? 16 : 22;
-    const y = R - 6 - i * 3;
-    const w = WIDE_INDICES.has(i) ? 8 : i % 3 === 2 ? 3 : 4;
-    fillRect(grid, x, y, w, 2, W, H);
-    spirePlatforms.push({ x, y, w });
-  }
-  const topSpire = spirePlatforms[SEGMENTS - 1];
-  const plateauTopRow = topSpire.y - 4;
-
-  fillRect(grid, 40, plateauTopRow, W - 40, 3, W, H); // final plateau
-
-  const decor = scatterDecor(grid, W, H, 8, ['gem_green', 'gem_red', 'gem_yellow', 'rock'], 59);
-
-  const doors = [doorObject({ col: 0, rowBottom: R - 3, name: 'toForge', targetZone: 'forge', targetSpawn: 'fromEast' })];
-
-  const spawns = [spawnPoint('fromWest', 4, R - 8), spawnPoint('end', W - 15, plateauTopRow - 3)];
-
-  // Same column-sharing caveat as forge's chimney: use each segment's known
-  // y directly instead of a surface lookup.
-  const enemySpots = [spirePlatforms[3], spirePlatforms[7]];
-  const encounters = [
-    ...enemySpots.map((p) => marker('encounter', 'enemy', p.x + 1, p.y - 1)),
-    markerOnSurface(grid, W, H, 'encounter', 'boss', W - 30)
-  ];
-
-  const interactables = [
-    marker('interactable', 'lore', spirePlatforms[1].x, spirePlatforms[1].y - 1, lore('The crystal grows fastest where people used to give up.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', W - 20, loot('Prism Splinter')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', W - 12, lore('The path ends here — for now. The next vein hasn’t been logged yet.'))
-  ];
-
-  writeZone(
-    'crystal.json',
-    buildTiledMap({
-      width: W,
-      height: H,
-      zoneKey: 'crystal',
-      layers: [
-        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
-        { type: 'objects', name: 'doors', objects: doors },
-        { type: 'objects', name: 'spawns', objects: spawns },
-        { type: 'objects', name: 'encounters', objects: encounters },
-        { type: 'objects', name: 'interactables', objects: interactables },
-        { type: 'objects', name: 'decor', objects: decor }
-      ]
-    })
-  );
-}
+      targetSpawn: 'fr

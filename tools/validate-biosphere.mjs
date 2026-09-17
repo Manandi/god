@@ -39,5 +39,11 @@ const spawnNames=new Set(map.layers.find(l=>l.name==='spawns').objects.map(o=>o.
 const checkpoints=map.layers.find(l=>l.name==='checkpoints').objects;
 assert.equal(checkpoints.length,1,'Biosphere should have one sanctuary before the guardian');
 for(const o of checkpoints) assert(spawnNames.has(o.name));
+const encounters=map.layers.find(l=>l.name==='encounters').objects;
+for(const checkpoint of checkpoints) {
+  for(const enemy of encounters) {
+    assert(Math.abs(checkpoint.x-enemy.x)>=10*16,'Sanctuary overlaps an enemy patrol or guardian');
+  }
+}
 assert(map.width>=340&&map.height>=80,'Expanded Biosphere dimensions missing');
 console.log('Biosphere: '+map.width+'x'+map.height+', '+count+' spawn/encounter placements, connected route loops and checkpoint links verified.');

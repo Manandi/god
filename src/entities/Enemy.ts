@@ -41,6 +41,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private queuedAttack: BossAttack = 'charge';
   private lastAttack: BossAttack = 'jump';
   private stateUntil = 1000;
+  private readonly idleTexture: string;
 
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, groundLayer: Phaser.Tilemaps.TilemapLayer, options: EnemyOptions) {
     super(scene, x, y, textureKey);
@@ -51,6 +52,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.isBoss = options.isBoss ?? false;
     this.elite = options.elite ?? false;
     this.onGuardianAttack = options.onGuardianAttack;
+    this.idleTexture = textureKey;
     this.health = this.isBoss ? (this.elite ? 10 : 5) : this.elite ? 2 : 1;
     this.maxHealth = this.health;
     this.healthBar = scene.add.graphics().setDepth(21);
@@ -96,7 +98,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const seesPlayer = Math.abs(playerX - this.x) < (this.isBoss ? 280 : 150) && Math.abs(playerY - this.y) < 52;
     if (seesPlayer && now > this.turnUntil) this.direction = playerX < this.x ? -1 : 1;
     body.setVelocityX((seesPlayer ? CHASE_SPEED : PATROL_SPEED) * this.direction);
-    this.setFlipX(this.direction < 0);
+    this.applyFacing();
 
     const aheadX = this.direction > 0 ? body.right + 6 : body.left - 6;
     const floorAhead = layerHasFloor(this.groundLayer, body, this.direction);
@@ -120,22 +122,30 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.bossState === 'warn') {
       body.setVelocityX(0);
+      this.direction = playerX < this.x ? -1 : 1;
+      this.applyFacing();
       const colors: Record<BossAttack, number> = { charge: 0xffa647, fireball: 0x70d9ff, jump: 0xb8ff8a };
       this.setTint(now % 180 < 90 ? colors[this.queuedAttack] : 0xffffff);
+      if (this.queuedAttack === 'charge') {
+        const brace = Math.sin(now / 70) * 0.025;
+        this.setScale(1.05 + brace, 0.93 - brace);
+      }
       if (now >= this.stateUntil) this.executeQueuedAttack(now, playerX, body);
       return true;
     }
     if (this.bossState === 'charge') {
-      body.setVelocityX(this.direction * 250);
-      this.setFlipX(this.direction < 0);
-      if (now >= this.stateUntil || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(1100);
+      body.setVelocityX(this.direction * 290);
+      this.applyFacing();
+      if (this.isBoss) this.setTexture('turtle_boss_charge_v2').setScale(1.1, 0.9);
+      if (now >= this.stateUntil || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(780);
       return true;
     }
     if (this.bossState === 'jump') {
+      this.setTexture('turtle_boss_jump_v2').setScale(1).setAngle(Phaser.Math.Clamp(body.velocity.y / 45, -9, 9));
       if (body.blocked.down && now >= this.stateUntil) {
         this.onGuardianAttack?.('wave', this);
         this.scene.cameras.main.shake(130, 0.004);
-        this.enterRecover(950);
+        this.enterRecover(720);
       }
       return true;
     }
@@ -147,6 +157,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.stateUntil = now + Phaser.Math.Between(650, 1050);
         this.clearTint();
         this.attackTell?.setVisible(false);
+        this.restoreIdlePose();
       }
       return true;
     }
@@ -160,28 +171,36 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.queuedAttack = attacks[index];
     this.lastAttack = this.queuedAttack;
     this.direction = playerX < this.x ? -1 : 1;
+    this.applyFacing();
     this.bossState = 'warn';
-    this.stateUntil = now + (this.queuedAttack === 'jump' ? 780 : 650);
+    this.stateUntil = now + (this.queuedAttack === 'jump' ? 620 : 520);
     const labels: Record<BossAttack, string> = { charge: 'CHARGE', fireball: 'SPORE VOLLEY', jump: 'ROOT QUAKE' };
     this.attackTell?.setText(labels[this.queuedAttack]).setVisible(true);
+    if (this.queuedAttack === 'charge') this.setTexture('turtle_boss_charge_v2').setScale(1.04, 0.94);
+    else this.restoreIdlePose();
   }
 
   private executeQueuedAttack(now: number, playerX: number, body: Phaser.Physics.Arcade.Body): void {
     this.clearTint();
     if (this.queuedAttack === 'charge') {
+      this.direction = playerX < this.x ? -1 : 1;
+      this.applyFacing();
       this.bossState = 'charge';
-      this.stateUntil = now + 760;
+      this.stateUntil = now + 680;
       this.attackTell?.setText('DASH!');
       return;
     }
     if (this.queuedAttack === 'fireball') {
       this.onGuardianAttack?.('fireball', this);
-      this.enterRecover(900);
+      this.enterRecover(700);
       return;
     }
     this.bossState = 'jump';
     this.stateUntil = now + 260;
     body.setVelocity(playerX < this.x ? -115 : 115, -525);
+    this.direction = playerX < this.x ? -1 : 1;
+    this.applyFacing();
+    this.setTexture('turtle_boss_jump_v2').setScale(1).setAngle(-8);
     this.attackTell?.setText('JUMP!');
   }
 
@@ -190,6 +209,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.stateUntil = this.scene.time.now + duration;
     this.attackTell?.setText('OPEN').setVisible(true);
     (this.body as Phaser.Physics.Arcade.Body).setVelocityX(0);
+    this.restoreIdlePose();
+  }
+
+  private applyFacing(): void {
+    // Regular turtle art faces right; guardian art faces left.
+    this.setFlipX(this.isBoss ? this.direction > 0 : this.direction < 0);
+  }
+
+  private restoreIdlePose(): void {
+    this.setTexture(this.idleTexture).setScale(1).setAngle(0);
+    this.applyFacing();
   }
 
   private drawStatus(): void {
