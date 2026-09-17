@@ -272,14 +272,15 @@ function loot(item) {
 // Authored terrain profiles. Most walkable area belongs to solid land masses;
 // shafts connect surface routes to underpasses instead of floating staircases.
 const layouts = [
-  {key:'biosphere', title:'THE HOLLOW ROOTS', floor:52,
-    profile:[[0,52],[22,52],[28,49],[42,49],[48,46],[65,46],[71,50],[84,50],[90,47],[105,47],[111,43],[130,43],[136,47],[155,47],[161,50],[184,50],[190,46],[208,46],[214,49],[244,49]],
-    ridge:[52,28,27], cave:[100,51,58,9], climb:[[48,28,4,24],[79,28,4,25],[96,42,4,20],[158,43,4,19]],
-    hazards:[[32,48,4],[144,46,4],[202,45,4]], names:['Waking grove','Hollow roots','Keeper overlook']},
+  {key:'biosphere', title:'THE HOLLOW ROOTS', floor:60,
+    profile:[[0,60],[20,60],[28,57],[44,57],[52,54],[96,54],[104,60],[126,60],[136,55],[164,55],[174,61],[200,61],[210,56],[240,56],[250,52],[270,52],[278,58],[340,58]],
+    ridge:[52,40,44], cave:[128,66,68,11],
+    climb:[[52,40,4,20,'right'],[128,58,4,19,'center'],[192,59,4,18,'center']],
+    hazards:[[30,3],[146,3],[220,3]], names:['Waking grove','Hollow roots','Keeper overlook','Guardian court']},
 ];
 for (const [index, layout] of layouts.slice(0, 1).entries()) {
   objectIdSeq = 1;
-  const W=244, H=72;
+  const W=340, H=80;
   const grid=emptyGrid(W,H);
   const surfaces=[];
   for(let x=0;x<W;x++){
@@ -289,39 +290,58 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     surfaces.push(y); fillRect(grid,x,y,1,H-y,W,H);
   }
   const [rx,ry,rw]=layout.ridge;
-  fillRect(grid,rx,ry,rw,H-ry,W,H);
-  // A spacious traversable arch underneath the ridge. Its ceiling remains
-  // ten tiles above the route and the solid supports stay outside the path.
-  carve(grid,rx,layout.floor-9,rw,9);
+  // Build an uneven root arch rather than stamping a rectangular platform.
+  // Its crown rises/falls by a tile and the underside thickens toward the
+  // center, while the right root grows down into the existing hillside.
+  for(let x=rx;x<rx+rw;x++) {
+    const t=(x-rx)/(rw-1);
+    const top=ry+Math.round(Math.sin(t*Math.PI*2));
+    const thickness=6+Math.round(Math.sin(t*Math.PI)*2);
+    fillRect(grid,x,top,1,thickness,W,H);
+  }
+  fillRect(grid,rx+rw-6,ry,6,layout.floor-ry,W,H);
+  // A broad tunnel runs underneath, then opens through the root's foot.
+  carve(grid,rx,ry+8,rw-6,layout.floor-(ry+8));
+  carve(grid,rx+rw-6,layout.floor-6,11,6);
   const [cx,cy,cw,ch]=layout.cave;
-  carve(grid,cx,cy,cw,ch);
+  // The undercroft follows an uneven ceiling and floor instead of being a
+  // box-shaped hallway. Two hanging root teeth break the sightline without
+  // blocking either traversal route.
+  for(let x=cx;x<cx+cw;x++) {
+    const t=(x-cx)/(cw-1);
+    const ceiling=cy+Math.round((Math.sin(t*Math.PI*3)+1)*0.7);
+    const floor=cy+ch-Math.round((Math.cos(t*Math.PI*4)+1)*0.55);
+    carve(grid,x,ceiling,1,Math.max(7,floor-ceiling),W,H);
+  }
+  for(const toothX of [cx+22,cx+47]) {
+    const t=(toothX-cx)/(cw-1);
+    const toothTop=cy+Math.round((Math.sin(t*Math.PI*3)+1)*0.7);
+    fillRect(grid,toothX,toothTop,3,3,W,H);
+  }
   for(const [x,y,w,h] of layout.climb) carve(grid,x,y,w,h);
-  // Climbing ledges are attached to the shaft's side, never across its mouth.
-  const shelves=[[rx,ry,rw],[cx+8,cy+ch-4,9],[cx+cw-17,cy+ch-5,9]];
-  for(const [x,y,w] of shelves.slice(1)) fillRect(grid,x,y,w,2,W,H);
   const spawns=[spawnPoint('start',5,surfaces[5]),spawnPoint('fromWest',5,surfaces[5]),spawnPoint('fromEast',W-6,surfaces[W-6])];
-  const checkpointCols=[22,104,211];
+  const checkpointCols=[264];
   const checkpoints=checkpointCols.map((x,i)=>{
     const name='rest'+i;
-    spawns.push(spawnPoint(name,x,surfaces[x]-1));
-    return marker('checkpoint',name,x,surfaces[x]);
+    const surface=findSurfaceRow(grid,x,W,H);
+    spawns.push(spawnPoint(name,x,surface-1));
+    return marker('checkpoint',name,x,surface);
   });
-  const encounters=[... [34,91,152,195].map(x=>marker('encounter','turtle',x,surfaces[x]-1)),
-    marker('encounter','turtle',rx+12,ry-1),
-    marker('encounter','turtle',cx+cw/2,cy+ch-1),
-    marker('encounter','turtle-boss',229,surfaces[229]-1)];
+  const encounters=[... [18,72,112,150,185,232,260].map(x=>markerOnSurface(grid,W,H,'encounter','turtle',x)),
+    markerOnSurface(grid,W,H,'encounter','turtle-boss',326)];
   const interactables=[
     marker('interactable','lore',10,surfaces[10]-1,lore(layout.names[0]+'. Hold W or ↑ to climb. Press C to leap away.')),
-    marker('interactable','chest',rx+rw-6,ry-1,loot('Overlook relic')),
-    marker('interactable','chest',cx+cw-12,cy+ch-6,loot('Buried relic')),
-    marker('interactable','lore',216,surfaces[216]-1,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
+    markerOnSurface(grid,W,H,'interactable','chest',82,loot('Overlook relic')),
+    marker('interactable','chest',cx+cw/2,cy+ch-2,loot('Buried relic')),
+    markerOnSurface(grid,W,H,'interactable','lore',286,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
   ];
   const doors=[];
   if(index>0) doors.push(doorObject({col:0,rowBottom:surfaces[0],name:'west',targetZone:layouts[index-1].key,targetSpawn:'fromEast'}));
   if(index<3) doors.push(doorObject({col:W-1,rowBottom:surfaces[W-1],name:'east',targetZone:'rustsea',targetSpawn:'fromWest'}));
-  const hazards=layout.hazards.map(([x,y,w],i)=>regionObject('hazard','hazard'+i,x,y,w,1));
-  const climbables=layout.climb.map(([x,y,w,h],i)=>regionObject('climbable','shaft'+i,x,y,w,h));
-  const regions=[marker('region',layout.names[0],5,surfaces[5]-6),marker('region',layout.names[1],108,surfaces[108]-6),marker('region',layout.names[2],210,surfaces[210]-6)];
+  const hazards=layout.hazards.map(([x,w],i)=>regionObject('hazard','hazard'+i,x,findSurfaceRow(grid,x,W,H)-1,w,1));
+  const climbables=layout.climb.map(([x,y,w,h,side],i)=>regionObject('climbable','shaft'+i,x,y,w,h,[{name:'wallSide',type:'string',value:side}]));
+  const regionCols=[5,105,205,274];
+  const regions=regionCols.map((x,i)=>marker('region',layout.names[i],x,Math.max(2,findSurfaceRow(grid,x,W,H)-6)));
   writeZone(layout.key+'.json',buildTiledMap({width:W,height:H,zoneKey:layout.key,layers:[
     {type:'tile',name:'ground',grid:classifyTiles(grid,W,H)},
     ...Object.entries({doors,spawns,encounters,interactables,climbables,hazards,checkpoints,regions,decor:[]}).map(([name,objects])=>({type:'objects',name,objects}))

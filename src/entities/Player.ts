@@ -47,6 +47,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private dashReadyAt = 0;
   private attackId = 0;
   private climbReleaseUntil = 0;
+  private climbCenterX = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -105,8 +106,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /** Called every frame the player overlaps a climbable zone — reset happens
    * at the end of update() so it must be reconfirmed each frame. */
-  markTouchingClimbZone(): void {
+  markTouchingClimbZone(centerX: number): void {
     this.touchingClimbZone = true;
+    this.climbCenterX = centerX;
   }
 
   get isClimbingWall(): boolean {
@@ -173,6 +175,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (this.isClimbing) {
         this.updateClimbMovement(body);
       } else {
+        this.setAngle(0);
         this.updateHorizontalMovement(body);
         this.updateJump(body, dt);
       }
@@ -287,10 +290,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateClimbMovement(body: Phaser.Physics.Arcade.Body): void {
     const vy = this.upHeld ? -PHYSICS.climbSpeed : this.downHeld ? PHYSICS.climbSpeed : 0;
-    const vx = this.moveRightHeld ? 65 : this.moveLeftHeld ? -65 : 0;
+    const centerPull = Phaser.Math.Clamp((this.climbCenterX - this.x) * 5, -90, 90);
+    const vx = this.moveRightHeld ? 95 : this.moveLeftHeld ? -95 : centerPull;
     body.setAccelerationX(0);
     body.setVelocity(vx, vy);
     if(vx) this.setFlipX(vx < 0);
+    this.setAngle(Phaser.Math.Clamp(vx / 16, -6, 6));
   }
 
   private updateStateMachine(body: Phaser.Physics.Arcade.Body): void {

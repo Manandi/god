@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { PHYSICS, TILE_SIZE, PARTICLE_TEXTURE_KEY } from '../config';
 import { Player } from '../entities/Player';
-import { Enemy } from '../entities/Enemy';
+import { Enemy, GuardianAttack } from '../entities/Enemy';
 import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistry';
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
@@ -47,6 +47,8 @@ const TURTLE_WALK_ANIM = 'turtle-walk';
 // frames were tightly cropped to different widths, which made patrols pulse
 // and jitter as the animation advanced.
 const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1'];
+const CLIMB_VINE_KEY = 'biosphere-climb-vine-v2';
+const BIOSPHERE_TERRAIN_KEY = 'biosphere-terrain-seamless-v2';
 const DECOR_KEYS = [
   'bush',
   'cactus',
@@ -85,6 +87,8 @@ export class ZoneScene extends Phaser.Scene {
   private mapHeight = 1;
   private regions: {x:number; name:string}[] = [];
   private dying = false;
+  private bossProjectiles?: Phaser.Physics.Arcade.Group;
+  private bossWaves?: Phaser.Physics.Arcade.Group;
 
   constructor() {
     super('ZoneScene');
@@ -120,6 +124,12 @@ export class ZoneScene extends Phaser.Scene {
     if (!this.textures.exists('turtle_boss')) {
       this.load.image('turtle_boss', 'sprites/enemies/turtle_boss.png');
     }
+    if (this.zoneKey === 'biosphere' && !this.textures.exists(CLIMB_VINE_KEY)) {
+      this.load.image(CLIMB_VINE_KEY, 'sprites/biosphere/climb-vine-v2.png');
+    }
+    if (this.zoneKey === 'biosphere' && !this.textures.exists(BIOSPHERE_TERRAIN_KEY)) {
+      this.load.image(BIOSPHERE_TERRAIN_KEY, 'sprites/biosphere/terrain-seamless-v2.jpg');
+    }
     for (const key of DECOR_KEYS) {
       if (!this.textures.exists(`decor-${key}`)) {
         this.load.image(`decor-${key}`, `sprites/decor/${key}.png`);
@@ -150,6 +160,7 @@ export class ZoneScene extends Phaser.Scene {
     });
 
     this.generatePlayerTexture();
+    this.generateCombatTextures();
     if (!this.anims.exists(TURTLE_WALK_ANIM)) {
       this.anims.create({
         key: TURTLE_WALK_ANIM,
@@ -187,6 +198,7 @@ export class ZoneScene extends Phaser.Scene {
     this.player = new Player(this, spawn.x, spawn.y);
     this.player.setDepth(10);
     this.physics.add.collider(this.player, groundLayer);
+    this.createBossAttackPhysics(groundLayer);
 
     this.createDecor(map);
     this.createDoors(map);
@@ -317,7 +329,13 @@ export class ZoneScene extends Phaser.Scene {
       }
       if (kind === 'turtle-boss') {
         if (this.textures.exists('turtle_boss')) {
-          this.guardian = new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: true, level: 3, isBoss: true, elite: this.zoneKey === 'biosphere' });
+          this.guardian = new Enemy(this, x, y, 'turtle_boss', groundLayer, {
+            patrols: true,
+            level: 3,
+            isBoss: true,
+            elite: this.zoneKey === 'biosphere',
+            onGuardianAttack: (attack, enemy) => this.handleGuardianAttack(attack, enemy)
+          });
           this.enemies.push(this.guardian);
         }
         continue;
@@ -343,13 +361,28 @@ export class ZoneScene extends Phaser.Scene {
     if (enemy.isDefeated) return;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const enemyBody = enemy.body as Phaser.Physics.Arcade.Body;
-    const isStomp = body.velocity.y > 0 && body.bottom <= enemyBody.top + 14;
+    const previousBottom = body.prev.y + body.height;
+    const stompY = enemy.stompSurfaceY;
+    const horizontalContact = body.right > enemyBody.left + 3 && body.left < enemyBody.right - 3;
+    const crossedShell = previousBottom <= stompY + 10 && body.bottom >= stompY - 3;
+    const isStomp = body.velocity.y > 70 && horizontalContact && crossedShell;
 
     if (isStomp) {
+      this.player.setY(stompY);
       enemy.takeHit(this.player.x);
-      body.setVelocityY(PHYSICS.jumpVelocity * 0.6);
+      body.setVelocityY(PHYSICS.jumpVelocity * 0.68);
       this.cameras.main.shake(60, 0.002);
       return;
+    }
+
+    if (this.player.isAttackActive) {
+      const attackBounds = this.player.getAttackBounds();
+      const enemyBounds = new Phaser.Geom.Rectangle(enemyBody.x, enemyBody.y, enemyBody.width, enemyBody.height);
+      if (Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) {
+        this.enemyAttackIds.set(enemy, this.player.currentAttackId);
+        enemy.takeHit(this.player.x);
+        return;
+      }
     }
 
     this.hurtPlayer(enemy.x);
@@ -468,19 +501,16 @@ export class ZoneScene extends Phaser.Scene {
       const height = obj.height ?? TILE_SIZE * 4;
       const x = obj.x ?? 0;
       const y = obj.y ?? 0;
+      const props = getObjectProperties(obj);
+      const wallSide = String(props.wallSide ?? 'center');
+      const artOffset = wallSide === 'right' ? width * 0.32 : wallSide === 'left' ? -width * 0.32 : 0;
       const zone = this.add.zone(x + width / 2, y + height / 2, width, height);
       this.physics.add.existing(zone, true);
-      this.physics.add.overlap(this.player, zone, () => this.player.markTouchingClimbZone());
-
-      const vine = this.add.graphics().setDepth(3);
-      // Climb grips extend along a clearly bounded traverse shaft.
-      vine.lineStyle(2,0xd5d8a0,0.6);
-      for(let stepY=y+8;stepY<y+height;stepY+=16) vine.lineBetween(x+8,stepY,x+width-8,stepY);
-      vine.lineStyle(4, 0x234e38, 0.95).beginPath().moveTo(x + width * 0.35, y).lineTo(x + width * 0.58, y + height).strokePath();
-      vine.lineStyle(2, 0x62a66e, 0.9).beginPath().moveTo(x + width * 0.65, y).lineTo(x + width * 0.42, y + height).strokePath();
-      for (let leafY = y + 12; leafY < y + height; leafY += 24) {
-        vine.fillStyle(0x78b96f, 0.85).fillEllipse(x + (leafY % 48 === 0 ? width * 0.25 : width * 0.72), leafY, 10, 5);
-      }
+      this.physics.add.overlap(this.player, zone, () => this.player.markTouchingClimbZone(x + width / 2));
+      this.add.image(x + width / 2 + artOffset, y + height / 2, CLIMB_VINE_KEY)
+        .setDisplaySize(Math.max(62, width * 1.05), height + 24)
+        .setTint(0xc8ddb0)
+        .setDepth(3);
     }
   }
 
@@ -494,6 +524,14 @@ export class ZoneScene extends Phaser.Scene {
       const zone = this.add.zone(x + width / 2, y + height / 2, width, height);
       this.physics.add.existing(zone, true);
       this.physics.add.overlap(this.player, zone, () => this.hurtPlayer(x + width / 2));
+
+      for (const edgeX of [x - 5, x + width + 5]) {
+        const blocker = this.add.zone(edgeX, y - 24, 8, 96);
+        this.physics.add.existing(blocker, true);
+        for (const enemy of this.enemies) {
+          this.physics.add.collider(enemy, blocker, () => enemy.turnFromObstacle());
+        }
+      }
 
       const spikes = this.add.graphics().setDepth(3).fillStyle(0xb9e6c5, 0.85);
       for (let spikeX = x; spikeX < x + width; spikeX += 12) {
@@ -522,6 +560,61 @@ export class ZoneScene extends Phaser.Scene {
         this.showMessage('Sanctuary awakened • Vitality restored • Return here after defeat', 2200);
       });
       this.tweens.add({ targets: light, alpha: { from: 0.55, to: 1 }, duration: 900, yoyo: true, repeat: -1 });
+    }
+  }
+
+  private generateCombatTextures(): void {
+    if (!this.textures.exists('guardian-fireball')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x5ddfff, 0.22).fillCircle(10, 10, 10);
+      g.fillStyle(0x86ffc7, 0.7).fillCircle(10, 10, 7);
+      g.fillStyle(0xf4ffe1, 1).fillCircle(10, 10, 3);
+      g.generateTexture('guardian-fireball', 20, 20);
+      g.destroy();
+    }
+    if (!this.textures.exists('guardian-wave')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x9ce678, 0.28).fillTriangle(0, 12, 16, 0, 32, 12);
+      g.lineStyle(3, 0xe8ffad, 0.95).lineBetween(0, 11, 16, 1).lineBetween(16, 1, 32, 11);
+      g.generateTexture('guardian-wave', 32, 13);
+      g.destroy();
+    }
+  }
+
+  private createBossAttackPhysics(groundLayer: Phaser.Tilemaps.TilemapLayer): void {
+    this.bossProjectiles = this.physics.add.group({ allowGravity: false });
+    this.bossWaves = this.physics.add.group({ allowGravity: false });
+    this.physics.add.collider(this.bossProjectiles, groundLayer, (projectile) => projectile.destroy());
+    const damagePlayer: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (_player, attack) => {
+      const sprite = attack as Phaser.Physics.Arcade.Sprite;
+      this.hurtPlayer(sprite.x);
+      sprite.destroy();
+    };
+    this.physics.add.overlap(this.player, this.bossProjectiles, damagePlayer);
+    this.physics.add.overlap(this.player, this.bossWaves, damagePlayer);
+  }
+
+  private handleGuardianAttack(attack: GuardianAttack, enemy: Enemy): void {
+    if (attack === 'fireball') {
+      const baseAngle = Phaser.Math.Angle.Between(enemy.x, enemy.y - 48, this.player.x, this.player.y - 18);
+      for (const offset of [-0.24, 0, 0.24]) {
+        const fireball = this.bossProjectiles?.create(enemy.x, enemy.y - 48, 'guardian-fireball') as Phaser.Physics.Arcade.Sprite | undefined;
+        if (!fireball) continue;
+        fireball.setCircle(7, 3, 3).setDepth(12).setAngularVelocity(260);
+        const speed = offset === 0 ? 250 : 215;
+        this.physics.velocityFromRotation(baseAngle + offset, speed, (fireball.body as Phaser.Physics.Arcade.Body).velocity);
+        this.time.delayedCall(2600, () => fireball.active && fireball.destroy());
+      }
+      return;
+    }
+
+    for (const direction of [-1, 1]) {
+      const wave = this.bossWaves?.create(enemy.x + direction * 36, enemy.y - 7, 'guardian-wave') as Phaser.Physics.Arcade.Sprite | undefined;
+      if (!wave) continue;
+      wave.setFlipX(direction < 0).setDepth(12).setVelocityX(direction * 245);
+      const body = wave.body as Phaser.Physics.Arcade.Body;
+      body.setSize(26, 9).setOffset(3, 3);
+      this.time.delayedCall(1700, () => wave.active && wave.destroy());
     }
   }
 
@@ -594,6 +687,12 @@ export class ZoneScene extends Phaser.Scene {
         .setDisplaySize(displayWidth, displayHeight)
         .setScrollFactor(0.45)
         .setDepth(-9);
+    }
+    if (this.zoneKey === 'biosphere') {
+      this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x041b18, 0.34)
+        .setOrigin(0)
+        .setScrollFactor(0)
+        .setDepth(-8);
     }
   }
 
