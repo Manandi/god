@@ -150,7 +150,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       body.setVelocityX(Phaser.Math.Linear(body.velocity.x, this.direction * 320, 0.2));
       this.applyFacing();
       const stride = Math.sin(now / 48);
-      if (this.isBoss) this.setTexture('turtle_boss_charge_v2').setScale(1.09 + stride * 0.025, 0.91 - stride * 0.018).setAngle(this.direction * (2 + stride));
+      if (!this.anims.isPlaying || this.anims.currentAnim?.key !== 'guardian-walk-v3') {
+        this.play('guardian-walk-v3', true);
+      }
+      this.anims.timeScale = 2.2;
+      this.setScale(1.09 + stride * 0.025, 0.91 - stride * 0.018).setAngle(this.direction * (2 + stride));
       const atArenaEdge = this.x <= this.patrolMinX || this.x >= this.patrolMaxX;
       if (now >= this.stateUntil || atArenaEdge || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(650);
       return true;
@@ -190,6 +194,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.anims.isPlaying || this.anims.currentAnim?.key !== 'guardian-walk-v3') {
       this.play('guardian-walk-v3', true);
     }
+    this.anims.timeScale = 1;
     this.setScale(1).setAngle(0);
     const wallAhead = this.groundLayer.getTileAtWorldXY(this.direction > 0 ? body.right + 6 : body.left - 6, body.center.y)?.collides;
     if (body.blocked.down && (wallAhead || !layerHasFloor(this.groundLayer, body, this.direction))) this.turnFromObstacle();
@@ -272,6 +277,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private restoreIdlePose(): void {
+    this.anims.timeScale = 1;
     this.anims.stop();
     this.setTexture(this.idleTexture).setScale(1).setAngle(0);
     this.applyFacing();

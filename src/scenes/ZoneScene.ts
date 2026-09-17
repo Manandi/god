@@ -573,23 +573,28 @@ export class ZoneScene extends Phaser.Scene {
       const crownY = artTop + 7;
       if (climbIndex % 3 === 0) {
         const petal = climbIndex % 2 === 0 ? 0xb9e879 : 0x8fd7be;
+        // Keep the bloom proportional to the trunk. The previous pass made
+        // these read as tiny map pins instead of a natural root crown.
         roots.fillStyle(petal, 0.95);
         for (let p = 0; p < 6; p += 1) {
           const angle = p * Math.PI / 3;
-          roots.fillEllipse(center + Math.cos(angle) * 13, crownY + Math.sin(angle) * 9, 15, 10);
+          roots.fillEllipse(center + Math.cos(angle) * 16, crownY + Math.sin(angle) * 10, 24, 15);
         }
         roots.fillStyle(0xf2d56f, 1).fillCircle(center, crownY, 7);
+        roots.lineStyle(3, 0x6e8d45, 0.9)
+          .lineBetween(center - 4, crownY + 9, center - 13, crownY + 20)
+          .lineBetween(center + 4, crownY + 9, center + 14, crownY + 18);
       } else if (climbIndex % 3 === 1) {
         roots.fillStyle(0x6f9f52, 0.98)
-          .fillEllipse(center - 15, crownY + 3, 24, 10)
-          .fillEllipse(center + 15, crownY + 3, 24, 10)
-          .fillEllipse(center - 7, crownY - 5, 17, 12)
-          .fillEllipse(center + 7, crownY - 5, 17, 12);
-        roots.fillStyle(0xa5c86d, 1).fillCircle(center, crownY + 2, 5);
+          .fillEllipse(center - 15, crownY + 3, 25, 12)
+          .fillEllipse(center + 15, crownY + 3, 25, 12)
+          .fillEllipse(center - 7, crownY - 6, 18, 14)
+          .fillEllipse(center + 7, crownY - 6, 18, 14);
+        roots.fillStyle(0xa5c86d, 1).fillCircle(center, crownY + 1, 5);
       } else {
-        roots.fillStyle(0x365f46, 0.98).fillEllipse(center, crownY + 3, 36, 24);
-        roots.fillStyle(0x8de4af, 0.88).fillEllipse(center, crownY, 23, 15);
-        roots.fillStyle(0xd9ffd0, 0.95).fillCircle(center, crownY - 1, 5);
+        roots.fillStyle(0x365f46, 0.98).fillEllipse(center, crownY + 3, 48, 28);
+        roots.fillStyle(0x8de4af, 0.88).fillEllipse(center, crownY, 31, 19);
+        roots.fillStyle(0xd9ffd0, 0.95).fillCircle(center, crownY - 1, 6);
       }
     }
   }

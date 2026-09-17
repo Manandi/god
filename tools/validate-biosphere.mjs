@@ -43,6 +43,9 @@ for(const layer of map.layers.filter(l=>l.objects)) for(const o of layer.objects
     let bottomEntry=false;
     for(let x=left;x<left+width;x++) bottomEntry ||= solid(x,bottom)||solid(x,bottom+1);
     assert(bottomEntry,'Climb has no floor-level entry: '+o.name);
+    for(let x=left-2;x<left+width+2;x++) {
+      assert(solid(x,bottom)&&solid(x,bottom+1),'Climb lacks a connected flat root pad: '+o.name);
+    }
   }
 }
 const spawnNames=new Set(map.layers.find(l=>l.name==='spawns').objects.map(o=>o.name));

@@ -351,6 +351,9 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     carve(grid,x,ceiling,1,71-ceiling,W,H);
   }
   for(const [x,y,w,h,,mode] of layout.climb) if(mode !== 'wall') carve(grid,x,y,w,h);
+  // Every root grows from a connected, flat terrain pad. This prevents a
+  // trunk from terminating on a stair corner or appearing to float over air.
+  for(const [x,y,w,h] of layout.climb) fillRect(grid,x-2,y+h,w+4,2,W,H);
   // Remove generator crumbs and close pinholes. These tiny disconnected cells
   // were the random squares visible around cave and climb entrances.
   for(let pass=0;pass<2;pass++) {
