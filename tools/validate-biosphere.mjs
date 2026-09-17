@@ -30,9 +30,19 @@ for(const layer of map.layers.filter(l=>l.objects)) for(const o of layer.objects
     }
   }
   if(layer.name==='climbables'){
-    for(let y=o.y/16;y<(o.y+o.height)/16;y++) for(let x=o.x/16;x<(o.x+o.width)/16;x++){
+    const props=Object.fromEntries((o.properties||[]).map(p=>[p.name,p.value]));
+    const left=o.x/16, top=o.y/16, width=o.width/16, bottom=(o.y+o.height)/16;
+    for(let y=top;y<bottom;y++) for(let x=left;x<left+width;x++){
       assert(!solid(x,y),'Climb shaft obstructed at '+x+','+y);
     }
+    const wallX=props.wallSide==='left'?left-1:left+width;
+    let landingY=-1;
+    for(let y=top;y<=top+5;y++) if(solid(wallX,y)){landingY=y;break;}
+    assert(landingY>=top+2,'Climb has no reachable top landing: '+o.name);
+    assert(!solid(wallX,landingY-1),'Climb top landing has no headroom: '+o.name);
+    let bottomEntry=false;
+    for(let x=left;x<left+width;x++) bottomEntry ||= solid(x,bottom)||solid(x,bottom+1);
+    assert(bottomEntry,'Climb has no floor-level entry: '+o.name);
   }
 }
 const spawnNames=new Set(map.layers.find(l=>l.name==='spawns').objects.map(o=>o.name));
@@ -46,4 +56,19 @@ for(const checkpoint of checkpoints) {
   }
 }
 assert(map.width>=340&&map.height>=80,'Expanded Biosphere dimensions missing');
+const surface=(x)=>Array.from({length:map.height},(_,y)=>y).find(y=>solid(x,y));
+const guardianCourt=new Set(Array.from({length:56},(_,i)=>surface(282+i)));
+assert.equal(guardianCourt.size,1,'Guardian court must remain flat so the boss cannot jam on slopes');
+const climbables=map.layers.find(l=>l.name==='climbables').objects;
+assert(climbables.length>=7,'Biosphere exploration branches are missing climb connections');
+for(let y=1;y<map.height-1;y++) for(let x=1;x<map.width-1;x++) if(solid(x,y)) {
+  const neighbors=Number(solid(x-1,y))+Number(solid(x+1,y))+Number(solid(x,y-1))+Number(solid(x,y+1));
+  assert(neighbors>1,'Isolated terrain fragment at '+x+','+y);
+}
+assert(!solid(163,65)&&!solid(163,69),'Undercroft loft route is not connected');
+const discoveries=map.layers.find(l=>l.name==='interactables').objects;
+const lootNames=new Set(discoveries.flatMap(o=>(o.properties||[]).filter(p=>p.name==='item').map(p=>p.value)));
+for(const expected of ['Groveheart seed','Buried relic','Guardian-carved charm']) {
+  assert(lootNames.has(expected),'Optional discovery is missing: '+expected);
+}
 console.log('Biosphere: '+map.width+'x'+map.height+', '+count+' spawn/encounter placements, connected route loops and checkpoint links verified.');

@@ -43,11 +43,11 @@ const INTERACT_RADIUS = 30;
 const PLAYER_INVULNERABLE_MS = 800;
 const MARKER_KEYS = ['enemy', 'boss', 'chest', 'lore'] as const;
 const TURTLE_WALK_ANIM = 'turtle-walk';
+const GUARDIAN_WALK_ANIM = 'guardian-walk-v3';
 // These two source frames share the same 62x48 canvas. The remaining legacy
 // frames were tightly cropped to different widths, which made patrols pulse
 // and jitter as the animation advanced.
 const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1'];
-const CLIMB_VINE_KEY = 'biosphere-climb-vine-v2';
 const BIOSPHERE_TERRAIN_KEY = 'biosphere-terrain-seamless-v2';
 const DECOR_KEYS = [
   'bush',
@@ -128,8 +128,11 @@ export class ZoneScene extends Phaser.Scene {
     ] as const) {
       if (!this.textures.exists(key)) this.load.image(key, `sprites/enemies/${file}`);
     }
-    if (this.zoneKey === 'biosphere' && !this.textures.exists(CLIMB_VINE_KEY)) {
-      this.load.image(CLIMB_VINE_KEY, 'sprites/biosphere/climb-vine-v2.png');
+    for (const [key, file] of [
+      ['turtle_boss_walk_a_v3', 'turtle_boss_walk_a_v3.png'],
+      ['turtle_boss_walk_b_v3', 'turtle_boss_walk_b_v3.png']
+    ] as const) {
+      if (!this.textures.exists(key)) this.load.image(key, `sprites/enemies/${file}`);
     }
     if (this.zoneKey === 'biosphere' && !this.textures.exists(BIOSPHERE_TERRAIN_KEY)) {
       this.load.image(BIOSPHERE_TERRAIN_KEY, 'sprites/biosphere/terrain-seamless-v2.jpg');
@@ -170,6 +173,14 @@ export class ZoneScene extends Phaser.Scene {
         key: TURTLE_WALK_ANIM,
         frames: TURTLE_FRAME_KEYS.map((key) => ({ key })),
         frameRate: 4,
+        repeat: -1
+      });
+    }
+    if (!this.anims.exists(GUARDIAN_WALK_ANIM)) {
+      this.anims.create({
+        key: GUARDIAN_WALK_ANIM,
+        frames: [{ key: 'turtle_boss_walk_a_v3' }, { key: 'turtle_boss_walk_b_v3' }],
+        frameRate: 5,
         repeat: -1
       });
     }
@@ -338,6 +349,8 @@ export class ZoneScene extends Phaser.Scene {
             level: 3,
             isBoss: true,
             elite: this.zoneKey === 'biosphere',
+            patrolMinX: 282 * TILE_SIZE,
+            patrolMaxX: 337 * TILE_SIZE,
             onGuardianAttack: (attack, enemy) => this.handleGuardianAttack(attack, enemy)
           });
           this.enemies.push(this.guardian);
@@ -436,4 +449,366 @@ export class ZoneScene extends Phaser.Scene {
       const key = `marker-${kind}`;
       if (!this.textures.exists(key)) continue;
       const x = obj.x ?? 0;
-      const y = obj.y 
+      const y = obj.y ?? 0;
+      const image = this.add.image(x, y, key).setDepth(5);
+
+      this.interactables.push({
+        id,
+        kind,
+        x,
+        y,
+        image,
+        text: props.text ? String(props.text) : undefined,
+        item: props.item ? String(props.item) : undefined
+      });
+    }
+  }
+
+  private updateInteractions(): void {
+    let nearest: InteractableEntry | null = null;
+    let nearestDist = INTERACT_RADIUS;
+    for (const entry of this.interactables) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 16, entry.x, entry.y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = entry;
+      }
+    }
+
+    if (nearest) {
+      this.promptText?.setPosition(nearest.x, nearest.y - 14).setVisible(true);
+    } else {
+      this.promptText?.setVisible(false);
+    }
+
+    if (nearest && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+      this.collectInteractable(nearest);
+    }
+  }
+
+  private collectInteractable(entry: InteractableEntry): void {
+    CollectedItems.add(entry.id);
+    entry.image.destroy();
+    this.promptText?.setVisible(false);
+    this.interactables = this.interactables.filter((e) => e !== entry);
+    const message = entry.kind === 'chest' ? `Relic recovered: ${entry.item ?? 'unknown'}` : entry.text ?? '...';
+    this.showMessage(message, COLLECT_MESSAGE_MS);
+  }
+
+  private createDecor(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('decor');
+    for (const obj of layer?.objects ?? []) {
+      const props = getObjectProperties(obj);
+      const kind = String(props.kind ?? '');
+      const key = `decor-${kind}`;
+      if (!this.textures.exists(key)) continue;
+      this.add.image(obj.x ?? 0, obj.y ?? 0, key).setDepth(4);
+    }
+  }
+
+  private createClimbables(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('climbables');
+    for (const [climbIndex, obj] of (layer?.objects ?? []).entries()) {
+      const width = obj.width ?? TILE_SIZE;
+      const height = obj.height ?? TILE_SIZE * 4;
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      // The object starts above the landing so the player's full body can
+      // clear the lip. Artwork covers that complete height too, making every
+      // climbable pixel visible and keeping the exit fully player-controlled.
+      const tileBottom = Math.round((y + height) / TILE_SIZE);
+      const artTop = y;
+      const artBottom = tileBottom * TILE_SIZE + 5;
+      const artHeight = artBottom - artTop;
+      const faceWidth = width + 18;
+      const faceX = x + width / 2;
+      const zone = this.add.zone(x + width / 2, artTop + artHeight / 2, width, artHeight);
+      this.physics.add.existing(zone, true);
+      this.physics.add.overlap(this.player, zone, () => this.player.markTouchingClimbZone(x + width / 2));
+
+      const roots = this.add.graphics().setDepth(0.9);
+      const left = faceX - faceWidth / 2;
+      const right = faceX + faceWidth / 2;
+      const center = faceX;
+      const leftEdge: Phaser.Math.Vector2[] = [];
+      const rightEdge: Phaser.Math.Vector2[] = [];
+      for (let i = 0; i <= 12; i += 1) {
+        const t = i / 12;
+        const yy = artTop + artHeight * t;
+        const sway = Math.sin(t * Math.PI * 4.2) * 5;
+        leftEdge.push(new Phaser.Math.Vector2(center - faceWidth * 0.38 + sway, yy));
+        rightEdge.push(new Phaser.Math.Vector2(center + faceWidth * 0.38 + sway, yy));
+      }
+      roots.fillStyle(0x14271b, 0.98).fillPoints([...leftEdge, ...rightEdge.reverse()], true);
+      roots.lineStyle(12, 0x263c25, 0.98).beginPath()
+        .moveTo(center - 9, artTop)
+        .lineTo(center + 8, artTop + artHeight * 0.25)
+        .lineTo(center - 7, artTop + artHeight * 0.52)
+        .lineTo(center + 7, artTop + artHeight * 0.78)
+        .lineTo(center - 5, artBottom)
+        .strokePath();
+      roots.lineStyle(4, 0x607b43, 0.88).beginPath()
+        .moveTo(center - 8, artTop)
+        .lineTo(center + 7, artTop + artHeight * 0.25)
+        .lineTo(center - 6, artTop + artHeight * 0.52)
+        .lineTo(center + 8, artTop + artHeight * 0.78)
+        .lineTo(center - 4, artBottom)
+        .strokePath();
+      roots.lineStyle(5, 0x243b27, 0.86).beginPath()
+        .moveTo(left + 5, artTop + 8)
+        .lineTo(right - 5, artTop + artHeight * 0.36)
+        .lineTo(left + 7, artTop + artHeight * 0.7)
+        .lineTo(right - 4, artBottom - 5)
+        .strokePath();
+      // Ground roots physically merge the trunk into the floor. They angle
+      // downward rather than reading as another floating platform.
+      roots.lineStyle(8, 0x405d34, 0.95)
+        .lineBetween(center, artBottom - 9, left - 14, artBottom)
+        .lineBetween(center, artBottom - 9, right + 14, artBottom);
+
+      // Distinct crowns make above-ledge handholds intentional instead of
+      // looking like alignment mistakes. Every crown grows directly from the
+      // same continuous trunk and is only decorative—the climb bounds remain
+      // identical to the visible art.
+      const crownY = artTop + 7;
+      if (climbIndex % 3 === 0) {
+        const petal = climbIndex % 2 === 0 ? 0xb9e879 : 0x8fd7be;
+        roots.fillStyle(petal, 0.95);
+        for (let p = 0; p < 6; p += 1) {
+          const angle = p * Math.PI / 3;
+          roots.fillEllipse(center + Math.cos(angle) * 13, crownY + Math.sin(angle) * 9, 15, 10);
+        }
+        roots.fillStyle(0xf2d56f, 1).fillCircle(center, crownY, 7);
+      } else if (climbIndex % 3 === 1) {
+        roots.fillStyle(0x6f9f52, 0.98)
+          .fillEllipse(center - 15, crownY + 3, 24, 10)
+          .fillEllipse(center + 15, crownY + 3, 24, 10)
+          .fillEllipse(center - 7, crownY - 5, 17, 12)
+          .fillEllipse(center + 7, crownY - 5, 17, 12);
+        roots.fillStyle(0xa5c86d, 1).fillCircle(center, crownY + 2, 5);
+      } else {
+        roots.fillStyle(0x365f46, 0.98).fillEllipse(center, crownY + 3, 36, 24);
+        roots.fillStyle(0x8de4af, 0.88).fillEllipse(center, crownY, 23, 15);
+        roots.fillStyle(0xd9ffd0, 0.95).fillCircle(center, crownY - 1, 5);
+      }
+    }
+  }
+
+  private createHazards(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('hazards');
+    for (const obj of layer?.objects ?? []) {
+      const width = obj.width ?? TILE_SIZE;
+      const height = obj.height ?? TILE_SIZE;
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      const zone = this.add.zone(x + width / 2, y + height / 2, width, height);
+      this.physics.add.existing(zone, true);
+      this.physics.add.overlap(this.player, zone, () => this.hurtPlayer(x + width / 2));
+
+      for (const edgeX of [x - 5, x + width + 5]) {
+        const blocker = this.add.zone(edgeX, y - 24, 8, 96);
+        this.physics.add.existing(blocker, true);
+        for (const enemy of this.enemies) {
+          this.physics.add.collider(enemy, blocker, () => enemy.turnFromObstacle());
+        }
+      }
+
+      const spikes = this.add.graphics().setDepth(3).fillStyle(0xb9e6c5, 0.85);
+      for (let spikeX = x; spikeX < x + width; spikeX += 12) {
+        spikes.fillTriangle(spikeX, y + height, spikeX + 6, y, spikeX + 12, y + height);
+      }
+    }
+  }
+
+  private createCheckpoints(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('checkpoints');
+    for (const obj of layer?.objects ?? []) {
+      const name = obj.name || 'start';
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      const light = this.add.circle(x, y - 12, 9, 0x79f2b2, 0.35).setStrokeStyle(2, 0xd9ffe8, 0.9).setDepth(4);
+      const zone = this.add.zone(x, y - 12, 32, 54);
+      this.physics.add.existing(zone, true);
+      const checkpoint = { name, x, y, light };
+      this.checkpoints.push(checkpoint);
+      this.physics.add.overlap(this.player, zone, () => {
+        if (this.activeCheckpoint === name) return;
+        this.activeCheckpoint = name;
+        this.health = MAX_HEALTH;
+        this.updateHealthHud();
+        light.setFillStyle(0xd9ffe8, 0.8).setScale(1.25);
+        this.showMessage('Sanctuary awakened • Vitality restored • Return here after defeat', 2200);
+      });
+      this.tweens.add({ targets: light, alpha: { from: 0.55, to: 1 }, duration: 900, yoyo: true, repeat: -1 });
+    }
+  }
+
+  private generateCombatTextures(): void {
+    if (!this.textures.exists('guardian-fireball')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x5ddfff, 0.22).fillCircle(10, 10, 10);
+      g.fillStyle(0x86ffc7, 0.7).fillCircle(10, 10, 7);
+      g.fillStyle(0xf4ffe1, 1).fillCircle(10, 10, 3);
+      g.generateTexture('guardian-fireball', 20, 20);
+      g.destroy();
+    }
+    if (!this.textures.exists('guardian-wave')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x9ce678, 0.28).fillTriangle(0, 12, 16, 0, 32, 12);
+      g.lineStyle(3, 0xe8ffad, 0.95).lineBetween(0, 11, 16, 1).lineBetween(16, 1, 32, 11);
+      g.generateTexture('guardian-wave', 32, 13);
+      g.destroy();
+    }
+  }
+
+  private createBossAttackPhysics(groundLayer: Phaser.Tilemaps.TilemapLayer): void {
+    this.bossProjectiles = this.physics.add.group({ allowGravity: false });
+    this.bossWaves = this.physics.add.group({ allowGravity: false });
+    this.physics.add.collider(this.bossProjectiles, groundLayer, (projectile) => projectile.destroy());
+    const damagePlayer: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (_player, attack) => {
+      const sprite = attack as Phaser.Physics.Arcade.Sprite;
+      this.hurtPlayer(sprite.x);
+      sprite.destroy();
+    };
+    this.physics.add.overlap(this.player, this.bossProjectiles, damagePlayer);
+    this.physics.add.overlap(this.player, this.bossWaves, damagePlayer);
+  }
+
+  private handleGuardianAttack(attack: GuardianAttack, enemy: Enemy): void {
+    if (attack === 'fireball') {
+      const baseAngle = Phaser.Math.Angle.Between(enemy.x, enemy.y - 48, this.player.x, this.player.y - 18);
+      for (const offset of [-0.24, 0, 0.24]) {
+        const fireball = this.bossProjectiles?.create(enemy.x, enemy.y - 48, 'guardian-fireball') as Phaser.Physics.Arcade.Sprite | undefined;
+        if (!fireball) continue;
+        fireball.setCircle(7, 3, 3).setDepth(12).setAngularVelocity(260);
+        const speed = offset === 0 ? 250 : 215;
+        this.physics.velocityFromRotation(baseAngle + offset, speed, (fireball.body as Phaser.Physics.Arcade.Body).velocity);
+        this.time.delayedCall(2600, () => fireball.active && fireball.destroy());
+      }
+      return;
+    }
+
+    for (const direction of [-1, 1]) {
+      const wave = this.bossWaves?.create(enemy.x + direction * 36, enemy.y - 7, 'guardian-wave') as Phaser.Physics.Arcade.Sprite | undefined;
+      if (!wave) continue;
+      wave.setFlipX(direction < 0).setDepth(12).setVelocityX(direction * 245);
+      const body = wave.body as Phaser.Physics.Arcade.Body;
+      body.setSize(26, 9).setOffset(3, 3);
+      this.time.delayedCall(1700, () => wave.active && wave.destroy());
+    }
+  }
+
+  private createHud(): void {
+    const objectives: Record<string, string> = {
+      biosphere: 'Cross the canopy • Defeat the eastern guardian',
+      rustsea: 'Follow the tide terraces east',
+      forge: 'Climb the furnace chimney',
+      crystal: 'Reach the crown of the spire'
+    };
+    this.healthText = this.add.text(18, 18, '', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#d9ffe8', stroke: '#07110b', strokeThickness: 4
+    }).setScrollFactor(0).setDepth(110);
+    this.add.text(18, 46, `${this.zoneKey.toUpperCase()}  •  ${objectives[this.zoneKey] ?? 'Explore'}`, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#b8c8bf', backgroundColor: '#07110bbb'
+    }).setPadding(5, 3, 5, 3).setScrollFactor(0).setDepth(110);
+    this.add.text(942, 520, 'MOVE  A/D   JUMP  W/↑   STRIKE  J/X   DASH  SHIFT/C   USE  E', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#d7e7dc', backgroundColor: '#07110baa'
+    }).setPadding(6, 4, 6, 4).setOrigin(1, 1).setScrollFactor(0).setDepth(110);
+    this.updateHealthHud();
+  }
+
+  private createWorldMap(map: Phaser.Tilemaps.Tilemap, layer: Phaser.Tilemaps.TilemapLayer): void {
+    this.add.rectangle(840,49,208,76,0x061510,0.9).setStrokeStyle(1,0x638275,0.6).setScrollFactor(0).setDepth(109);
+    const g=this.add.graphics().setScrollFactor(0).setDepth(110).fillStyle(0x47755a,0.8);
+    for(let y=0;y<map.height;y+=2) for(let x=0;x<map.width;x+=2) {
+      if(layer.getTileAt(x,y)?.collides) g.fillRect(747+x/map.width*192,20+y/map.height*57,1.6,1.6);
+    }
+    this.mapDot=this.add.circle(747,20,3,0xf6d898).setScrollFactor(0).setDepth(111);
+    this.regionText=this.add.text(18,78,'WAKING GROVE',{fontFamily:'monospace',fontSize:'13px',color:'#f0d8ab',letterSpacing:2}).setScrollFactor(0).setDepth(110);
+    this.add.text(18,496,'CLIMB  W/S + A/D     LEAP OFF  C     SANCTUARIES RESTORE HEALTH',{fontFamily:'monospace',fontSize:'11px',color:'#b7cabb',backgroundColor:'#07110baa'}).setPadding(5).setScrollFactor(0).setDepth(110);
+  }
+
+  private updateHealthHud(): void {
+    this.healthText?.setText(`VITALITY  ${'◆'.repeat(this.health)}${'◇'.repeat(MAX_HEALTH - this.health)}`);
+  }
+
+  private createParallax(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {
+    const bgKey = `bg-${this.zoneKey}`;
+    const width = mapWidthPx + 2000;
+    const height = mapHeightPx + 400;
+
+    // Tinted repeating texture as a guaranteed-full-coverage base layer —
+    // keeps working at the level's far edges even where a hero painting
+    // (below) doesn't reach.
+    this.add
+      .tileSprite(mapWidthPx / 2, mapHeightPx / 2, width, height, bgKey)
+      .setScrollFactor(0.15)
+      .setTint(config.backgroundTintFar)
+      .setDepth(-11);
+
+    this.add
+      .tileSprite(mapWidthPx / 2, mapHeightPx / 2, width, height, bgKey)
+      .setScrollFactor(0.4)
+      .setTint(config.backgroundTintNear)
+      .setDepth(-10);
+
+    if (config.heroBackgroundPath) {
+      const heroKey = `hero-${this.zoneKey}`;
+      const source = this.textures.get(heroKey).getSourceImage();
+      // Centered and scrolling slower than the camera (scrollFactor < 1),
+      // the image has to be as wide as the whole map or the untouched edges
+      // peek out from behind it as the camera nears either end — see the
+      // parallax-coverage math this replaced for the derivation.
+      const displayWidth = mapWidthPx;
+      const displayHeight = displayWidth * (source.height / source.width);
+      this.add
+        .image(mapWidthPx / 2, mapHeightPx, heroKey)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(displayWidth, displayHeight)
+        .setScrollFactor(0.45)
+        .setDepth(-9);
+    }
+    if (this.zoneKey === 'biosphere') {
+      this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x041b18, 0.34)
+        .setOrigin(0)
+        .setScrollFactor(0)
+        .setDepth(-8);
+    }
+  }
+
+  private createAmbientParticles(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {
+    this.add.particles(0, 0, PARTICLE_TEXTURE_KEY, {
+      x: { min: 0, max: mapWidthPx },
+      y: { min: 0, max: mapHeightPx },
+      lifespan: { min: 4000, max: 7000 },
+      speedY: { min: -12, max: -4 },
+      speedX: { min: -6, max: 6 },
+      scale: { start: 0.5, end: 0.1 },
+      alpha: { start: 0, end: 0.35 },
+      tint: config.backgroundTintNear,
+      frequency: 220,
+      quantity: 1
+    }).setDepth(-5);
+  }
+
+  private generatePlayerTexture(): void {
+    const key = 'player';
+    if (this.textures.exists(key)) return;
+    const width = 22;
+    const height = 36;
+    const graphics = this.make.graphics({ x: 0, y: 0 });
+    // Compact moss-cloaked explorer: still procedural, but with a readable
+    // silhouette and palette instead of the original featureless rectangle.
+    graphics.fillStyle(0x07110b, 1).fillRect(6, 0, 11, 3);
+    graphics.fillStyle(0xd9b98c, 1).fillRect(7, 3, 9, 9);
+    graphics.fillStyle(0x233b2c, 1).fillRect(4, 2, 4, 9).fillRect(16, 4, 3, 7);
+    graphics.fillStyle(0xbff5d0, 1).fillRect(14, 6, 2, 2);
+    graphics.fillStyle(0x315b42, 1).fillRect(4, 12, 14, 16);
+    graphics.fillStyle(0x47795a, 1).fillTriangle(2, 29, 20, 29, 11, 13);
+    graphics.fillStyle(0x9fd8af, 1).fillRect(2, 15, 3, 11).fillRect(17, 15, 3, 11);
+    graphics.fillStyle(0x17241c, 1).fillRect(5, 28, 5, 7).fillRect(13, 28, 5, 7);
+    graphics.fillStyle(0xcfffe0, 1).fillRect(4, 34, 6, 2).fillRect(13, 34, 6, 2);
+    graphics.generateTexture(key, width, height);
+    graphics.destroy();
+  }
+}

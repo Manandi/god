@@ -18,6 +18,8 @@ export interface EnemyOptions {
   level: number;
   isBoss?: boolean;
   elite?: boolean;
+  patrolMinX?: number;
+  patrolMaxX?: number;
   onGuardianAttack?: (attack: GuardianAttack, enemy: Enemy) => void;
 }
 
@@ -42,6 +44,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lastAttack: BossAttack = 'jump';
   private stateUntil = 1000;
   private readonly idleTexture: string;
+  private readonly patrolMinX: number;
+  private readonly patrolMaxX: number;
+  private traversingStep = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, groundLayer: Phaser.Tilemaps.TilemapLayer, options: EnemyOptions) {
     super(scene, x, y, textureKey);
@@ -53,8 +58,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.elite = options.elite ?? false;
     this.onGuardianAttack = options.onGuardianAttack;
     this.idleTexture = textureKey;
+    this.patrolMinX = options.patrolMinX ?? Number.NEGATIVE_INFINITY;
+    this.patrolMaxX = options.patrolMaxX ?? Number.POSITIVE_INFINITY;
     this.health = this.isBoss ? (this.elite ? 10 : 5) : this.elite ? 2 : 1;
     this.maxHealth = this.health;
+    if (this.isBoss) this.stateUntil = scene.time.now + 1800;
     this.healthBar = scene.add.graphics().setDepth(21);
     this.setOrigin(0.5, 1).setCollideWorldBounds(true).setDepth(5);
     if (options.animKey) this.play(options.animKey);
@@ -90,6 +98,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const now = this.scene.time.now;
     this.drawStatus();
+    if (this.traversingStep) return;
 
     if (this.elite && this.isBoss && this.updateGuardian(now, playerX, playerY, body)) return;
     if (now < this.hurtUntil || now < this.pauseUntil) { body.setVelocityX(0); return; }
@@ -101,16 +110,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.applyFacing();
 
     const aheadX = this.direction > 0 ? body.right + 6 : body.left - 6;
-    const floorAhead = layerHasFloor(this.groundLayer, body, this.direction);
+    const floorNear = !!this.groundLayer.getTileAtWorldXY(aheadX, body.bottom + 6)?.collides;
+    const floorLower = !!this.groundLayer.getTileAtWorldXY(aheadX, body.bottom + 22)?.collides;
+    const floorAhead = floorNear || floorLower;
     const wallAhead = this.groundLayer.getTileAtWorldXY(aheadX, body.center.y)?.collides;
     const oneTileStep = !this.isBoss
       && wallAhead
       && this.groundLayer.getTileAtWorldXY(aheadX, body.bottom - 6)?.collides
       && !this.groundLayer.getTileAtWorldXY(aheadX, body.bottom - 22)?.collides;
     if (body.blocked.down && oneTileStep) {
-      this.y -= 17;
-      body.updateFromGameObject();
-      body.setVelocityX((seesPlayer ? CHASE_SPEED : PATROL_SPEED) * this.direction);
+      this.traverseStep(this.direction, -16, seesPlayer ? CHASE_SPEED : PATROL_SPEED);
+      return;
+    }
+    if (body.blocked.down && !floorNear && floorLower) {
+      this.traverseStep(this.direction, 16, seesPlayer ? CHASE_SPEED : PATROL_SPEED);
       return;
     }
     if (body.blocked.down && (!floorAhead || wallAhead || body.blocked.left || body.blocked.right)) this.turnFromObstacle();
@@ -134,10 +147,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return true;
     }
     if (this.bossState === 'charge') {
-      body.setVelocityX(this.direction * 290);
+      body.setVelocityX(Phaser.Math.Linear(body.velocity.x, this.direction * 320, 0.2));
       this.applyFacing();
-      if (this.isBoss) this.setTexture('turtle_boss_charge_v2').setScale(1.1, 0.9);
-      if (now >= this.stateUntil || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(780);
+      const stride = Math.sin(now / 48);
+      if (this.isBoss) this.setTexture('turtle_boss_charge_v2').setScale(1.09 + stride * 0.025, 0.91 - stride * 0.018).setAngle(this.direction * (2 + stride));
+      const atArenaEdge = this.x <= this.patrolMinX || this.x >= this.patrolMaxX;
+      if (now >= this.stateUntil || atArenaEdge || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(650);
       return true;
     }
     if (this.bossState === 'jump') {
@@ -150,21 +165,39 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return true;
     }
     if (this.bossState === 'recover') {
-      body.setVelocityX(0);
+      body.setVelocityX(Phaser.Math.Linear(body.velocity.x, 0, 0.28));
       this.setTint(0x91a79a);
       if (now >= this.stateUntil) {
         this.bossState = 'patrol';
-        this.stateUntil = now + Phaser.Math.Between(650, 1050);
+        this.stateUntil = now + Phaser.Math.Between(1100, 1600);
         this.clearTint();
         this.attackTell?.setVisible(false);
         this.restoreIdlePose();
       }
       return true;
     }
-    return false;
+
+    // Smooth guardian locomotion. Unlike the small mobs, the guardian uses a
+    // large single-frame silhouette, so acceleration plus a subtle weighted
+    // gait is what prevents it from reading as a PNG sliding over the floor.
+    const seesPlayer = Math.abs(playerX - this.x) < 320 && Math.abs(playerY - this.y) < 90;
+    if (seesPlayer && now > this.turnUntil) this.direction = playerX < this.x ? -1 : 1;
+    if (this.x <= this.patrolMinX) this.direction = 1;
+    if (this.x >= this.patrolMaxX) this.direction = -1;
+    const targetSpeed = (seesPlayer ? 86 : 54) * this.direction;
+    body.setVelocityX(Phaser.Math.Linear(body.velocity.x, targetSpeed, 0.075));
+    this.applyFacing();
+    if (!this.anims.isPlaying || this.anims.currentAnim?.key !== 'guardian-walk-v3') {
+      this.play('guardian-walk-v3', true);
+    }
+    this.setScale(1).setAngle(0);
+    const wallAhead = this.groundLayer.getTileAtWorldXY(this.direction > 0 ? body.right + 6 : body.left - 6, body.center.y)?.collides;
+    if (body.blocked.down && (wallAhead || !layerHasFloor(this.groundLayer, body, this.direction))) this.turnFromObstacle();
+    return true;
   }
 
   private beginRandomAttack(now: number, playerX: number): void {
+    this.anims.stop();
     const attacks: BossAttack[] = ['charge', 'fireball', 'jump'];
     let index = Phaser.Math.Between(0, attacks.length - 1);
     if (attacks[index] === this.lastAttack) index = (index + 1) % attacks.length;
@@ -178,6 +211,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.attackTell?.setText(labels[this.queuedAttack]).setVisible(true);
     if (this.queuedAttack === 'charge') this.setTexture('turtle_boss_charge_v2').setScale(1.04, 0.94);
     else this.restoreIdlePose();
+  }
+
+  private traverseStep(direction: 1 | -1, deltaY: number, speed: number): void {
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    this.traversingStep = true;
+    body.setVelocity(0, 0);
+    body.enable = false;
+    this.scene.tweens.add({
+      targets: this,
+      x: this.x + direction * 18,
+      y: this.y + deltaY,
+      duration: 150,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        if (this.defeated) return;
+        body.enable = true;
+        body.updateFromGameObject();
+        body.setVelocityX(direction * speed);
+        this.traversingStep = false;
+      }
+    });
   }
 
   private executeQueuedAttack(now: number, playerX: number, body: Phaser.Physics.Arcade.Body): void {
@@ -218,6 +272,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private restoreIdlePose(): void {
+    this.anims.stop();
     this.setTexture(this.idleTexture).setScale(1).setAngle(0);
     this.applyFacing();
   }

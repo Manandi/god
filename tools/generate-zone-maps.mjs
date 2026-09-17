@@ -274,8 +274,10 @@ function loot(item) {
 const layouts = [
   {key:'biosphere', title:'THE HOLLOW ROOTS', floor:60,
     profile:[[0,60],[20,60],[28,57],[44,57],[52,54],[96,54],[104,60],[126,60],[136,55],[164,55],[174,61],[200,61],[210,56],[240,56],[250,52],[270,52],[278,58],[340,58]],
-    ridge:[52,40,44], cave:[128,66,68,11],
-    climb:[[49,40,3,14,'right','wall'],[132,58,4,19,'right','shaft'],[192,59,4,18,'right','shaft']],
+    ridge:[52,40,44], cave:[128,69,68,8],
+    // Every climb begins at a real floor and extends 2-4 tiles above its
+    // destination ledge so the player's full body can clear the lip.
+    climb:[[38,54,3,20,'right','shaft'],[49,37,3,17,'right','wall'],[101,41,3,17,'right','wall'],[132,53,4,24,'right','shaft'],[164,54,4,23,'right','shaft'],[192,57,4,20,'right','shaft'],[260,49,3,22,'right','shaft']],
     hazards:[[30,3],[146,3],[220,3]], names:['Waking grove','Hollow roots','Keeper overlook','Guardian court']},
 ];
 for (const [index, layout] of layouts.slice(0, 1).entries()) {
@@ -300,8 +302,18 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     fillRect(grid,x,top,1,thickness,W,H);
   }
   fillRect(grid,rx+rw-6,ry,6,layout.floor-ry,W,H);
-  // A broad tunnel runs underneath, then opens through the root's foot.
-  carve(grid,rx,ry+8,rw-6,layout.floor-(ry+8));
+  // High canopy overlook: a substantial optional upper route anchored into
+  // the terrain, with its own climb and reward rather than floating tiles.
+  fillRect(grid,104,44,24,5,W,H);
+  fillRect(grid,124,44,4,16,W,H);
+  // Carve a rounded root arch instead of a rectangular void. The opening is
+  // player-height at both ends and rises organically beneath the crown.
+  for(let x=rx;x<rx+rw-6;x++) {
+    const t=(x-rx)/(rw-7);
+    const arch=Math.sin(t*Math.PI);
+    const openingTop=layout.floor-5-Math.round(arch*7);
+    carve(grid,x,openingTop,1,layout.floor-openingTop,W,H);
+  }
   carve(grid,rx+rw-6,layout.floor-6,11,6);
   const [cx,cy,cw,ch]=layout.cave;
   // The undercroft follows an uneven ceiling and floor instead of being a
@@ -318,7 +330,38 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     const toothTop=cy+Math.round((Math.sin(t*Math.PI*3)+1)*0.7);
     fillRect(grid,toothX,toothTop,3,3,W,H);
   }
+  // A rounded loft above the undercroft creates an optional exploration loop
+  // and reconnects through its own climb shaft instead of ending in a pocket.
+  for(let x=146;x<181;x++) {
+    const t=(x-146)/34;
+    const ceiling=67-Math.round(Math.sin(t*Math.PI)*4);
+    carve(grid,x,ceiling,1,70-ceiling,W,H);
+  }
+  // Western secret grotto: a deliberately dead-end discovery room reached by
+  // descending away from the main route.
+  for(let x=28;x<47;x++) {
+    const t=(x-28)/18;
+    const ceiling=68-Math.round(Math.sin(t*Math.PI)*4);
+    carve(grid,x,ceiling,1,74-ceiling,W,H);
+  }
+  // Eastern reliquary: a second optional dead end before the guardian court.
+  for(let x=246;x<270;x++) {
+    const t=(x-246)/23;
+    const ceiling=65-Math.round(Math.sin(t*Math.PI)*3);
+    carve(grid,x,ceiling,1,71-ceiling,W,H);
+  }
   for(const [x,y,w,h,,mode] of layout.climb) if(mode !== 'wall') carve(grid,x,y,w,h);
+  // Remove generator crumbs and close pinholes. These tiny disconnected cells
+  // were the random squares visible around cave and climb entrances.
+  for(let pass=0;pass<2;pass++) {
+    const next=grid.map(row=>[...row]);
+    for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++) {
+      const neighbors=grid[y-1][x]+grid[y+1][x]+grid[y][x-1]+grid[y][x+1];
+      if(grid[y][x] && neighbors<=1) next[y][x]=0;
+      if(!grid[y][x] && neighbors===4) next[y][x]=1;
+    }
+    for(let y=0;y<H;y++) grid[y]=next[y];
+  }
   const spawns=[spawnPoint('start',5,surfaces[5]),spawnPoint('fromWest',5,surfaces[5]),spawnPoint('fromEast',W-6,surfaces[W-6])];
   const checkpointCols=[286];
   const checkpoints=checkpointCols.map((x,i)=>{
@@ -327,11 +370,14 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     spawns.push(spawnPoint(name,x,surface-1));
     return marker('checkpoint',name,x,surface);
   });
-  const encounters=[... [18,72,112,150,185,232,260].map(x=>markerOnSurface(grid,W,H,'encounter','turtle',x)),
+  const encounters=[... [18,72,112,150,185,216,232].map(x=>markerOnSurface(grid,W,H,'encounter','turtle',x)),
     markerOnSurface(grid,W,H,'encounter','turtle-boss',326)];
   const interactables=[
     marker('interactable','lore',10,surfaces[10]-1,lore(layout.names[0]+'. Hold W or ↑ to climb. Press C to leap away.')),
     marker('interactable','chest',cx+cw/2,cy+ch-2,loot('Buried relic')),
+    marker('interactable','chest',34,72,loot('Groveheart seed')),
+    markerOnSurface(grid,W,H,'interactable','lore',112,lore('From this forgotten bough, the old forest paths become visible.')),
+    marker('interactable','chest',252,69,loot('Guardian-carved charm')),
     markerOnSurface(grid,W,H,'interactable','lore',300,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
   ];
   const doors=[];
@@ -460,4 +506,111 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
       rowBottom: landingTopRow,
       name: 'toCrystal',
       targetZone: 'crystal',
-      targetSpawn: 'fr
+      targetSpawn: 'fromWest'
+    })
+  ];
+
+  const spawns = [spawnPoint('fromWest', 4, R - 8), spawnPoint('fromEast', W - 6, landingTopRow - 3)];
+
+  // Segment platforms share columns across the two alternating families, so
+  // markers tied to a *specific* segment use its known y directly rather than
+  // a column-based surface lookup (which would find whichever segment in
+  // that column is topmost, not necessarily this one).
+  const enemySpots = [chimneyPlatforms[2], chimneyPlatforms[4], chimneyPlatforms[9]];
+  const encounters = [
+    ...enemySpots.map((p) => marker('encounter', 'enemy', p.x + 2, p.y - 1)),
+    markerOnSurface(grid, W, H, 'encounter', 'boss', 40)
+  ];
+
+  const midRest = chimneyPlatforms[MID_REST_INDEX];
+  const interactables = [
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 16, lore('The forge never went cold; it just ran out of things worth shaping.')),
+    marker('interactable', 'chest', midRest.x, midRest.y - 1, loot('Ember Core Shard')),
+    markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('Whoever built the last landing meant to come back down.')),
+    markerOnSurface(grid, W, H, 'interactable', 'chest', W - 10, loot('Slag-Forged Ring'))
+  ];
+
+  writeZone(
+    'forge.json',
+    buildTiledMap({
+      width: W,
+      height: H,
+      zoneKey: 'forge',
+      layers: [
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
+        { type: 'objects', name: 'doors', objects: doors },
+        { type: 'objects', name: 'spawns', objects: spawns },
+        { type: 'objects', name: 'encounters', objects: encounters },
+        { type: 'objects', name: 'interactables', objects: interactables },
+        { type: 'objects', name: 'decor', objects: decor }
+      ]
+    })
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Zone: crystal (current frontier — no forward door yet)
+// ---------------------------------------------------------------------------
+{
+  objectIdSeq = 1;
+  const W = 100;
+  const H = 50;
+  const R = H;
+  const grid = emptyGrid(W, H);
+
+  fillRect(grid, 0, R - 3, 14, 3, W, H);
+
+  // Spire climb: asymmetric jutting platforms, narrower every third segment
+  // — except where a patrolling enemy stands, which gets real room instead.
+  const SEGMENTS = 13;
+  const WIDE_INDICES = new Set([3, 7]);
+  const spirePlatforms = [];
+  for (let i = 0; i < SEGMENTS; i++) {
+    const x = i % 2 === 0 ? 16 : 22;
+    const y = R - 6 - i * 3;
+    const w = WIDE_INDICES.has(i) ? 8 : i % 3 === 2 ? 3 : 4;
+    fillRect(grid, x, y, w, 2, W, H);
+    spirePlatforms.push({ x, y, w });
+  }
+  const topSpire = spirePlatforms[SEGMENTS - 1];
+  const plateauTopRow = topSpire.y - 4;
+
+  fillRect(grid, 40, plateauTopRow, W - 40, 3, W, H); // final plateau
+
+  const decor = scatterDecor(grid, W, H, 8, ['gem_green', 'gem_red', 'gem_yellow', 'rock'], 59);
+
+  const doors = [doorObject({ col: 0, rowBottom: R - 3, name: 'toForge', targetZone: 'forge', targetSpawn: 'fromEast' })];
+
+  const spawns = [spawnPoint('fromWest', 4, R - 8), spawnPoint('end', W - 15, plateauTopRow - 3)];
+
+  // Same column-sharing caveat as forge's chimney: use each segment's known
+  // y directly instead of a surface lookup.
+  const enemySpots = [spirePlatforms[3], spirePlatforms[7]];
+  const encounters = [
+    ...enemySpots.map((p) => marker('encounter', 'enemy', p.x + 1, p.y - 1)),
+    markerOnSurface(grid, W, H, 'encounter', 'boss', W - 30)
+  ];
+
+  const interactables = [
+    marker('interactable', 'lore', spirePlatforms[1].x, spirePlatforms[1].y - 1, lore('The crystal grows fastest where people used to give up.')),
+    markerOnSurface(grid, W, H, 'interactable', 'chest', W - 20, loot('Prism Splinter')),
+    markerOnSurface(grid, W, H, 'interactable', 'lore', W - 12, lore('The path ends here — for now. The next vein hasn’t been logged yet.'))
+  ];
+
+  writeZone(
+    'crystal.json',
+    buildTiledMap({
+      width: W,
+      height: H,
+      zoneKey: 'crystal',
+      layers: [
+        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
+        { type: 'objects', name: 'doors', objects: doors },
+        { type: 'objects', name: 'spawns', objects: spawns },
+        { type: 'objects', name: 'encounters', objects: encounters },
+        { type: 'objects', name: 'interactables', objects: interactables },
+        { type: 'objects', name: 'decor', objects: decor }
+      ]
+    })
+  );
+}
