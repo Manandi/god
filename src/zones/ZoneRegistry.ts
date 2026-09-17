@@ -14,7 +14,7 @@ export const ZONES: Record<string, ZoneConfig> = {
   biosphere: {
     key: 'biosphere',
     mapPath: 'maps/biosphere.json',
-    tilesetPath: 'tilesets/biosphere.png',
+    tilesetPath: 'tilesets/biosphere.svg',
     backgroundPath: 'backgrounds/biosphere.png',
     backgroundTintFar: 0x1b3a2a,
     backgroundTintNear: 0x2f6b47,

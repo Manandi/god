@@ -14,7 +14,15 @@ interface InputKeys {
   right: Phaser.Input.Keyboard.Key;
   jumpKeys: Phaser.Input.Keyboard.Key[];
   downKeys: Phaser.Input.Keyboard.Key[];
+  attackKeys: Phaser.Input.Keyboard.Key[];
+  dashKeys: Phaser.Input.Keyboard.Key[];
 }
+
+const ATTACK_ACTIVE_MS = 120;
+const ATTACK_COOLDOWN_MS = 260;
+const DASH_DURATION_MS = 135;
+const DASH_COOLDOWN_MS = 650;
+const DASH_SPEED = 390;
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   readonly fsm: StateMachine<Player>;
@@ -33,6 +41,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly levelBadge: LevelBadge;
   private touchingClimbZone = false;
   private isClimbing = false;
+  private attackActiveUntil = 0;
+  private attackReadyAt = 0;
+  private dashUntil = 0;
+  private dashReadyAt = 0;
+  private attackId = 0;
+  private climbReleaseUntil = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -59,7 +73,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       downKeys: [
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
         keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S)
-      ]
+      ],
+      attackKeys: [keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J), keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X)],
+      dashKeys: [keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT), keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C)]
     };
     this.leftKeyA = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     this.rightKeyD = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
@@ -77,7 +93,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   get isGrounded(): boolean {
-    return this.body?.blocked.down ?? false;
+    return !!(this.body?.blocked.down || this.body?.touching.down);
   }
 
   /** Flashes a hurt tint for durationMs, overriding the state-driven tint
@@ -95,6 +111,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   get isClimbingWall(): boolean {
     return this.isClimbing;
+  }
+
+  get facingDirection(): 1 | -1 {
+    return this.flipX ? -1 : 1;
+  }
+
+  get currentAttackId(): number {
+    return this.attackId;
+  }
+
+  get isAttackActive(): boolean {
+    return this.scene.time.now < this.attackActiveUntil;
+  }
+
+  get isDashInvulnerable(): boolean {
+    return this.scene.time.now < this.dashUntil;
+  }
+
+  getAttackBounds(): Phaser.Geom.Rectangle {
+    const reach = 34;
+    const left = this.facingDirection > 0 ? this.x + 5 : this.x - reach - 5;
+    return new Phaser.Geom.Rectangle(left, this.y - 31, reach, 27);
   }
 
   private get moveLeftHeld(): boolean {
@@ -121,12 +159,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
 
-    this.updateClimbTransitions(body);
-    if (this.isClimbing) {
-      this.updateClimbMovement(body);
+    this.updateActions(time, body);
+    if (this.isDashInvulnerable) {
+      this.setMaxVelocity(DASH_SPEED, PHYSICS.maxFallSpeed);
+      body.setDragX(0);
+      body.setAcceleration(0, 0);
+      body.setVelocityY(0);
     } else {
-      this.updateHorizontalMovement(body);
-      this.updateJump(body, dt);
+      this.setMaxVelocity(PHYSICS.moveSpeed, PHYSICS.maxFallSpeed);
+      body.setDragX(this.isGrounded ? PHYSICS.runDrag : PHYSICS.airDrag);
+      body.setAllowGravity(!this.isClimbing);
+      this.updateClimbTransitions(body);
+      if (this.isClimbing) {
+        this.updateClimbMovement(body);
+      } else {
+        this.updateHorizontalMovement(body);
+        this.updateJump(body, dt);
+      }
     }
     this.updateStateMachine(body);
 
@@ -143,6 +192,38 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.updateVisualJuice(time, delta);
     this.touchingClimbZone = false;
+  }
+
+  private updateActions(time: number, body: Phaser.Physics.Arcade.Body): void {
+    const attackPressed = this.keys.attackKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
+    if (attackPressed && time >= this.attackReadyAt && !this.isClimbing) {
+      this.attackId += 1;
+      this.attackActiveUntil = time + ATTACK_ACTIVE_MS;
+      this.attackReadyAt = time + ATTACK_COOLDOWN_MS;
+      this.showAttackArc();
+    }
+
+    const dashPressed = !this.isClimbing && this.keys.dashKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
+    if (dashPressed && time >= this.dashReadyAt && !this.isClimbing) {
+      this.dashUntil = time + DASH_DURATION_MS;
+      this.dashReadyAt = time + DASH_COOLDOWN_MS;
+      body.setAllowGravity(false);
+      body.setVelocity(this.facingDirection * DASH_SPEED, 0);
+      this.emitDust(0.8);
+    }
+  }
+
+  private showAttackArc(): void {
+    const direction = this.facingDirection;
+    const arc = this.scene.add
+      .graphics()
+      .setPosition(this.x, this.y)
+      .lineStyle(4, 0xd8ffe8, 0.9)
+      .beginPath()
+      .arc(direction * 5, -18, 27, direction > 0 ? -0.9 : Math.PI - 0.9, direction > 0 ? 0.9 : Math.PI + 0.9, direction < 0)
+      .strokePath()
+      .setDepth(11);
+    this.scene.tweens.add({ targets: arc, alpha: 0, scale: 1.2, duration: ATTACK_ACTIVE_MS, onComplete: () => arc.destroy() });
   }
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {
@@ -181,31 +262,35 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Grabs on when touching a climbable zone and pressing up, lets go on
    * jump (pushing off away from the wall) or on leaving the zone. */
   private updateClimbTransitions(body: Phaser.Physics.Arcade.Body): void {
-    if (!this.isClimbing && this.touchingClimbZone && this.upHeld) {
+    if (!this.isClimbing && this.touchingClimbZone && this.upHeld && this.scene.time.now >= this.climbReleaseUntil) {
       this.isClimbing = true;
       body.setAllowGravity(false);
       body.setVelocity(0, 0);
       return;
     }
 
-    if (this.isClimbing && (!this.touchingClimbZone || this.jumpJustPressed)) {
-      const pushOff = this.isClimbing && this.touchingClimbZone && this.jumpJustPressed;
+    const pushOff = this.isClimbing && this.keys.dashKeys.some(key => Phaser.Input.Keyboard.JustDown(key));
+    if (this.isClimbing && (!this.touchingClimbZone || pushOff)) {
       this.isClimbing = false;
+      this.climbReleaseUntil = this.scene.time.now + 300;
       body.setAllowGravity(true);
       if (pushOff) {
-        const dir = this.flipX ? 1 : -1;
+        const dir = this.facingDirection;
         body.setVelocity(dir * 200, PHYSICS.jumpVelocity * 0.7);
       } else {
         // Climbed out the top/bottom of the zone — drop any residual climb
         // velocity so gravity doesn't carry a leftover upward "bounce".
-        body.setVelocity(0, 0);
+        body.setVelocityY(Math.min(body.velocity.y, -80));
       }
     }
   }
 
   private updateClimbMovement(body: Phaser.Physics.Arcade.Body): void {
     const vy = this.upHeld ? -PHYSICS.climbSpeed : this.downHeld ? PHYSICS.climbSpeed : 0;
-    body.setVelocity(0, vy);
+    const vx = this.moveRightHeld ? 65 : this.moveLeftHeld ? -65 : 0;
+    body.setAccelerationX(0);
+    body.setVelocity(vx, vy);
+    if(vx) this.setFlipX(vx < 0);
   }
 
   private updateStateMachine(body: Phaser.Physics.Arcade.Body): void {

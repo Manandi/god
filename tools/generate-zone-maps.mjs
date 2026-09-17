@@ -172,6 +172,20 @@ function marker(kind, name, col, row, extra = []) {
   };
 }
 
+function regionObject(type, name, col, row, widthCols, heightRows, extra = []) {
+  return {
+    id: nextObjectId(),
+    name,
+    type,
+    x: col * TILE,
+    y: row * TILE,
+    width: widthCols * TILE,
+    height: heightRows * TILE,
+    visible: true,
+    properties: extra
+  };
+}
+
 // Places a marker resting on whatever surface is topmost at that column,
 // instead of a manually guessed row — markers are static images with no
 // physics to "settle" them, so a wrong row leaves them floating unreachable.
@@ -255,99 +269,63 @@ function loot(item) {
   return [{ name: 'item', type: 'string', value: item }];
 }
 
-// ---------------------------------------------------------------------------
-// Zone: biosphere (starting zone)
-// ---------------------------------------------------------------------------
-{
+// Authored terrain profiles. Most walkable area belongs to solid land masses;
+// shafts connect surface routes to underpasses instead of floating staircases.
+const layouts = [
+  {key:'biosphere', title:'THE HOLLOW ROOTS', floor:52,
+    profile:[[0,52],[22,52],[28,49],[42,49],[48,46],[65,46],[71,50],[84,50],[90,47],[105,47],[111,43],[130,43],[136,47],[155,47],[161,50],[184,50],[190,46],[208,46],[214,49],[244,49]],
+    ridge:[52,28,27], cave:[100,51,58,9], climb:[[48,28,4,24],[79,28,4,25],[96,42,4,20],[158,43,4,19]],
+    hazards:[[32,48,4],[144,46,4],[202,45,4]], names:['Waking grove','Hollow roots','Keeper overlook']},
+];
+for (const [index, layout] of layouts.slice(0, 1).entries()) {
   objectIdSeq = 1;
-  const W = 160;
-  const H = 32;
-  const R = H;
-  const grid = emptyGrid(W, H);
-
-  fillRect(grid, 0, R - 3, W, 3, W, H);
-  carve(grid, 20, R - 3, 4, 2); // first gap, safety floor beneath stays solid
-
-  // Rising platforms — wide enough for a patrolling mob to actually patrol,
-  // not just twitch at both edges of a 4-tile strip.
-  fillRect(grid, 30, R - 7, 9, 2, W, H);
-  fillRect(grid, 50, R - 13, 9, 2, W, H);
-
-  fillRect(grid, 15, R - 6, 3, 2, W, H); // ledge up to the locked vault door
-  fillRect(grid, 1, 4, 5, 1, W, H); // isolated vault room, teleport-only
-
-  carve(grid, 66, R - 3, 6, 2); // second, wider gap — a real running jump
-  // Canopy chain: a zig-zag route above the gap, distinct from the low platforms.
-  fillRect(grid, 78, R - 6, 9, 2, W, H);
-  fillRect(grid, 92, R - 11, 9, 2, W, H);
-  fillRect(grid, 108, R - 6, 9, 2, W, H);
-
-  // Boss arena: wide open clearing before the exit door.
-  // (floor already continuous here — kept deliberately obstacle-free)
-
-  // Climbable root-wall set piece: a tall climbable trunk (biosphere-climb-1
-  // art, cols 119-123) leading up to a reward landing (cols 124-133, right
-  // where the trunk ends — nothing solid sits above the climb column itself,
-  // or the player collides with the landing's underside partway up), plus a
-  // jumpable stepped mound (biosphere-terrain-1 art, cols 145-151) — real
-  // hand-placed terrain, not auto-tiled.
-  fillRect(grid, 124, 11, 10, 2, W, H); // climb-wall reward landing
-  fillRect(grid, 145, 26, 7, 6, W, H); // terrain-piece plateau (steps up from the floor)
-
-  // No scattered decor icons here — the flat Kenney cutouts read as random
-  // debris against the painted panorama background, worse than nothing.
-  const decor = [];
-
-  const doors = [
-    doorObject({ col: W - 1, rowBottom: R - 3, name: 'toRustsea', targetZone: 'rustsea', targetSpawn: 'fromWest' }),
-    doorObject({
-      col: 17,
-      rowBottom: R - 6,
-      name: 'vaultDoor',
-      targetZone: 'biosphere',
-      targetSpawn: 'vault',
-      requiredLevel: 5
-    })
+  const W=244, H=72;
+  const grid=emptyGrid(W,H);
+  const surfaces=[];
+  for(let x=0;x<W;x++){
+    const p=layout.profile.findIndex((point,i)=>i<layout.profile.length-1 && x>=point[0] && x<layout.profile[i+1][0]);
+    const a=layout.profile[Math.max(0,p)], b=layout.profile[Math.max(0,p)+1];
+    const y=Math.round(a[1]+(b[1]-a[1])*(x-a[0])/(b[0]-a[0]));
+    surfaces.push(y); fillRect(grid,x,y,1,H-y,W,H);
+  }
+  const [rx,ry,rw]=layout.ridge;
+  fillRect(grid,rx,ry,rw,H-ry,W,H);
+  // A spacious traversable arch underneath the ridge. Its ceiling remains
+  // ten tiles above the route and the solid supports stay outside the path.
+  carve(grid,rx,layout.floor-9,rw,9);
+  const [cx,cy,cw,ch]=layout.cave;
+  carve(grid,cx,cy,cw,ch);
+  for(const [x,y,w,h] of layout.climb) carve(grid,x,y,w,h);
+  // Climbing ledges are attached to the shaft's side, never across its mouth.
+  const shelves=[[rx,ry,rw],[cx+8,cy+ch-4,9],[cx+cw-17,cy+ch-5,9]];
+  for(const [x,y,w] of shelves.slice(1)) fillRect(grid,x,y,w,2,W,H);
+  const spawns=[spawnPoint('start',5,surfaces[5]),spawnPoint('fromWest',5,surfaces[5]),spawnPoint('fromEast',W-6,surfaces[W-6])];
+  const checkpointCols=[22,104,211];
+  const checkpoints=checkpointCols.map((x,i)=>{
+    const name='rest'+i;
+    spawns.push(spawnPoint(name,x,surfaces[x]-1));
+    return marker('checkpoint',name,x,surfaces[x]);
+  });
+  const encounters=[... [34,91,152,195].map(x=>marker('encounter','turtle',x,surfaces[x]-1)),
+    marker('encounter','turtle',rx+12,ry-1),
+    marker('encounter','turtle',cx+cw/2,cy+ch-1),
+    marker('encounter','turtle-boss',229,surfaces[229]-1)];
+  const interactables=[
+    marker('interactable','lore',10,surfaces[10]-1,lore(layout.names[0]+'. Hold W or ↑ to climb. Press C to leap away.')),
+    marker('interactable','chest',rx+rw-6,ry-1,loot('Overlook relic')),
+    marker('interactable','chest',cx+cw-12,cy+ch-6,loot('Buried relic')),
+    marker('interactable','lore',216,surfaces[216]-1,lore('The guardian guards the passage. Its amber warning means: prepare to evade.'))
   ];
-
-  const spawns = [
-    spawnPoint('start', 3, R - 8),
-    spawnPoint('fromEast', W - 6, R - 8),
-    spawnPoint('vault', 3, 4)
-  ];
-
-  const encounters = [
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 25),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 34),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 82),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle', 130),
-    markerOnSurface(grid, W, H, 'encounter', 'turtle-boss', 140)
-  ];
-
-  const interactables = [
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 6, lore('The biosphere dome cracked a decade before anyone logged a workout for it.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 3, loot('Fern-Wrapped Charm')),
-    markerOnSurface(grid, W, H, 'interactable', 'lore', 96, lore('Something in the canopy still keeps the old irrigation rhythm.')),
-    markerOnSurface(grid, W, H, 'interactable', 'chest', 112, loot('Sapling Core')),
-    marker('interactable', 'chest', 127, 10, loot('Canopy-View Charm'))
-  ];
-
-  writeZone(
-    'biosphere.json',
-    buildTiledMap({
-      width: W,
-      height: H,
-      zoneKey: 'biosphere',
-      layers: [
-        { type: 'tile', name: 'ground', grid: classifyTiles(grid, W, H) },
-        { type: 'objects', name: 'doors', objects: doors },
-        { type: 'objects', name: 'spawns', objects: spawns },
-        { type: 'objects', name: 'encounters', objects: encounters },
-        { type: 'objects', name: 'interactables', objects: interactables },
-        { type: 'objects', name: 'decor', objects: decor }
-      ]
-    })
-  );
+  const doors=[];
+  if(index>0) doors.push(doorObject({col:0,rowBottom:surfaces[0],name:'west',targetZone:layouts[index-1].key,targetSpawn:'fromEast'}));
+  if(index<3) doors.push(doorObject({col:W-1,rowBottom:surfaces[W-1],name:'east',targetZone:'rustsea',targetSpawn:'fromWest'}));
+  const hazards=layout.hazards.map(([x,y,w],i)=>regionObject('hazard','hazard'+i,x,y,w,1));
+  const climbables=layout.climb.map(([x,y,w,h],i)=>regionObject('climbable','shaft'+i,x,y,w,h));
+  const regions=[marker('region',layout.names[0],5,surfaces[5]-6),marker('region',layout.names[1],108,surfaces[108]-6),marker('region',layout.names[2],210,surfaces[210]-6)];
+  writeZone(layout.key+'.json',buildTiledMap({width:W,height:H,zoneKey:layout.key,layers:[
+    {type:'tile',name:'ground',grid:classifyTiles(grid,W,H)},
+    ...Object.entries({doors,spawns,encounters,interactables,climbables,hazards,checkpoints,regions,decor:[]}).map(([name,objects])=>({type:'objects',name,objects}))
+  ]}));
 }
 
 // ---------------------------------------------------------------------------

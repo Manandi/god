@@ -6,6 +6,7 @@ import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistr
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
 import { CollectedItems } from '../progress/CollectedItems';
+import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
   zoneKey?: string;
@@ -28,6 +29,13 @@ interface InteractableEntry {
   item?: string;
 }
 
+interface CheckpointEntry {
+  name: string;
+  x: number;
+  y: number;
+  light: Phaser.GameObjects.Arc;
+}
+
 const TRANSITION_COOLDOWN_MS = 400;
 const LOCKED_MESSAGE_MS = 1800;
 const COLLECT_MESSAGE_MS = 2600;
@@ -35,7 +43,10 @@ const INTERACT_RADIUS = 30;
 const PLAYER_INVULNERABLE_MS = 800;
 const MARKER_KEYS = ['enemy', 'boss', 'chest', 'lore'] as const;
 const TURTLE_WALK_ANIM = 'turtle-walk';
-const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1', 'turtle_walk_2', 'turtle_walk_3', 'turtle_walk_4'];
+// These two source frames share the same 62x48 canvas. The remaining legacy
+// frames were tightly cropped to different widths, which made patrols pulse
+// and jitter as the animation advanced.
+const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1'];
 const DECOR_KEYS = [
   'bush',
   'cactus',
@@ -49,13 +60,7 @@ const DECOR_KEYS = [
   'fence_broken',
   'hill_top'
 ] as const;
-const BIOSPHERE_CLIMB_KEY = 'biosphere-climb-1';
-const BIOSPHERE_TERRAIN_KEY = 'biosphere-terrain-1';
-// World-pixel placement for the biosphere's hand-placed climb/terrain set
-// piece — matches the plateau/landing tiles hand-carved in
-// tools/generate-zone-maps.mjs (cols 119-123, 124-133, 145-151).
-const BIOSPHERE_CLIMB_ZONE = { x: 1904, yTop: 176, width: 80, groundY: 464 };
-const BIOSPHERE_TERRAIN_PIECE = { centerX: 2376, groundY: 464, displayWidth: 150, displayHeight: 186 };
+const MAX_HEALTH = 4;
 
 export class ZoneScene extends Phaser.Scene {
   private zoneKey = FIRST_ZONE;
@@ -68,6 +73,18 @@ export class ZoneScene extends Phaser.Scene {
   private interactables: InteractableEntry[] = [];
   private enemies: Enemy[] = [];
   private playerInvulnerableUntil = 0;
+  private health = MAX_HEALTH;
+  private healthText?: Phaser.GameObjects.Text;
+  private checkpoints: CheckpointEntry[] = [];
+  private activeCheckpoint = FIRST_SPAWN;
+  private enemyAttackIds = new WeakMap<Enemy, number>();
+  private guardian?: Enemy;
+  private regionText?: Phaser.GameObjects.Text;
+  private mapDot?: Phaser.GameObjects.Arc;
+  private mapWidth = 1;
+  private mapHeight = 1;
+  private regions: {x:number; name:string}[] = [];
+  private dying = false;
 
   constructor() {
     super('ZoneScene');
@@ -81,7 +98,11 @@ export class ZoneScene extends Phaser.Scene {
   preload(): void {
     const config = ZONES[this.zoneKey];
     this.load.tilemapTiledJSON(this.zoneKey, config.mapPath);
-    this.load.image(`tileset-${this.zoneKey}`, config.tilesetPath);
+    if (config.tilesetPath.endsWith('.svg')) {
+      this.load.svg(`tileset-${this.zoneKey}`, config.tilesetPath);
+    } else {
+      this.load.image(`tileset-${this.zoneKey}`, config.tilesetPath);
+    }
     this.load.image(`bg-${this.zoneKey}`, config.backgroundPath);
     if (config.heroBackgroundPath && !this.textures.exists(`hero-${this.zoneKey}`)) {
       this.load.image(`hero-${this.zoneKey}`, config.heroBackgroundPath);
@@ -107,14 +128,6 @@ export class ZoneScene extends Phaser.Scene {
     if (!this.textures.exists(PARTICLE_TEXTURE_KEY)) {
       this.load.image(PARTICLE_TEXTURE_KEY, 'sprites/decor/particle.png');
     }
-    if (this.zoneKey === 'biosphere') {
-      if (!this.textures.exists(BIOSPHERE_CLIMB_KEY)) {
-        this.load.image(BIOSPHERE_CLIMB_KEY, 'sprites/biosphere/climb-1.png');
-      }
-      if (!this.textures.exists(BIOSPHERE_TERRAIN_KEY)) {
-        this.load.image(BIOSPHERE_TERRAIN_KEY, 'sprites/biosphere/terrain-1.png');
-      }
-    }
   }
 
   create(): void {
@@ -122,7 +135,13 @@ export class ZoneScene extends Phaser.Scene {
 
     this.interactables = [];
     this.enemies = [];
+    this.checkpoints = [];
+    this.enemyAttackIds = new WeakMap<Enemy, number>();
     this.playerInvulnerableUntil = 0;
+    this.health = MAX_HEALTH;
+    this.dying = false;
+    this.guardian = undefined;
+    this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     this.transitionLocked = true;
@@ -150,9 +169,13 @@ export class ZoneScene extends Phaser.Scene {
       throw new Error(`Failed to create ground layer for zone "${this.zoneKey}"`);
     }
     groundLayer.setCollisionByExclusion([-1, 0]);
+    if (this.zoneKey === 'biosphere') drawBiosphereTerrain(this, map, groundLayer);
 
     const mapWidthPx = map.widthInPixels;
     const mapHeightPx = map.heightInPixels;
+    this.mapWidth = mapWidthPx;
+    this.mapHeight = mapHeightPx;
+    this.regions = (map.getObjectLayer('regions')?.objects ?? []).map(o=>({x:o.x ?? 0,name:o.name}));
 
     this.createParallax(config, mapWidthPx, mapHeightPx);
     this.createAmbientParticles(config, mapWidthPx, mapHeightPx);
@@ -169,9 +192,9 @@ export class ZoneScene extends Phaser.Scene {
     this.createDoors(map);
     this.createEncounters(map, groundLayer);
     this.createInteractables(map);
-    if (this.zoneKey === 'biosphere') {
-      this.createBiosphereSetPieces();
-    }
+    this.createClimbables(map);
+    this.createHazards(map);
+    this.createCheckpoints(map);
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, mapWidthPx, mapHeightPx);
@@ -179,7 +202,7 @@ export class ZoneScene extends Phaser.Scene {
     camera.startFollow(this.player, true, 0.1, 0.1);
 
     this.messageText = this.add
-      .text(16, 16, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ffe066', backgroundColor: '#00000099' })
+      .text(18, 108, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ffe066', backgroundColor: '#000000cc', wordWrap: {width:570} })
       .setPadding(6, 4, 6, 4)
       .setScrollFactor(0)
       .setDepth(100)
@@ -191,14 +214,23 @@ export class ZoneScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(90)
       .setVisible(false);
+
+    this.createHud();
+    if(this.zoneKey === 'biosphere') this.createWorldMap(map,groundLayer);
+    this.cameras.main.fadeIn(500,6,17,14);
   }
 
   update(time: number, delta: number): void {
+    if(this.dying) return;
     this.player.update(time, delta);
     this.updateInteractions();
     for (const enemy of this.enemies) {
-      if (!enemy.isDefeated) enemy.update();
+      if (!enemy.isDefeated) enemy.update(this.player.x, this.player.y);
     }
+    this.updatePlayerAttacks();
+    this.mapDot?.setPosition(747 + this.player.x / this.mapWidth * 192, 20 + this.player.y / this.mapHeight * 57);
+    const region = [...this.regions].reverse().find(r=>this.player.x>=r.x);
+    this.regionText?.setText(region?.name.toUpperCase() ?? 'BIOSPHERE');
   }
 
   private findSpawnPosition(map: Phaser.Tilemaps.Tilemap, spawnName: string): { x: number; y: number } {
@@ -225,6 +257,10 @@ export class ZoneScene extends Phaser.Scene {
       const height = obj.height ?? TILE_SIZE;
       const zone = this.add.zone(obj.x! + width / 2, obj.y! + height / 2, width, height);
       this.physics.add.existing(zone, true);
+      if(this.zoneKey === 'biosphere') {
+        this.add.rectangle(obj.x!+width/2,obj.y!+height/2,12,height,0xb4d5a0,0.32).setStrokeStyle(2,0xe4e6bb,0.8).setDepth(4);
+        this.add.text(obj.x!-14,obj.y!-20,'RUSTSEA →',{fontFamily:'monospace',fontSize:'12px',color:'#f3d9a0'}).setOrigin(1,0).setDepth(4);
+      }
 
       this.physics.add.overlap(this.player, zone, () => this.handleDoorOverlap(meta));
     }
@@ -232,6 +268,10 @@ export class ZoneScene extends Phaser.Scene {
 
   private handleDoorOverlap(meta: DoorMeta): void {
     if (this.transitionLocked) return;
+    if(this.zoneKey === 'biosphere' && meta.targetZone === 'rustsea' && this.guardian && !this.guardian.isDefeated) {
+      this.showMessage('The keeper seals the eastern passage. Defeat it to continue.',1800);
+      return;
+    }
 
     if (PlayerProgress.level < meta.requiredLevel) {
       this.showMessage(`Locked — requires Level ${meta.requiredLevel} (you are Level ${PlayerProgress.level})`, LOCKED_MESSAGE_MS);
@@ -269,6 +309,7 @@ export class ZoneScene extends Phaser.Scene {
           new Enemy(this, x, y, 'turtle_idle', groundLayer, {
             patrols: true,
             animKey: TURTLE_WALK_ANIM,
+            elite: this.zoneKey === 'biosphere',
             level: 1
           })
         );
@@ -276,9 +317,8 @@ export class ZoneScene extends Phaser.Scene {
       }
       if (kind === 'turtle-boss') {
         if (this.textures.exists('turtle_boss')) {
-          this.enemies.push(
-            new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: false, level: 3, isBoss: true })
-          );
+          this.guardian = new Enemy(this, x, y, 'turtle_boss', groundLayer, { patrols: true, level: 3, isBoss: true, elite: this.zoneKey === 'biosphere' });
+          this.enemies.push(this.guardian);
         }
         continue;
       }
@@ -302,21 +342,50 @@ export class ZoneScene extends Phaser.Scene {
   private handleEnemyOverlap(enemy: Enemy): void {
     if (enemy.isDefeated) return;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const isStomp = body.velocity.y > 0 && this.player.y <= enemy.y - enemy.displayHeight * 0.6;
+    const enemyBody = enemy.body as Phaser.Physics.Arcade.Body;
+    const isStomp = body.velocity.y > 0 && body.bottom <= enemyBody.top + 14;
 
     if (isStomp) {
-      enemy.defeat();
+      enemy.takeHit(this.player.x);
       body.setVelocityY(PHYSICS.jumpVelocity * 0.6);
       this.cameras.main.shake(60, 0.002);
       return;
     }
 
-    if (this.time.now < this.playerInvulnerableUntil) return;
+    this.hurtPlayer(enemy.x);
+  }
+
+  private hurtPlayer(sourceX: number): void {
+    if (this.dying || this.time.now < this.playerInvulnerableUntil || this.player.isDashInvulnerable) return;
     this.playerInvulnerableUntil = this.time.now + PLAYER_INVULNERABLE_MS;
-    const pushDir = this.player.x < enemy.x ? -1 : 1;
+    this.health = Math.max(0, this.health - 1);
+    this.updateHealthHud();
+    const pushDir = this.player.x < sourceX ? -1 : 1;
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(pushDir * 200, -200);
     this.player.setHurtFlash(600);
     this.cameras.main.shake(100, 0.003);
+    if (this.health === 0) {
+      this.dying = true;
+      body.setVelocity(0,0);
+      body.enable = false;
+      this.cameras.main.fadeOut(350, 8, 12, 12);
+      this.time.delayedCall(380, () => this.scene.restart({ zoneKey: this.zoneKey, spawnName: this.activeCheckpoint }));
+    }
+  }
+
+  private updatePlayerAttacks(): void {
+    if (!this.player.isAttackActive) return;
+    const attackBounds = this.player.getAttackBounds();
+    for (const enemy of this.enemies) {
+      if (enemy.isDefeated || this.enemyAttackIds.get(enemy) === this.player.currentAttackId) continue;
+      const enemyBody = enemy.body as Phaser.Physics.Arcade.Body;
+      const enemyBounds = new Phaser.Geom.Rectangle(enemyBody.x, enemyBody.y, enemyBody.width, enemyBody.height);
+      if (!Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) continue;
+      this.enemyAttackIds.set(enemy, this.player.currentAttackId);
+      enemy.takeHit(this.player.x);
+      this.cameras.main.shake(45, 0.0015);
+    }
   }
 
   private createInteractables(map: Phaser.Tilemaps.Tilemap): void {
@@ -372,8 +441,12 @@ export class ZoneScene extends Phaser.Scene {
     entry.image.destroy();
     this.promptText?.setVisible(false);
     this.interactables = this.interactables.filter((e) => e !== entry);
+    if(entry.kind === 'chest') {
+      this.health = MAX_HEALTH;
+      this.updateHealthHud();
+    }
 
-    const message = entry.kind === 'chest' ? `Found: ${entry.item ?? 'something useful'}` : entry.text ?? '...';
+    const message = entry.kind === 'chest' ? `Relic recovered: ${entry.item ?? 'unknown'} • Vitality restored` : entry.text ?? '...';
     this.showMessage(message, COLLECT_MESSAGE_MS);
   }
 
@@ -388,32 +461,102 @@ export class ZoneScene extends Phaser.Scene {
     }
   }
 
-  // First real "hand-placed terrain" set piece: a climbable root-wall and a
-  // jumpable stepped mound, both real painted art with real (if approximate)
-  // collision — matches the plateau/landing tiles hand-carved for biosphere
-  // in tools/generate-zone-maps.mjs, not the usual auto-tiled grid.
-  private createBiosphereSetPieces(): void {
-    const climb = BIOSPHERE_CLIMB_ZONE;
-    this.add
-      .image(climb.x + climb.width / 2, climb.groundY, BIOSPHERE_CLIMB_KEY)
-      .setOrigin(0.5, 1)
-      .setDisplaySize(climb.width, climb.groundY - climb.yTop)
-      .setDepth(4);
+  private createClimbables(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('climbables');
+    for (const obj of layer?.objects ?? []) {
+      const width = obj.width ?? TILE_SIZE;
+      const height = obj.height ?? TILE_SIZE * 4;
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      const zone = this.add.zone(x + width / 2, y + height / 2, width, height);
+      this.physics.add.existing(zone, true);
+      this.physics.add.overlap(this.player, zone, () => this.player.markTouchingClimbZone());
 
-    const climbZone = this.add.zone(climb.x + climb.width / 2, (climb.yTop + climb.groundY) / 2, climb.width, climb.groundY - climb.yTop);
-    this.physics.add.existing(climbZone, true);
-    this.physics.add.overlap(this.player, climbZone, () => this.player.markTouchingClimbZone());
-    // Solid unless actively climbing, so it's a real obstacle you have to
-    // grab onto rather than a decoration you can walk or jump straight
-    // through.
-    this.physics.add.collider(this.player, climbZone, undefined, () => !this.player.isClimbingWall);
+      const vine = this.add.graphics().setDepth(3);
+      // Climb grips extend along a clearly bounded traverse shaft.
+      vine.lineStyle(2,0xd5d8a0,0.6);
+      for(let stepY=y+8;stepY<y+height;stepY+=16) vine.lineBetween(x+8,stepY,x+width-8,stepY);
+      vine.lineStyle(4, 0x234e38, 0.95).beginPath().moveTo(x + width * 0.35, y).lineTo(x + width * 0.58, y + height).strokePath();
+      vine.lineStyle(2, 0x62a66e, 0.9).beginPath().moveTo(x + width * 0.65, y).lineTo(x + width * 0.42, y + height).strokePath();
+      for (let leafY = y + 12; leafY < y + height; leafY += 24) {
+        vine.fillStyle(0x78b96f, 0.85).fillEllipse(x + (leafY % 48 === 0 ? width * 0.25 : width * 0.72), leafY, 10, 5);
+      }
+    }
+  }
 
-    const terrain = BIOSPHERE_TERRAIN_PIECE;
-    this.add
-      .image(terrain.centerX, terrain.groundY, BIOSPHERE_TERRAIN_KEY)
-      .setOrigin(0.5, 1)
-      .setDisplaySize(terrain.displayWidth, terrain.displayHeight)
-      .setDepth(4);
+  private createHazards(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('hazards');
+    for (const obj of layer?.objects ?? []) {
+      const width = obj.width ?? TILE_SIZE;
+      const height = obj.height ?? TILE_SIZE;
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      const zone = this.add.zone(x + width / 2, y + height / 2, width, height);
+      this.physics.add.existing(zone, true);
+      this.physics.add.overlap(this.player, zone, () => this.hurtPlayer(x + width / 2));
+
+      const spikes = this.add.graphics().setDepth(3).fillStyle(0xb9e6c5, 0.85);
+      for (let spikeX = x; spikeX < x + width; spikeX += 12) {
+        spikes.fillTriangle(spikeX, y + height, spikeX + 6, y, spikeX + 12, y + height);
+      }
+    }
+  }
+
+  private createCheckpoints(map: Phaser.Tilemaps.Tilemap): void {
+    const layer = map.getObjectLayer('checkpoints');
+    for (const obj of layer?.objects ?? []) {
+      const name = obj.name || 'start';
+      const x = obj.x ?? 0;
+      const y = obj.y ?? 0;
+      const light = this.add.circle(x, y - 12, 9, 0x79f2b2, 0.35).setStrokeStyle(2, 0xd9ffe8, 0.9).setDepth(4);
+      const zone = this.add.zone(x, y - 12, 32, 54);
+      this.physics.add.existing(zone, true);
+      const checkpoint = { name, x, y, light };
+      this.checkpoints.push(checkpoint);
+      this.physics.add.overlap(this.player, zone, () => {
+        if (this.activeCheckpoint === name) return;
+        this.activeCheckpoint = name;
+        this.health = MAX_HEALTH;
+        this.updateHealthHud();
+        light.setFillStyle(0xd9ffe8, 0.8).setScale(1.25);
+        this.showMessage('Sanctuary awakened • Vitality restored • Return here after defeat', 2200);
+      });
+      this.tweens.add({ targets: light, alpha: { from: 0.55, to: 1 }, duration: 900, yoyo: true, repeat: -1 });
+    }
+  }
+
+  private createHud(): void {
+    const objectives: Record<string, string> = {
+      biosphere: 'Cross the canopy • Defeat the eastern guardian',
+      rustsea: 'Follow the tide terraces east',
+      forge: 'Climb the furnace chimney',
+      crystal: 'Reach the crown of the spire'
+    };
+    this.healthText = this.add.text(18, 18, '', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#d9ffe8', stroke: '#07110b', strokeThickness: 4
+    }).setScrollFactor(0).setDepth(110);
+    this.add.text(18, 46, `${this.zoneKey.toUpperCase()}  •  ${objectives[this.zoneKey] ?? 'Explore'}`, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#b8c8bf', backgroundColor: '#07110bbb'
+    }).setPadding(5, 3, 5, 3).setScrollFactor(0).setDepth(110);
+    this.add.text(942, 520, 'MOVE  A/D   JUMP  W/↑   STRIKE  J/X   DASH  SHIFT/C   USE  E', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#d7e7dc', backgroundColor: '#07110baa'
+    }).setPadding(6, 4, 6, 4).setOrigin(1, 1).setScrollFactor(0).setDepth(110);
+    this.updateHealthHud();
+  }
+
+  private createWorldMap(map: Phaser.Tilemaps.Tilemap, layer: Phaser.Tilemaps.TilemapLayer): void {
+    this.add.rectangle(840,49,208,76,0x061510,0.9).setStrokeStyle(1,0x638275,0.6).setScrollFactor(0).setDepth(109);
+    const g=this.add.graphics().setScrollFactor(0).setDepth(110).fillStyle(0x47755a,0.8);
+    for(let y=0;y<map.height;y+=2) for(let x=0;x<map.width;x+=2) {
+      if(layer.getTileAt(x,y)?.collides) g.fillRect(747+x/map.width*192,20+y/map.height*57,1.6,1.6);
+    }
+    this.mapDot=this.add.circle(747,20,3,0xf6d898).setScrollFactor(0).setDepth(111);
+    this.regionText=this.add.text(18,78,'WAKING GROVE',{fontFamily:'monospace',fontSize:'13px',color:'#f0d8ab',letterSpacing:2}).setScrollFactor(0).setDepth(110);
+    this.add.text(18,496,'CLIMB  W/S + A/D     LEAP OFF  C     SANCTUARIES RESTORE HEALTH',{fontFamily:'monospace',fontSize:'11px',color:'#b7cabb',backgroundColor:'#07110baa'}).setPadding(5).setScrollFactor(0).setDepth(110);
+  }
+
+  private updateHealthHud(): void {
+    this.healthText?.setText(`VITALITY  ${'◆'.repeat(this.health)}${'◇'.repeat(MAX_HEALTH - this.health)}`);
   }
 
   private createParallax(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {
@@ -472,13 +615,20 @@ export class ZoneScene extends Phaser.Scene {
   private generatePlayerTexture(): void {
     const key = 'player';
     if (this.textures.exists(key)) return;
-    const width = 18;
-    const height = 34;
+    const width = 22;
+    const height = 36;
     const graphics = this.make.graphics({ x: 0, y: 0 });
-    graphics.fillStyle(0xffffff, 1);
-    graphics.fillRect(0, 0, width, height);
-    graphics.fillStyle(0x0b0b0f, 1);
-    graphics.fillRect(width - 5, 6, 4, 4);
+    // Compact moss-cloaked explorer: still procedural, but with a readable
+    // silhouette and palette instead of the original featureless rectangle.
+    graphics.fillStyle(0x07110b, 1).fillRect(6, 0, 11, 3);
+    graphics.fillStyle(0xd9b98c, 1).fillRect(7, 3, 9, 9);
+    graphics.fillStyle(0x233b2c, 1).fillRect(4, 2, 4, 9).fillRect(16, 4, 3, 7);
+    graphics.fillStyle(0xbff5d0, 1).fillRect(14, 6, 2, 2);
+    graphics.fillStyle(0x315b42, 1).fillRect(4, 12, 14, 16);
+    graphics.fillStyle(0x47795a, 1).fillTriangle(2, 29, 20, 29, 11, 13);
+    graphics.fillStyle(0x9fd8af, 1).fillRect(2, 15, 3, 11).fillRect(17, 15, 3, 11);
+    graphics.fillStyle(0x17241c, 1).fillRect(5, 28, 5, 7).fillRect(13, 28, 5, 7);
+    graphics.fillStyle(0xcfffe0, 1).fillRect(4, 34, 6, 2).fillRect(13, 34, 6, 2);
     graphics.generateTexture(key, width, height);
     graphics.destroy();
   }
