@@ -163,6 +163,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   update(time: number, delta: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
+    const dexterityScale = 0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012;
 
     this.updateActions(time, body);
     if (this.isDashInvulnerable) {
@@ -171,7 +172,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       body.setAcceleration(0, 0);
       body.setVelocityY(0);
     } else {
-      this.setMaxVelocity(PHYSICS.moveSpeed, PHYSICS.maxFallSpeed);
+      this.setMaxVelocity(PHYSICS.moveSpeed * dexterityScale, PHYSICS.maxFallSpeed);
       body.setDragX(this.isGrounded ? PHYSICS.runDrag : PHYSICS.airDrag);
       body.setAllowGravity(!this.isClimbing);
       this.updateClimbTransitions(body);
@@ -211,7 +212,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const dashPressed = !this.isClimbing && this.keys.dashKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
     if (dashPressed && time >= this.dashReadyAt && !this.isClimbing) {
       this.dashUntil = time + DASH_DURATION_MS;
-      this.dashReadyAt = time + DASH_COOLDOWN_MS;
+      const resolveScale = 1.06 - (PlayerProgress.stats.resolve - 8) * 0.012;
+      this.dashReadyAt = time + DASH_COOLDOWN_MS * resolveScale;
       body.setAllowGravity(false);
       body.setVelocity(this.facingDirection * DASH_SPEED, 0);
       this.emitDust(0.8);
@@ -233,10 +235,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {
     if (this.moveLeftHeld && !this.moveRightHeld) {
-      body.setAccelerationX(-PHYSICS.runAccel);
+      body.setAccelerationX(-PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012));
       this.setFlipX(true);
     } else if (this.moveRightHeld && !this.moveLeftHeld) {
-      body.setAccelerationX(PHYSICS.runAccel);
+      body.setAccelerationX(PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012));
       this.setFlipX(false);
     } else {
       body.setAccelerationX(0);
@@ -271,9 +273,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.isClimbing && touchingClimbZone && this.upHeld && this.scene.time.now >= this.climbReleaseUntil) {
       this.isClimbing = true;
       body.setAllowGravity(false);
+      // Keep the player's current position when grabbing the roots. Snapping
+      // directly to the center made contact at the foot of a trunk look like
+      // a short teleport, especially when grabbing from either edge.
       body.setVelocity(0, 0);
-      this.x = this.climbCenterX;
-      body.updateFromGameObject();
       return;
     }
 
@@ -294,8 +297,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private updateClimbMovement(body: Phaser.Physics.Arcade.Body): void {
-    const vy = this.upHeld ? -PHYSICS.climbSpeed : this.downHeld ? PHYSICS.climbSpeed : 0;
-    const vx = this.moveRightHeld ? 70 : this.moveLeftHeld ? -70 : 0;
+    const climbScale = 0.92 + (PlayerProgress.stats.stamina - 8) * 0.014;
+    const vy = this.upHeld ? -PHYSICS.climbSpeed * climbScale : this.downHeld ? PHYSICS.climbSpeed * climbScale : 0;
+    // Player input wins, otherwise ease toward the trunk's center. This keeps
+    // the climb visually attached without ever changing position instantly.
+    const centerVelocity = Phaser.Math.Clamp((this.climbCenterX - this.x) * 5, -55, 55);
+    const vx = this.moveRightHeld ? 70 : this.moveLeftHeld ? -70 : centerVelocity;
     body.setAccelerationX(0);
     body.setVelocity(vx, vy);
     if(vx) this.setFlipX(vx < 0);

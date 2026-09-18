@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from './config';
+import { TitleScene } from './scenes/TitleScene';
 import { ZoneScene } from './scenes/ZoneScene';
 
 new Phaser.Game({
@@ -10,6 +11,9 @@ new Phaser.Game({
   backgroundColor: '#1a1a2e',
   pixelArt: false,
   antialias: true,
+  dom: {
+    createContainer: true
+  },
   physics: {
     default: 'arcade',
     arcade: {
@@ -17,5 +21,5 @@ new Phaser.Game({
       debug: false
     }
   },
-  scene: [ZoneScene]
+  scene: [TitleScene, ZoneScene]
 });

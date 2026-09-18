@@ -6,6 +6,7 @@ import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistr
 import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
 import { CollectedItems } from '../progress/CollectedItems';
+import { GameSave } from '../progress/GameSave';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
@@ -62,7 +63,6 @@ const DECOR_KEYS = [
   'fence_broken',
   'hill_top'
 ] as const;
-const MAX_HEALTH = 4;
 
 export class ZoneScene extends Phaser.Scene {
   private zoneKey = FIRST_ZONE;
@@ -75,7 +75,8 @@ export class ZoneScene extends Phaser.Scene {
   private interactables: InteractableEntry[] = [];
   private enemies: Enemy[] = [];
   private playerInvulnerableUntil = 0;
-  private health = MAX_HEALTH;
+  private health = 4;
+  private maxHealth = 4;
   private healthText?: Phaser.GameObjects.Text;
   private checkpoints: CheckpointEntry[] = [];
   private activeCheckpoint = FIRST_SPAWN;
@@ -89,14 +90,15 @@ export class ZoneScene extends Phaser.Scene {
   private dying = false;
   private bossProjectiles?: Phaser.Physics.Arcade.Group;
   private bossWaves?: Phaser.Physics.Arcade.Group;
+  private menuKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super('ZoneScene');
   }
 
   init(data: ZoneSceneData): void {
-    this.zoneKey = data.zoneKey ?? FIRST_ZONE;
-    this.spawnName = data.spawnName ?? FIRST_SPAWN;
+    this.zoneKey = data.zoneKey ?? PlayerProgress.currentZone ?? FIRST_ZONE;
+    this.spawnName = data.spawnName ?? PlayerProgress.currentSpawn ?? FIRST_SPAWN;
   }
 
   preload(): void {
@@ -155,11 +157,16 @@ export class ZoneScene extends Phaser.Scene {
     this.checkpoints = [];
     this.enemyAttackIds = new WeakMap<Enemy, number>();
     this.playerInvulnerableUntil = 0;
-    this.health = MAX_HEALTH;
+    this.maxHealth = Phaser.Math.Clamp(3 + Math.floor((PlayerProgress.stats.stamina - 8) / 3), 3, 6);
+    this.health = this.maxHealth;
     this.dying = false;
     this.guardian = undefined;
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.menuKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
+    PlayerProgress.currentZone = this.zoneKey;
+    PlayerProgress.currentSpawn = this.spawnName;
+    GameSave.save();
 
     this.transitionLocked = true;
     this.time.delayedCall(TRANSITION_COOLDOWN_MS, () => {
@@ -249,6 +256,13 @@ export class ZoneScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if(this.dying) return;
+    if (Phaser.Input.Keyboard.JustDown(this.menuKey)) {
+      PlayerProgress.currentZone = this.zoneKey;
+      PlayerProgress.currentSpawn = this.activeCheckpoint;
+      GameSave.save();
+      this.scene.start('TitleScene');
+      return;
+    }
     this.player.update(time, delta);
     this.updateInteractions();
     for (const enemy of this.enemies) {
@@ -310,6 +324,9 @@ export class ZoneScene extends Phaser.Scene {
     }
 
     this.transitionLocked = true;
+    PlayerProgress.currentZone = meta.targetZone;
+    PlayerProgress.currentSpawn = meta.targetSpawn;
+    GameSave.save();
     this.scene.restart({ zoneKey: meta.targetZone, spawnName: meta.targetSpawn });
   }
 
@@ -343,6 +360,7 @@ export class ZoneScene extends Phaser.Scene {
         continue;
       }
       if (kind === 'turtle-boss') {
+        if (PlayerProgress.guardianDefeated) continue;
         if (this.textures.exists('turtle_boss_idle_v2')) {
           this.guardian = new Enemy(this, x, y, 'turtle_boss_idle_v2', groundLayer, {
             patrols: true,
@@ -351,7 +369,12 @@ export class ZoneScene extends Phaser.Scene {
             elite: this.zoneKey === 'biosphere',
             patrolMinX: 282 * TILE_SIZE,
             patrolMaxX: 337 * TILE_SIZE,
-            onGuardianAttack: (attack, enemy) => this.handleGuardianAttack(attack, enemy)
+            onGuardianAttack: (attack, enemy) => this.handleGuardianAttack(attack, enemy),
+            onDefeated: () => {
+              PlayerProgress.guardianDefeated = true;
+              GameSave.save();
+              this.showMessage('Guardian defeated • Guardian cloak unlocked • Autosaved', 2800);
+            }
           });
           this.enemies.push(this.guardian);
         }
@@ -397,7 +420,8 @@ export class ZoneScene extends Phaser.Scene {
       const enemyBounds = enemy.getCombatBounds();
       if (Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) {
         this.enemyAttackIds.set(enemy, this.player.currentAttackId);
-        enemy.takeHit(this.player.x);
+        const damage = PlayerProgress.stats.strength >= 17 ? 2 : 1;
+        enemy.takeHit(this.player.x, damage);
         return;
       }
     }
@@ -432,7 +456,8 @@ export class ZoneScene extends Phaser.Scene {
       const enemyBounds = enemy.getCombatBounds();
       if (!Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) continue;
       this.enemyAttackIds.set(enemy, this.player.currentAttackId);
-      enemy.takeHit(this.player.x);
+      const damage = PlayerProgress.stats.strength >= 17 ? 2 : 1;
+      enemy.takeHit(this.player.x, damage);
       this.cameras.main.shake(45, 0.0015);
     }
   }
@@ -465,7 +490,7 @@ export class ZoneScene extends Phaser.Scene {
 
   private updateInteractions(): void {
     let nearest: InteractableEntry | null = null;
-    let nearestDist = INTERACT_RADIUS;
+    let nearestDist = INTERACT_RADIUS + Math.max(0, PlayerProgress.stats.insight - 10) * 1.5;
     for (const entry of this.interactables) {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 16, entry.x, entry.y);
       if (dist < nearestDist) {
@@ -487,6 +512,7 @@ export class ZoneScene extends Phaser.Scene {
 
   private collectInteractable(entry: InteractableEntry): void {
     CollectedItems.add(entry.id);
+    GameSave.save();
     entry.image.destroy();
     this.promptText?.setVisible(false);
     this.interactables = this.interactables.filter((e) => e !== entry);
@@ -641,8 +667,11 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.existing(zone, true);
       this.physics.add.overlap(this.player, zone, () => this.hurtPlayer(x + width / 2));
 
-      for (const edgeX of [x - 5, x + width + 5]) {
-        const blocker = this.add.zone(edgeX, y - 24, 8, 96);
+      // Stop an enemy's whole silhouette before the spikes, not merely its
+      // center/body edge. The old five-pixel offset let turtles appear to sit
+      // on a hazard even though their physics center was technically outside.
+      for (const edgeX of [x - 30, x + width + 30]) {
+        const blocker = this.add.zone(edgeX, y - 24, 10, 96);
         this.physics.add.existing(blocker, true);
         for (const enemy of this.enemies) {
           this.physics.add.collider(enemy, blocker, () => enemy.turnFromObstacle());
@@ -670,8 +699,11 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, zone, () => {
         if (this.activeCheckpoint === name) return;
         this.activeCheckpoint = name;
-        this.health = MAX_HEALTH;
+        PlayerProgress.currentZone = this.zoneKey;
+        PlayerProgress.currentSpawn = name;
+        this.health = this.maxHealth;
         this.updateHealthHud();
+        GameSave.save();
         light.setFillStyle(0xd9ffe8, 0.8).setScale(1.25);
         this.showMessage('Sanctuary awakened • Vitality restored • Return here after defeat', 2200);
       });
@@ -747,7 +779,7 @@ export class ZoneScene extends Phaser.Scene {
     this.add.text(18, 46, `${this.zoneKey.toUpperCase()}  •  ${objectives[this.zoneKey] ?? 'Explore'}`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#b8c8bf', backgroundColor: '#07110bbb'
     }).setPadding(5, 3, 5, 3).setScrollFactor(0).setDepth(110);
-    this.add.text(942, 520, 'MOVE  A/D   JUMP  W/↑   STRIKE  J/X   DASH  SHIFT/C   USE  E', {
+    this.add.text(942, 520, 'MOVE A/D  JUMP W/↑  STRIKE J/X  DASH SHIFT/C  USE E  MENU M', {
       fontFamily: 'monospace', fontSize: '10px', color: '#d7e7dc', backgroundColor: '#07110baa'
     }).setPadding(6, 4, 6, 4).setOrigin(1, 1).setScrollFactor(0).setDepth(110);
     this.updateHealthHud();
@@ -765,7 +797,7 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private updateHealthHud(): void {
-    this.healthText?.setText(`VITALITY  ${'◆'.repeat(this.health)}${'◇'.repeat(MAX_HEALTH - this.health)}`);
+    this.healthText?.setText(`VITALITY  ${'◆'.repeat(this.health)}${'◇'.repeat(this.maxHealth - this.health)}`);
   }
 
   private createParallax(config: ZoneConfig, mapWidthPx: number, mapHeightPx: number): void {
@@ -829,19 +861,25 @@ export class ZoneScene extends Phaser.Scene {
 
   private generatePlayerTexture(): void {
     const key = 'player';
-    if (this.textures.exists(key)) return;
+    if (this.textures.exists(key)) this.textures.remove(key);
     const width = 22;
     const height = 36;
     const graphics = this.make.graphics({ x: 0, y: 0 });
+    const skinColors = [0x8d5c3c, 0xb97950, 0xd9a675, 0xefc394, 0x7a4930];
+    const cloakColors = { moss: 0x47795a, sunroot: 0xc28b42, moonfern: 0x4c86a8, guardian: 0x7f4f78 } as const;
+    const hairColors = { raven: 0x07110b, earth: 0x553522, silver: 0xb9c6bd } as const;
+    const skin = skinColors[PlayerProgress.appearance.skinIndex] ?? skinColors[1];
+    const cloak = cloakColors[PlayerProgress.appearance.cloak];
+    const hair = hairColors[PlayerProgress.appearance.hair];
     // Compact moss-cloaked explorer: still procedural, but with a readable
     // silhouette and palette instead of the original featureless rectangle.
-    graphics.fillStyle(0x07110b, 1).fillRect(6, 0, 11, 3);
-    graphics.fillStyle(0xd9b98c, 1).fillRect(7, 3, 9, 9);
-    graphics.fillStyle(0x233b2c, 1).fillRect(4, 2, 4, 9).fillRect(16, 4, 3, 7);
+    graphics.fillStyle(hair, 1).fillRect(6, 0, 11, 3);
+    graphics.fillStyle(skin, 1).fillRect(7, 3, 9, 9);
+    graphics.fillStyle(hair, 1).fillRect(4, 2, 4, 9).fillRect(16, 4, 3, 7);
     graphics.fillStyle(0xbff5d0, 1).fillRect(14, 6, 2, 2);
-    graphics.fillStyle(0x315b42, 1).fillRect(4, 12, 14, 16);
-    graphics.fillStyle(0x47795a, 1).fillTriangle(2, 29, 20, 29, 11, 13);
-    graphics.fillStyle(0x9fd8af, 1).fillRect(2, 15, 3, 11).fillRect(17, 15, 3, 11);
+    graphics.fillStyle(cloak, 1).fillRect(4, 12, 14, 16);
+    graphics.fillStyle(cloak, 1).fillTriangle(2, 29, 20, 29, 11, 13);
+    graphics.fillStyle(skin, 1).fillRect(2, 15, 3, 11).fillRect(17, 15, 3, 11);
     graphics.fillStyle(0x17241c, 1).fillRect(5, 28, 5, 7).fillRect(13, 28, 5, 7);
     graphics.fillStyle(0xcfffe0, 1).fillRect(4, 34, 6, 2).fillRect(13, 34, 6, 2);
     graphics.generateTexture(key, width, height);

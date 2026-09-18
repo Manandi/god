@@ -19,7 +19,11 @@ for(const layer of map.layers.filter(l=>l.objects)) for(const o of layer.objects
     count++;
     if(layer.name==='encounters') {
       for(const hazard of hazardLayer.objects) {
-        assert(o.x < hazard.x || o.x > hazard.x + hazard.width, 'Enemy '+o.name+' placed over '+hazard.name);
+        const enemyHalfWidth=o.name==='turtle-boss'?48:32;
+        assert(
+          o.x+enemyHalfWidth < hazard.x || o.x-enemyHalfWidth > hazard.x+hazard.width,
+          'Enemy '+o.name+' lacks full-body clearance from '+hazard.name
+        );
       }
       if(o.name==='turtle') {
         const col=Math.floor(o.x/16);

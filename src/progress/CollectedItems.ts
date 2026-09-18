@@ -1,4 +1,3 @@
-// Tracks which interactables (chests/lore) have already been triggered this
-// session, keyed "<zone>:<objectId>". Decoupled from Phaser on purpose, same
-// as PlayerProgress — real persistence (save/load) is Phase 7.
+// Tracks collected chests and lore by "<zone>:<objectId>". GameSave persists
+// this set and restores it before a journey starts.
 export const CollectedItems = new Set<string>();

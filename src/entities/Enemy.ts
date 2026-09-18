@@ -21,6 +21,7 @@ export interface EnemyOptions {
   patrolMinX?: number;
   patrolMaxX?: number;
   onGuardianAttack?: (attack: GuardianAttack, enemy: Enemy) => void;
+  onDefeated?: () => void;
 }
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -34,6 +35,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly healthBar: Phaser.GameObjects.Graphics;
   private readonly attackTell?: Phaser.GameObjects.Text;
   private readonly onGuardianAttack?: (attack: GuardianAttack, enemy: Enemy) => void;
+  private readonly onDefeated?: () => void;
   private health: number;
   private defeated = false;
   private pauseUntil = 0;
@@ -58,6 +60,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.isBoss = options.isBoss ?? false;
     this.elite = options.elite ?? false;
     this.onGuardianAttack = options.onGuardianAttack;
+    this.onDefeated = options.onDefeated;
     this.idleTexture = textureKey;
     this.patrolMinX = options.patrolMinX ?? Number.NEGATIVE_INFINITY;
     this.patrolMaxX = options.patrolMaxX ?? Number.POSITIVE_INFINITY;
@@ -321,12 +324,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.healthBar.fillStyle(this.isBoss ? 0xf1a562 : 0xbace8c).fillRect(this.x - width / 2, y, width * this.health / this.maxHealth, 5);
   }
 
-  takeHit(fromX: number): void {
+  takeHit(fromX: number, damage = 1): void {
     if (this.defeated || this.scene.time.now < this.hurtUntil) return;
     // A strike during a stair tween should interrupt the movement immediately,
     // restore the physics body at the visible sprite, and then apply knockback.
     this.cancelStepTraversal();
-    this.health -= 1;
+    this.health -= Math.max(1, Math.round(damage));
     if (this.health <= 0) { this.defeat(); return; }
     this.hurtUntil = this.scene.time.now + HIT_STUN_MS;
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -342,6 +345,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0); body.enable = false; this.anims.stop(); this.setTint(0x888888);
     this.levelBadge.destroy(); this.healthBar.destroy(); this.attackTell?.destroy();
+    this.onDefeated?.();
     this.scene.tweens.add({ targets: this, scaleY: 0.15, alpha: 0, duration: 180, onComplete: () => this.destroy() });
   }
 }

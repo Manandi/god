@@ -373,7 +373,10 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     spawns.push(spawnPoint(name,x,surface-1));
     return marker('checkpoint',name,x,surface);
   });
-  const encounters=[... [18,72,112,150,185,216,232].map(x=>markerOnSurface(grid,W,H,'encounter','turtle',x)),
+  // Keep each turtle's complete sprite clear of spike beds at spawn. The old
+  // column 150 marker was only one tile beyond hazard1, so half the turtle
+  // visibly occupied the spikes despite its center being outside the hazard.
+  const encounters=[... [18,72,112,138,185,212,232].map(x=>markerOnSurface(grid,W,H,'encounter','turtle',x)),
     markerOnSurface(grid,W,H,'encounter','turtle-boss',326)];
   const interactables=[
     marker('interactable','lore',10,surfaces[10]-1,lore(layout.names[0]+'. Hold W or ↑ to climb. Press C to leap away.')),
