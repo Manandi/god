@@ -84,6 +84,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   get isDefeated(): boolean { return this.defeated; }
   get stompSurfaceY(): number { return this.y - (this.isBoss ? 64 : 34); }
 
+  /** Combat must follow the visible turtle even while its physics body is
+   * temporarily disabled for a one-tile step tween. */
+  getCombatBounds(): Phaser.Geom.Rectangle {
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (!this.traversingStep && body.enable) {
+      return new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+    }
+    return new Phaser.Geom.Rectangle(
+      this.x - body.width / 2,
+      this.y - body.height - 2,
+      body.width,
+      body.height
+    );
+  }
+
   turnFromObstacle(): void {
     if (this.defeated) return;
     this.direction = this.direction === 1 ? -1 : 1;

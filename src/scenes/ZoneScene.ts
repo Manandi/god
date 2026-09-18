@@ -394,7 +394,7 @@ export class ZoneScene extends Phaser.Scene {
 
     if (this.player.isAttackActive) {
       const attackBounds = this.player.getAttackBounds();
-      const enemyBounds = new Phaser.Geom.Rectangle(enemyBody.x, enemyBody.y, enemyBody.width, enemyBody.height);
+      const enemyBounds = enemy.getCombatBounds();
       if (Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) {
         this.enemyAttackIds.set(enemy, this.player.currentAttackId);
         enemy.takeHit(this.player.x);
@@ -429,8 +429,7 @@ export class ZoneScene extends Phaser.Scene {
     const attackBounds = this.player.getAttackBounds();
     for (const enemy of this.enemies) {
       if (enemy.isDefeated || this.enemyAttackIds.get(enemy) === this.player.currentAttackId) continue;
-      const enemyBody = enemy.body as Phaser.Physics.Arcade.Body;
-      const enemyBounds = new Phaser.Geom.Rectangle(enemyBody.x, enemyBody.y, enemyBody.width, enemyBody.height);
+      const enemyBounds = enemy.getCombatBounds();
       if (!Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) continue;
       this.enemyAttackIds.set(enemy, this.player.currentAttackId);
       enemy.takeHit(this.player.x);
@@ -570,31 +569,51 @@ export class ZoneScene extends Phaser.Scene {
       // looking like alignment mistakes. Every crown grows directly from the
       // same continuous trunk and is only decorative—the climb bounds remain
       // identical to the visible art.
-      const crownY = artTop + 7;
+      const crownY = artTop + 9;
+      const crownWidth = Math.max(108, faceWidth + 32);
+      // A broad opaque calyx locks every crown into the trunk instead of
+      // leaving a thin icon hovering over a much heavier root silhouette.
+      roots.fillStyle(0x101f16, 1).fillEllipse(center, crownY + 10, crownWidth, 34);
+      roots.fillStyle(0x29452a, 1).fillEllipse(center, crownY + 8, crownWidth - 10, 25);
+      roots.fillStyle(0x547642, 1)
+        .fillEllipse(center - crownWidth * 0.3, crownY + 5, 34, 17)
+        .fillEllipse(center + crownWidth * 0.3, crownY + 5, 34, 17);
       if (climbIndex % 3 === 0) {
         const petal = climbIndex % 2 === 0 ? 0xb9e879 : 0x8fd7be;
-        // Keep the bloom proportional to the trunk. The previous pass made
-        // these read as tiny map pins instead of a natural root crown.
-        roots.fillStyle(petal, 0.95);
+        for (let p = 0; p < 8; p += 1) {
+          const angle = p * Math.PI / 4;
+          const px = center + Math.cos(angle) * crownWidth * 0.27;
+          const py = crownY + Math.sin(angle) * 13;
+          roots.fillStyle(0x213a24, 1).fillEllipse(px, py, 47, 31);
+          roots.fillStyle(petal, 1).fillEllipse(px, py - 1, 40, 25);
+          roots.fillStyle(0xdaf5a4, 0.72).fillEllipse(px - 4, py - 5, 16, 7);
+        }
+        roots.fillStyle(0x5f4c21, 1).fillCircle(center, crownY, 19);
+        roots.fillStyle(0xf2d56f, 1).fillCircle(center, crownY - 1, 15);
+        roots.fillStyle(0xfff0a3, 1).fillCircle(center - 4, crownY - 5, 5);
+      } else if (climbIndex % 3 === 1) {
         for (let p = 0; p < 6; p += 1) {
           const angle = p * Math.PI / 3;
-          roots.fillEllipse(center + Math.cos(angle) * 16, crownY + Math.sin(angle) * 10, 24, 15);
+          const px = center + Math.cos(angle) * crownWidth * 0.27;
+          const py = crownY + Math.sin(angle) * 11;
+          roots.fillStyle(0x1d3523, 1).fillEllipse(px, py, 45, 25);
+          roots.fillStyle(p % 2 === 0 ? 0x79ae55 : 0x5d914b, 1).fillEllipse(px, py - 1, 38, 19);
+          roots.lineStyle(2, 0xb8d977, 0.8).lineBetween(center, crownY, px, py);
         }
-        roots.fillStyle(0xf2d56f, 1).fillCircle(center, crownY, 7);
-        roots.lineStyle(3, 0x6e8d45, 0.9)
-          .lineBetween(center - 4, crownY + 9, center - 13, crownY + 20)
-          .lineBetween(center + 4, crownY + 9, center + 14, crownY + 18);
-      } else if (climbIndex % 3 === 1) {
-        roots.fillStyle(0x6f9f52, 0.98)
-          .fillEllipse(center - 15, crownY + 3, 25, 12)
-          .fillEllipse(center + 15, crownY + 3, 25, 12)
-          .fillEllipse(center - 7, crownY - 6, 18, 14)
-          .fillEllipse(center + 7, crownY - 6, 18, 14);
-        roots.fillStyle(0xa5c86d, 1).fillCircle(center, crownY + 1, 5);
+        roots.fillStyle(0x365f3b, 1).fillCircle(center, crownY, 17);
+        roots.fillStyle(0xa5d66d, 1).fillCircle(center, crownY - 1, 12);
+        roots.fillStyle(0xe2f4a0, 0.9).fillCircle(center - 3, crownY - 5, 4);
       } else {
-        roots.fillStyle(0x365f46, 0.98).fillEllipse(center, crownY + 3, 48, 28);
-        roots.fillStyle(0x8de4af, 0.88).fillEllipse(center, crownY, 31, 19);
-        roots.fillStyle(0xd9ffd0, 0.95).fillCircle(center, crownY - 1, 6);
+        roots.fillStyle(0x203c2c, 1)
+          .fillEllipse(center - crownWidth * 0.31, crownY + 1, 42, 22)
+          .fillEllipse(center + crownWidth * 0.31, crownY + 1, 42, 22);
+        roots.fillStyle(0x6da65a, 1)
+          .fillEllipse(center - crownWidth * 0.31, crownY - 1, 34, 16)
+          .fillEllipse(center + crownWidth * 0.31, crownY - 1, 34, 16);
+        roots.fillStyle(0x203b31, 1).fillEllipse(center, crownY, 76, 46);
+        roots.fillStyle(0x70c395, 1).fillEllipse(center, crownY - 2, 66, 37);
+        roots.fillStyle(0xa8edb7, 1).fillEllipse(center - 7, crownY - 8, 32, 14);
+        roots.fillStyle(0xe4ffd5, 1).fillCircle(center - 10, crownY - 10, 6);
       }
     }
   }
