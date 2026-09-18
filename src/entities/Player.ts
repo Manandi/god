@@ -163,7 +163,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   update(time: number, delta: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const dt = delta / 1000;
-    const dexterityScale = 0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012;
+    const speedScale = 0.94 + (PlayerProgress.stats.speed - 8) * 0.012;
 
     this.updateActions(time, body);
     if (this.isDashInvulnerable) {
@@ -172,7 +172,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       body.setAcceleration(0, 0);
       body.setVelocityY(0);
     } else {
-      this.setMaxVelocity(PHYSICS.moveSpeed * dexterityScale, PHYSICS.maxFallSpeed);
+      this.setMaxVelocity(PHYSICS.moveSpeed * speedScale, PHYSICS.maxFallSpeed);
       body.setDragX(this.isGrounded ? PHYSICS.runDrag : PHYSICS.airDrag);
       body.setAllowGravity(!this.isClimbing);
       this.updateClimbTransitions(body);
@@ -212,8 +212,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const dashPressed = !this.isClimbing && this.keys.dashKeys.some((key) => Phaser.Input.Keyboard.JustDown(key));
     if (dashPressed && time >= this.dashReadyAt && !this.isClimbing) {
       this.dashUntil = time + DASH_DURATION_MS;
-      const resolveScale = 1.06 - (PlayerProgress.stats.resolve - 8) * 0.012;
-      this.dashReadyAt = time + DASH_COOLDOWN_MS * resolveScale;
+      const disciplineScale = 1.06 - (PlayerProgress.stats.discipline - 8) * 0.012;
+      this.dashReadyAt = time + DASH_COOLDOWN_MS * disciplineScale;
       body.setAllowGravity(false);
       body.setVelocity(this.facingDirection * DASH_SPEED, 0);
       this.emitDust(0.8);
@@ -235,10 +235,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateHorizontalMovement(body: Phaser.Physics.Arcade.Body): void {
     if (this.moveLeftHeld && !this.moveRightHeld) {
-      body.setAccelerationX(-PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012));
+      body.setAccelerationX(-PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.speed - 8) * 0.012));
       this.setFlipX(true);
     } else if (this.moveRightHeld && !this.moveLeftHeld) {
-      body.setAccelerationX(PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.dexterity - 8) * 0.012));
+      body.setAccelerationX(PHYSICS.runAccel * (0.94 + (PlayerProgress.stats.speed - 8) * 0.012));
       this.setFlipX(false);
     } else {
       body.setAccelerationX(0);

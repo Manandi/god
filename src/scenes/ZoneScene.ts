@@ -490,7 +490,7 @@ export class ZoneScene extends Phaser.Scene {
 
   private updateInteractions(): void {
     let nearest: InteractableEntry | null = null;
-    let nearestDist = INTERACT_RADIUS + Math.max(0, PlayerProgress.stats.insight - 10) * 1.5;
+    let nearestDist = INTERACT_RADIUS + Math.max(0, PlayerProgress.stats.focus - 10) * 1.5;
     for (const entry of this.interactables) {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 16, entry.x, entry.y);
       if (dist < nearestDist) {

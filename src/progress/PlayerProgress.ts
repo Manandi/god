@@ -1,25 +1,31 @@
 export interface LifeInputs {
   pushups: number;
-  pullups: number;
-  balanceSeconds: number;
-  coordinationDays: number;
-  cardioMinutes: number;
-  continuousMinutes: number;
-  learningHours: number;
-  learningDays: number;
-  reflectionDays: number;
-  detailRating: number;
+  sprintSeconds: number;
+  distanceKm: number;
+  iqScore: number;
+  focusMinutes: number;
   habitStreak: number;
-  followThroughRating: number;
 }
 
 export interface CharacterStats {
   strength: number;
-  dexterity: number;
+  speed: number;
   stamina: number;
   intelligence: number;
-  insight: number;
-  resolve: number;
+  focus: number;
+  discipline: number;
+}
+
+export type StatKey = keyof CharacterStats;
+export type ActivityKind = 'workout' | 'steps' | 'run' | 'focus' | 'goal';
+
+export interface ActivityEntry {
+  id: string;
+  kind: ActivityKind;
+  date: string;
+  amount: number;
+  xp: number;
+  note?: string;
 }
 
 export type CloakId = 'moss' | 'sunroot' | 'moonfern' | 'guardian';
@@ -33,26 +39,29 @@ export interface CharacterAppearance {
 
 export const DEFAULT_INPUTS: LifeInputs = {
   pushups: 10,
-  pullups: 0,
-  balanceSeconds: 20,
-  coordinationDays: 2,
-  cardioMinutes: 60,
-  continuousMinutes: 15,
-  learningHours: 5,
-  learningDays: 4,
-  reflectionDays: 2,
-  detailRating: 3,
-  habitStreak: 7,
-  followThroughRating: 3
+  sprintSeconds: 20,
+  distanceKm: 2,
+  iqScore: 100,
+  focusMinutes: 25,
+  habitStreak: 0
 };
 
 export const DEFAULT_STATS: CharacterStats = {
   strength: 10,
-  dexterity: 10,
+  speed: 10,
   stamina: 10,
   intelligence: 10,
-  insight: 10,
-  resolve: 10
+  focus: 10,
+  discipline: 10
+};
+
+export const DEFAULT_STAT_XP: Record<StatKey, number> = {
+  strength: 0,
+  speed: 0,
+  stamina: 0,
+  intelligence: 0,
+  focus: 0,
+  discipline: 0
 };
 
 export const DEFAULT_APPEARANCE: CharacterAppearance = {
@@ -62,40 +71,169 @@ export const DEFAULT_APPEARANCE: CharacterAppearance = {
 };
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
-const ability = (value: number): number => Math.round(8 + clamp01(value) * 10);
+const baseline = (value: number): number => Math.round(8 + clamp01(value) * 10);
 
-/** Converts current habits and simple physical benchmarks into 8–18 RPG
- * abilities. Intelligence represents learning practice, not innate IQ. */
-export function calculateStats(input: LifeInputs): CharacterStats {
+/** A compact, universal starting assessment. Ongoing real-world activity adds
+ * permanent stat XP after the baseline is created. */
+export function calculateBaseStats(input: LifeInputs): CharacterStats {
   return {
-    strength: ability(clamp01(input.pushups / 40) * 0.62 + clamp01(input.pullups / 12) * 0.38),
-    dexterity: ability(clamp01(input.balanceSeconds / 60) * 0.55 + clamp01(input.coordinationDays / 5) * 0.45),
-    stamina: ability(clamp01(input.cardioMinutes / 150) * 0.58 + clamp01(input.continuousMinutes / 45) * 0.42),
-    intelligence: ability(clamp01(input.learningHours / 10) * 0.62 + clamp01(input.learningDays / 7) * 0.38),
-    insight: ability(clamp01(input.reflectionDays / 7) * 0.52 + clamp01((input.detailRating - 1) / 4) * 0.48),
-    resolve: ability(clamp01(input.habitStreak / 30) * 0.55 + clamp01((input.followThroughRating - 1) / 4) * 0.45)
+    strength: baseline(input.pushups / 50),
+    speed: baseline((24 - input.sprintSeconds) / 12),
+    stamina: baseline(input.distanceKm / 10),
+    intelligence: baseline((input.iqScore - 70) / 60),
+    focus: baseline(input.focusMinutes / 90),
+    discipline: baseline(input.habitStreak / 60)
   };
+}
+
+export function calculateStats(input: LifeInputs, statXp: Record<StatKey, number> = DEFAULT_STAT_XP): CharacterStats {
+  const base = calculateBaseStats(input);
+  return Object.fromEntries((Object.keys(base) as StatKey[]).map(key => [
+    key,
+    Math.min(30, base[key] + Math.floor(Math.max(0, statXp[key]) / 250))
+  ])) as unknown as CharacterStats;
 }
 
 export const PlayerProgress: {
   level: number;
+  totalXp: number;
   profileCompleted: boolean;
   inputs: LifeInputs;
+  statXp: Record<StatKey, number>;
   stats: CharacterStats;
+  activities: ActivityEntry[];
   appearance: CharacterAppearance;
   currentZone: string;
   currentSpawn: string;
   guardianDefeated: boolean;
 } = {
   level: 1,
+  totalXp: 0,
   profileCompleted: false,
   inputs: { ...DEFAULT_INPUTS },
+  statXp: { ...DEFAULT_STAT_XP },
   stats: { ...DEFAULT_STATS },
+  activities: [],
   appearance: { ...DEFAULT_APPEARANCE },
   currentZone: 'biosphere',
   currentSpawn: 'start',
   guardianDefeated: false
 };
+
+export function xpForLevel(level: number): number {
+  return 500 + Math.max(0, level - 1) * 150;
+}
+
+export function recalculateLevel(): void {
+  let remaining = Math.max(0, PlayerProgress.totalXp);
+  let level = 1;
+  while (level < 99 && remaining >= xpForLevel(level)) {
+    remaining -= xpForLevel(level);
+    level += 1;
+  }
+  PlayerProgress.level = level;
+}
+
+export function currentLevelXp(): number {
+  let remaining = Math.max(0, PlayerProgress.totalXp);
+  for (let level = 1; level < PlayerProgress.level; level += 1) remaining -= xpForLevel(level);
+  return Math.max(0, remaining);
+}
+
+export function addActivity(kind: ActivityKind, amount = 1, note?: string): { ok: boolean; message: string; xp: number } {
+  const today = new Date().toISOString().slice(0, 10);
+  const firstActivityToday = !PlayerProgress.activities.some(entry => entry.date === today);
+  const onceDaily = kind === 'workout' || kind === 'steps' || kind === 'goal';
+  if (onceDaily && PlayerProgress.activities.some(entry => entry.kind === kind && entry.date === today)) {
+    return { ok: false, message: 'Already credited today.', xp: 0 };
+  }
+
+  let xp = 0;
+  const gains: Partial<Record<StatKey, number>> = {};
+  if (kind === 'workout') {
+    xp = 100;
+    gains.strength = 40;
+    gains.discipline = 15;
+    const weekStart = startOfWeek(new Date());
+    const workoutDays = new Set(PlayerProgress.activities
+      .filter(entry => entry.kind === 'workout' && new Date(`${entry.date}T12:00:00`) >= weekStart)
+      .map(entry => entry.date));
+    if (workoutDays.size === 3) {
+      xp += 200;
+      gains.strength += 60;
+      gains.stamina = 30;
+    }
+  } else if (kind === 'steps') {
+    xp = 50;
+    gains.stamina = 15;
+    gains.discipline = 10;
+  } else if (kind === 'run') {
+    const distance = Math.max(0.1, Math.min(100, amount));
+    xp = Math.min(300, Math.round(distance * 35));
+    gains.speed = Math.round(distance * 8);
+    gains.stamina = Math.round(distance * 18);
+  } else if (kind === 'focus') {
+    const minutes = Math.max(5, Math.min(480, amount));
+    xp = Math.min(240, Math.round(minutes * 1.5));
+    gains.intelligence = Math.round(minutes * 0.35);
+    gains.focus = Math.round(minutes * 0.7);
+  } else {
+    xp = 60;
+    gains.discipline = 20;
+  }
+
+  let streakBonus = false;
+  if (firstActivityToday) {
+    const dates = new Set(PlayerProgress.activities.map(entry => entry.date));
+    dates.add(today);
+    const streak = consecutiveDays(dates);
+    if (streak >= 7 && streak % 7 === 0) {
+      xp += 150;
+      gains.discipline = (gains.discipline ?? 0) + 50;
+      streakBonus = true;
+    }
+  }
+
+  for (const [key, value] of Object.entries(gains) as Array<[StatKey, number]>) PlayerProgress.statXp[key] += value;
+  PlayerProgress.totalXp += xp;
+  PlayerProgress.activities.push({ id: `${today}:${kind}:${Date.now()}`, kind, date: today, amount, xp, note });
+  PlayerProgress.activities = PlayerProgress.activities.slice(-180);
+  PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
+  recalculateLevel();
+  const message = streakBonus
+    ? 'Real effort logged · 7-day streak bonus!'
+    : kind === 'workout' && xp > 100 ? 'Workout logged · weekly 4-day bonus!' : 'Real effort logged.';
+  return { ok: true, message, xp };
+}
+
+export function activityStreak(): number {
+  return consecutiveDays(new Set(PlayerProgress.activities.map(entry => entry.date)));
+}
+
+function consecutiveDays(active: Set<string>): number {
+  let streak = 0;
+  const cursor = new Date();
+  while (active.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}
+
+export function workoutsThisWeek(): number {
+  const start = startOfWeek(new Date());
+  return new Set(PlayerProgress.activities
+    .filter(entry => entry.kind === 'workout' && new Date(`${entry.date}T12:00:00`) >= start)
+    .map(entry => entry.date)).size;
+}
+
+function startOfWeek(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  const mondayOffset = (copy.getDay() + 6) % 7;
+  copy.setDate(copy.getDate() - mondayOffset);
+  return copy;
+}
 
 export function totalStats(stats: CharacterStats = PlayerProgress.stats): number {
   return Object.values(stats).reduce((sum, value) => sum + value, 0);
