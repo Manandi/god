@@ -578,6 +578,18 @@ export class ZoneScene extends Phaser.Scene {
       roots.fillStyle(0x547642, 1)
         .fillEllipse(center - crownWidth * 0.3, crownY + 5, 34, 17)
         .fillEllipse(center + crownWidth * 0.3, crownY + 5, 34, 17);
+
+      // The broad blossom is a real one-way landing. Players can climb or
+      // jump upward through it, then stand and jump from its visible crown.
+      const crownPlatform = this.add.zone(center, crownY - 10, crownWidth - 16, 10);
+      this.physics.add.existing(crownPlatform, true);
+      const crownBody = crownPlatform.body as Phaser.Physics.Arcade.StaticBody;
+      crownBody.checkCollision.left = false;
+      crownBody.checkCollision.right = false;
+      crownBody.checkCollision.down = false;
+      crownBody.checkCollision.up = true;
+      this.physics.add.collider(this.player, crownPlatform);
+
       if (climbIndex % 3 === 0) {
         const petal = climbIndex % 2 === 0 ? 0xb9e879 : 0x8fd7be;
         for (let p = 0; p < 8; p += 1) {

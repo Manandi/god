@@ -47,6 +47,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly patrolMinX: number;
   private readonly patrolMaxX: number;
   private traversingStep = false;
+  private stepTween?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, groundLayer: Phaser.Tilemaps.TilemapLayer, options: EnemyOptions) {
     super(scene, x, y, textureKey);
@@ -238,7 +239,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.traversingStep = true;
     body.setVelocity(0, 0);
     body.enable = false;
-    this.scene.tweens.add({
+    this.stepTween = this.scene.tweens.add({
       targets: this,
       x: this.x + direction * 18,
       y: this.y + deltaY,
@@ -250,8 +251,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         body.updateFromGameObject();
         body.setVelocityX(direction * speed);
         this.traversingStep = false;
+        this.stepTween = undefined;
       }
     });
+  }
+
+  private cancelStepTraversal(): void {
+    if (!this.traversingStep) return;
+    this.stepTween?.stop();
+    this.stepTween = undefined;
+    this.traversingStep = false;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    body.updateFromGameObject();
   }
 
   private executeQueuedAttack(now: number, playerX: number, body: Phaser.Physics.Arcade.Body): void {
@@ -311,6 +323,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   takeHit(fromX: number): void {
     if (this.defeated || this.scene.time.now < this.hurtUntil) return;
+    // A strike during a stair tween should interrupt the movement immediately,
+    // restore the physics body at the visible sprite, and then apply knockback.
+    this.cancelStepTraversal();
     this.health -= 1;
     if (this.health <= 0) { this.defeat(); return; }
     this.hurtUntil = this.scene.time.now + HIT_STUN_MS;
@@ -322,6 +337,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   defeat(): void {
     if (this.defeated) return;
+    this.cancelStepTraversal();
     this.defeated = true;
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0); body.enable = false; this.anims.stop(); this.setTint(0x888888);
