@@ -4,8 +4,6 @@ export interface LifeInputs {
   mileSeconds: number;
   plankSeconds: number;
   iqScore: number;
-  focusMinutes: number;
-  habitStreak: number;
 }
 
 export interface CharacterStats {
@@ -14,12 +12,11 @@ export interface CharacterStats {
   stamina: number;
   defense: number;
   intelligence: number;
-  focus: number;
   discipline: number;
 }
 
 export type StatKey = keyof CharacterStats;
-export type ActivityKind = 'workout' | 'steps' | 'run' | 'focus' | 'goal';
+export type ActivityKind = 'workout' | 'steps' | 'run' | 'study' | 'focus' | 'goal';
 
 export interface ActivityEntry {
   id: string;
@@ -44,9 +41,7 @@ export const DEFAULT_INPUTS: LifeInputs = {
   sprintSeconds: 20,
   mileSeconds: 720,
   plankSeconds: 45,
-  iqScore: 100,
-  focusMinutes: 25,
-  habitStreak: 0
+  iqScore: 100
 };
 
 export const DEFAULT_STATS: CharacterStats = {
@@ -55,8 +50,7 @@ export const DEFAULT_STATS: CharacterStats = {
   stamina: 10,
   defense: 10,
   intelligence: 10,
-  focus: 10,
-  discipline: 10
+  discipline: 8
 };
 
 export const DEFAULT_STAT_XP: Record<StatKey, number> = {
@@ -65,7 +59,6 @@ export const DEFAULT_STAT_XP: Record<StatKey, number> = {
   stamina: 0,
   defense: 0,
   intelligence: 0,
-  focus: 0,
   discipline: 0
 };
 
@@ -80,23 +73,22 @@ const baseline = (value: number): number => Math.round(8 + clamp01(value) * 10);
 
 /** A compact, universal starting assessment. Ongoing real-world activity adds
  * permanent stat XP after the baseline is created. */
-export function calculateBaseStats(input: LifeInputs): CharacterStats {
+export function calculateBaseStats(input: LifeInputs, activities: ActivityEntry[] = []): CharacterStats {
   return {
-    strength: baseline(input.pushups / 50),
-    speed: baseline((24 - input.sprintSeconds) / 12),
-    stamina: baseline((900 - input.mileSeconds) / 540),
+    strength: baseline(input.pushups / 60),
+    speed: baseline((30 - input.sprintSeconds) / 19),
+    stamina: baseline((900 - input.mileSeconds) / 600),
     defense: baseline(input.plankSeconds / 180),
     intelligence: baseline((input.iqScore - 70) / 60),
-    focus: baseline(input.focusMinutes / 90),
-    discipline: baseline(input.habitStreak / 60)
+    discipline: disciplineFromHistory(activities)
   };
 }
 
-export function calculateStats(input: LifeInputs, statXp: Record<StatKey, number> = DEFAULT_STAT_XP): CharacterStats {
-  const base = calculateBaseStats(input);
+export function calculateStats(input: LifeInputs, statXp: Record<StatKey, number> = DEFAULT_STAT_XP, activities: ActivityEntry[] = PlayerProgress.activities): CharacterStats {
+  const base = calculateBaseStats(input, activities);
   return Object.fromEntries((Object.keys(base) as StatKey[]).map(key => [
     key,
-    Math.min(30, base[key] + Math.floor(Math.max(0, statXp[key]) / 250))
+    key === 'discipline' ? base[key] : Math.min(30, base[key] + Math.floor(Math.max(0, statXp[key]) / 250))
   ])) as unknown as CharacterStats;
 }
 
@@ -162,24 +154,20 @@ export function addActivity(kind: ActivityKind, amount = 1, note?: string): { ok
     xp = 100;
     gains.strength = 40;
     gains.defense = 15;
-    gains.discipline = 15;
   } else if (kind === 'steps') {
     xp = 50;
     gains.stamina = 15;
-    gains.discipline = 10;
   } else if (kind === 'run') {
     const distance = Math.max(0.1, Math.min(100, amount));
     xp = Math.min(300, Math.round(distance * 35));
     gains.speed = Math.round(distance * 8);
     gains.stamina = Math.round(distance * 18);
-  } else if (kind === 'focus') {
+  } else if (kind === 'study' || kind === 'focus') {
     const minutes = Math.max(5, Math.min(480, amount));
     xp = Math.min(240, Math.round(minutes * 1.5));
-    gains.intelligence = Math.round(minutes * 0.35);
-    gains.focus = Math.round(minutes * 0.7);
+    gains.intelligence = Math.round(minutes * 0.7);
   } else {
     xp = 60;
-    gains.discipline = 20;
   }
 
   let streakBonus = false;
@@ -189,7 +177,6 @@ export function addActivity(kind: ActivityKind, amount = 1, note?: string): { ok
     const streak = consecutiveDays(dates);
     if (streak >= 7 && streak % 7 === 0) {
       xp += 150;
-      gains.discipline = (gains.discipline ?? 0) + 50;
       streakBonus = true;
     }
   }
@@ -255,7 +242,7 @@ export function weeklyGoals(): WeeklyGoal[] {
   const workoutDays = new Set(entries.filter(entry => entry.kind === 'workout').map(entry => entry.date)).size;
   const stepDays = new Set(entries.filter(entry => entry.kind === 'steps').map(entry => entry.date)).size;
   const runKm = entries.filter(entry => entry.kind === 'run').reduce((sum, entry) => sum + entry.amount, 0);
-  const focusMinutes = entries.filter(entry => entry.kind === 'focus').reduce((sum, entry) => sum + entry.amount, 0);
+  const studyMinutes = entries.filter(entry => entry.kind === 'study' || entry.kind === 'focus').reduce((sum, entry) => sum + entry.amount, 0);
   const make = (id: string, label: string, current: number, target: number, unit: string, reward: number): WeeklyGoal => ({
     id,
     label,
@@ -269,7 +256,7 @@ export function weeklyGoals(): WeeklyGoal[] {
     make('train4', 'Train 4 days', workoutDays, 4, 'days', 250),
     make('steps4', '5K steps on 4 days', stepDays, 4, 'days', 150),
     make('distance5', 'Move 5 km', runKm, 5, 'km', 200),
-    make('focus120', 'Focus 120 min', focusMinutes, 120, 'min', 180)
+    make('study120', 'Learn 120 min', studyMinutes, 120, 'min', 180)
   ];
 }
 
@@ -287,13 +274,11 @@ function awardWeeklyGoals(): { xp: number; names: string[] } {
       PlayerProgress.statXp.defense += 40;
     } else if (goal.id === 'steps4') {
       PlayerProgress.statXp.stamina += 45;
-      PlayerProgress.statXp.discipline += 30;
     } else if (goal.id === 'distance5') {
       PlayerProgress.statXp.speed += 30;
       PlayerProgress.statXp.stamina += 55;
     } else {
-      PlayerProgress.statXp.intelligence += 35;
-      PlayerProgress.statXp.focus += 50;
+      PlayerProgress.statXp.intelligence += 70;
     }
   }
   PlayerProgress.claimedWeeklyGoals = PlayerProgress.claimedWeeklyGoals.slice(-32);
@@ -310,4 +295,19 @@ function startOfWeek(date: Date): Date {
 
 export function totalStats(stats: CharacterStats = PlayerProgress.stats): number {
   return Object.values(stats).reduce((sum, value) => sum + value, 0);
+}
+
+/** Discipline is deliberately earned, never self-reported. It combines recent
+ * consistency with the current streak and updates whenever effort is logged. */
+function disciplineFromHistory(activities: ActivityEntry[]): number {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 27);
+  const cutoffKey = cutoff.toISOString().slice(0, 10);
+  const recentDays = new Set(activities.filter(entry => entry.date >= cutoffKey).map(entry => entry.date)).size;
+  const active = new Set(activities.map(entry => entry.date));
+  const streak = consecutiveDays(active);
+  const consistency = Math.min(1, recentDays / 20);
+  const streakScore = Math.min(1, streak / 14);
+  return baseline(consistency * 0.75 + streakScore * 0.25);
 }
