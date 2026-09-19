@@ -28,18 +28,15 @@ const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['stamina', 'STA', 'Stamina'],
   ['defense', 'DEF', 'Defense'],
   ['intelligence', 'INT', 'Intelligence'],
-  ['focus', 'FOC', 'Focus'],
   ['discipline', 'DIS', 'Discipline']
 ];
 
 const INPUTS: Array<{ key: keyof LifeInputs; label: string; hint: string; min: number; max: number; step?: number }> = [
-  { key: 'pushups', label: 'Max push-ups', hint: 'Strength', min: 0, max: 200 },
-  { key: 'sprintSeconds', label: '100 m run time', hint: 'Speed · seconds', min: 8, max: 60, step: .1 },
-  { key: 'mileSeconds', label: 'One-mile time', hint: 'Stamina · seconds', min: 240, max: 1800 },
-  { key: 'plankSeconds', label: 'Longest plank hold', hint: 'Defense · seconds', min: 0, max: 600 },
-  { key: 'iqScore', label: 'IQ test score', hint: 'Intelligence · optional', min: 55, max: 160 },
-  { key: 'focusMinutes', label: 'Longest focused session', hint: 'Focus · minutes', min: 0, max: 480 },
-  { key: 'habitStreak', label: 'Longest habit streak', hint: 'Discipline · days', min: 0, max: 3650 }
+  { key: 'pushups', label: 'Strict push-ups', hint: 'Strength · max clean reps', min: 0, max: 200 },
+  { key: 'sprintSeconds', label: '100 m sprint', hint: 'Speed · seconds', min: 8, max: 60, step: .1 },
+  { key: 'mileSeconds', label: 'One-mile run', hint: 'Stamina · total seconds', min: 240, max: 1800 },
+  { key: 'plankSeconds', label: 'Forearm plank', hint: 'Defense · max seconds', min: 0, max: 600 },
+  { key: 'iqScore', label: 'Validated IQ score', hint: 'IQ · optional', min: 55, max: 160 }
 ];
 
 const SKIN_COLORS = ['#8d5c3c', '#b97950', '#d9a675', '#efc394', '#7a4930'];
@@ -105,7 +102,7 @@ export class TitleScene extends Phaser.Scene {
     this.root.innerHTML = `
       <section class="title-card full-card profile-card" aria-label="Real-life baseline">
         <div class="panel-heading"><div><p class="eyebrow">STARTING ATTRIBUTES</p><h2>YOUR BASELINE</h2></div>${this.backButton()}</div>
-        <p class="panel-copy">Seven simple benchmarks set your starting stats. They are self-reported game values, not health or clinical scores.</p>
+        <p class="panel-copy">Five repeatable benchmarks set your starting power. Discipline is calculated automatically from your logged consistency.</p>
         <form data-profile-form>
           <div class="profile-grid">
             ${INPUTS.map(field => `<label><span>${field.label}<small>${field.hint}</small></span><input name="${field.key}" type="number" min="${field.min}" max="${field.max}" step="${field.step ?? 1}" value="${PlayerProgress.inputs[field.key]}"></label>`).join('')}
@@ -142,11 +139,11 @@ export class TitleScene extends Phaser.Scene {
         <p class="weekly-label">WEEKLY GOALS · RESET MONDAY</p>
         <div class="weekly-goals">${goals.map(goal => `<div class="${goal.claimed ? 'complete' : ''}"><span><strong>${goal.label}</strong><small>+${goal.reward} XP</small></span><i><b style="width:${goal.current / goal.target * 100}%"></b></i><em>${goal.current}/${goal.target} ${goal.unit}</em></div>`).join('')}</div>
         <div class="effort-grid">
-          <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DEF / DIS</small></button>
-          <button data-log="steps"><strong>5,000+ STEPS</strong><small>+50 XP · STA / DIS<br>once per day</small></button>
+          <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DEF</small></button>
+          <button data-log="steps"><strong>5,000+ STEPS</strong><small>+50 XP · STA<br>once per day</small></button>
           <label><strong>RUN / WALK</strong><small>Distance builds SPD / STA</small><span><input data-amount="run" type="number" min="0.1" max="100" step="0.1" value="2"> km <button data-log="run">LOG</button></span></label>
-          <label><strong>DEEP FOCUS</strong><small>Learning builds INT / FOC</small><span><input data-amount="focus" type="number" min="5" max="480" step="5" value="30"> min <button data-log="focus">LOG</button></span></label>
-          <button data-log="goal"><strong>DAILY GOAL</strong><small>+60 XP · DIS<br>any meaningful promise kept</small></button>
+          <label><strong>LEARN / STUDY</strong><small>Learning builds IQ</small><span><input data-amount="study" type="number" min="5" max="480" step="5" value="30"> min <button data-log="study">LOG</button></span></label>
+          <button data-log="goal"><strong>DAILY GOAL</strong><small>+60 XP<br>builds automatic Discipline</small></button>
         </div>
         <div class="recent-log"><h3>RECENT</h3>${recent.length ? recent.map(entry => `<span><b>${entry.kind.toUpperCase()}</b><em>+${entry.xp} XP</em><small>${entry.date}</small></span>`).join('') : '<p>No effort logged yet.</p>'}</div>
       </section>`;
@@ -171,14 +168,13 @@ export class TitleScene extends Phaser.Scene {
       ['Runebound Staff', 'Weapon', s.intelligence >= 14, 'INT 14'],
       ['Bastion Shield', 'Weapon', s.defense >= 14, 'DEF 14'],
       ['Second Wind', 'Skill', s.stamina >= 15, 'STA 15'],
-      ['Perfect Guard', 'Skill', s.focus >= 15, 'FOC 15'],
       ['Unbroken Will', 'Skill', s.discipline >= 15, 'DIS 15']
     ] as const;
     this.root.innerHTML = `
       <section class="title-card full-card character-card" aria-label="Character stats and unlocks">
         <div class="panel-heading"><div><p class="eyebrow">REAL LIFE → GAMEPLAY</p><h2>EXPLORER</h2></div><div class="panel-tools"><button data-action="profile">BASELINE</button><button data-action="customize">APPEARANCE</button>${this.backButton()}</div></div>
         <div class="character-layout">
-          <div class="stat-list">${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${PlayerProgress.statXp[key] % 250} / 250 toward next point</small></span><em>${s[key]}</em></div>`).join('')}</div>
+          <div class="stat-list">${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${key === 'discipline' ? 'Automatic · 28-day consistency + streak' : `${PlayerProgress.statXp[key] % 250} / 250 toward next point`}</small></span><em>${s[key]}</em></div>`).join('')}</div>
           <div class="unlock-list"><h3>ARSENAL & SKILLS</h3>${unlocks.map(([name, type, unlocked, requirement]) => `<div class="${unlocked ? 'ready' : 'locked'}"><span><strong>${name}</strong><small>${type}</small></span><b>${unlocked ? 'UNLOCKED' : requirement}</b></div>`).join('')}</div>
         </div>
         <p class="panel-copy character-note">Enemies give challenge and world progress. Character XP comes from logged real effort.</p>
