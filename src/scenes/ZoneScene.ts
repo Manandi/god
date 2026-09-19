@@ -503,7 +503,7 @@ export class ZoneScene extends Phaser.Scene {
 
   private updateInteractions(): void {
     let nearest: InteractableEntry | null = null;
-    let nearestDist = INTERACT_RADIUS + Math.max(0, PlayerProgress.stats.focus - 10) * 1.5;
+    let nearestDist = INTERACT_RADIUS + Math.max(0, PlayerProgress.stats.intelligence - 10) * 1.2;
     for (const entry of this.interactables) {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y - 16, entry.x, entry.y);
       if (dist < nearestDist) {
@@ -680,6 +680,9 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.existing(zone, true);
       this.physics.add.overlap(this.player, zone, () => this.hurtPlayer(x + width / 2));
 
+      const hazardBounds = new Phaser.Geom.Rectangle(x, y, width, height);
+      for (const enemy of this.enemies) enemy.addHazardBounds(hazardBounds);
+
       // Stop an enemy's whole silhouette before the spikes, not merely its
       // center/body edge. The old five-pixel offset let turtles appear to sit
       // on a hazard even though their physics center was technically outside.
@@ -687,7 +690,7 @@ export class ZoneScene extends Phaser.Scene {
         const blocker = this.add.zone(edgeX, y - 24, 10, 96);
         this.physics.add.existing(blocker, true);
         for (const enemy of this.enemies) {
-          this.physics.add.collider(enemy, blocker, () => enemy.turnFromObstacle());
+          this.physics.add.collider(enemy, blocker, () => enemy.turnAwayFrom(x + width / 2));
         }
       }
 
