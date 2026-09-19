@@ -53,6 +53,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private traversingStep = false;
   private stepTween?: Phaser.Tweens.Tween;
   private stepCooldownUntil = 0;
+  private obstacleLockUntil = 0;
+  private readonly hazardBounds: Phaser.Geom.Rectangle[] = [];
   private lastProgressX: number;
   private lastProgressAt: number;
 
@@ -96,6 +98,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   get isDefeated(): boolean { return this.defeated; }
   get stompSurfaceY(): number { return this.getCombatBounds().top + 3; }
 
+  addHazardBounds(bounds: Phaser.Geom.Rectangle): void {
+    this.hazardBounds.push(bounds);
+  }
+
   setEncounterActive(active: boolean): void {
     this.setActive(active).setVisible(active);
     this.levelBadge.setVisible(active);
@@ -127,10 +133,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   turnFromObstacle(): void {
     if (this.defeated) return;
+    const now = this.scene.time.now;
+    if (now < this.obstacleLockUntil) return;
     this.direction = this.direction === 1 ? -1 : 1;
-    this.pauseUntil = this.scene.time.now + TURN_PAUSE_MS;
-    this.turnUntil = this.scene.time.now + 850;
-    (this.body as Phaser.Physics.Arcade.Body).setVelocityX(0);
+    this.obstacleLockUntil = now + 420;
+    this.pauseUntil = now + TURN_PAUSE_MS;
+    this.turnUntil = now + 850;
+    (this.body as Phaser.Physics.Arcade.Body).setVelocityX(PATROL_SPEED * this.direction);
+    this.applyFacing();
+    if (this.isBoss && this.bossState === 'charge') this.enterRecover(1050);
+  }
+
+  turnAwayFrom(sourceX: number): void {
+    if (this.defeated) return;
+    const now = this.scene.time.now;
+    const away: 1 | -1 = this.x < sourceX ? -1 : 1;
+    this.direction = away;
+    this.obstacleLockUntil = now + 520;
+    this.pauseUntil = now + 90;
+    this.turnUntil = now + 900;
+    (this.body as Phaser.Physics.Arcade.Body).setVelocityX(PATROL_SPEED * away);
+    this.applyFacing();
     if (this.isBoss && this.bossState === 'charge') this.enterRecover(1050);
   }
 
@@ -157,6 +180,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.elite && this.isBoss && this.updateGuardian(now, playerX, playerY, body)) return;
     if (now < this.hurtUntil || now < this.pauseUntil) { body.setVelocityX(0); return; }
     if (!this.patrols) { body.setVelocityX(0); return; }
+
+    // Hazards are navigation boundaries, not terrain. Check the turtle's full
+    // shell before any stair traversal so it can never climb into a spike-bed
+    // blocker and oscillate there forever.
+    const hazardAhead = this.hazardBounds.find(hazard => {
+      const verticallyRelevant = body.bottom >= hazard.top - 28 && body.top <= hazard.bottom + 20;
+      if (!verticallyRelevant) return false;
+      return this.direction > 0
+        ? body.right + 30 >= hazard.left && body.left < hazard.left
+        : body.left - 30 <= hazard.right && body.right > hazard.right;
+    });
+    if (hazardAhead) {
+      this.turnAwayFrom(hazardAhead.centerX);
+      return;
+    }
 
     const seesPlayer = Math.abs(playerX - this.x) < (this.isBoss ? 280 : 150) && Math.abs(playerY - this.y) < 52;
     if (seesPlayer && now > this.turnUntil) this.direction = playerX < this.x ? -1 : 1;
@@ -292,7 +330,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         body.updateFromGameObject();
         body.setVelocityX(direction * speed);
         this.traversingStep = false;
-        this.stepCooldownUntil = this.scene.time.now + 90;
+        this.stepCooldownUntil = this.scene.time.now + 180;
+        this.lastProgressX = this.x;
+        this.lastProgressAt = this.scene.time.now;
         this.stepTween = undefined;
       }
     });
