@@ -12,7 +12,7 @@
       .title-root { position: relative; width: 900px; height: 500px; color: #e6f4e9; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
       .title-card { position: absolute; inset: 0 auto auto 0; width: 590px; min-height: 452px; padding: 34px; border: 1px solid rgba(158, 209, 163, .38); border-radius: 5px; background: linear-gradient(145deg, rgba(4, 20, 14, .97), rgba(8, 34, 24, .94)); box-shadow: 0 24px 72px rgba(0,0,0,.62), inset 0 0 50px rgba(93,150,96,.06); }
       .full-card { width: 900px; height: 500px; padding: 24px 30px; }
-      .title-menu { padding-top: 40px; }
+      .title-menu { min-height: 390px; padding-top: 40px; }
       .eyebrow { margin: 0 0 8px; color: #cbd78e; font-size: 12px; letter-spacing: .2em; font-weight: 800; }
       .title-root h1, .title-root h2, .title-root h3, .title-root p { margin-top: 0; }
       .title-root h1 { margin-bottom: 14px; color: #f1f6d7; font: 700 45px/.94 Georgia, serif; letter-spacing: .035em; text-shadow: 0 3px 22px rgba(181,218,128,.2); }
@@ -20,6 +20,8 @@
       .title-root h3 { margin: 0 0 9px; color: #bcd1bf; font-size: 12px; letter-spacing: .15em; }
       .title-copy, .panel-copy { max-width: 510px; color: #b9c9bd; font-size: 14px; line-height: 1.55; }
       .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .panel-tools { display: flex; align-items: center; gap: 5px; }
+      .panel-tools button { padding: 7px 9px; font-size: 10px; }
       .panel-copy { margin: 10px 0 18px; }
       .title-root button { padding: 11px 14px; color: #dce9df; background: rgba(15,48,35,.9); border: 1px solid rgba(156,205,164,.38); font: 800 12px/1.1 ui-monospace, monospace; letter-spacing: .07em; cursor: pointer; transition: 120ms ease; }
       .title-root button:hover:not(:disabled), .title-root button:focus-visible { transform: translateY(-1px); border-color: #d7e9a8; background: rgba(35,85,57,.96); outline: none; }
@@ -44,8 +46,8 @@
       .profile-grid label span { display: flex; flex-direction: column; line-height: 1.25; }
       .profile-grid small { margin-top: 4px; color: #71897a; font-size: 10px; }
       .profile-grid input, .effort-grid input { width: 66px; padding: 8px 5px; color: #eff6d2; background: #071710; border: 1px solid #476b50; font: 800 13px ui-monospace, monospace; text-align: center; }
-      .stat-rune-row, .live-stats { display: grid; grid-template-columns: repeat(6,1fr); gap: 7px; margin: 17px auto 13px; }
-      .live-stats { width: 520px; }
+      .stat-rune-row, .live-stats { display: grid; grid-template-columns: repeat(7,1fr); gap: 7px; margin: 14px auto 11px; }
+      .live-stats { width: 600px; }
       .stat-rune-row span, .live-stats span { display: flex; padding: 6px 3px; flex-direction: column; align-items: center; border: 1px solid rgba(161,205,145,.2); background: rgba(119,170,113,.08); }
       .stat-rune-row b, .live-stats b { color: #8faa93; font-size: 10px; letter-spacing: .1em; }
       .stat-rune-row strong, .live-stats strong { color: #eff4ca; font-size: 17px; }
@@ -55,21 +57,31 @@
       .checkin-summary span { flex: 1; padding: 10px; color: #8fa798; background: rgba(4,18,12,.54); border: 1px solid rgba(143,184,145,.18); font-size: 11px; text-align: center; }
       .checkin-summary b { color: #edf1b7; font-size: 17px; }
       .feedback { position: absolute; top: 72px; right: 30px; color: #e8efa9; font-size: 11px; }
+      .weekly-label { margin: 4px 0 0; color: #a8bb80; font-size: 9px; letter-spacing: .12em; }
+      .weekly-goals { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; margin: 9px 0; }
+      .weekly-goals > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 7px; padding: 7px 8px; color: #9caf9f; background: rgba(3,18,12,.55); border: 1px solid rgba(144,185,143,.2); }
+      .weekly-goals span { display: flex; flex-direction: column; }
+      .weekly-goals strong { color: #d8e4cf; font-size: 10px; }
+      .weekly-goals small { color: #829687; font-size: 8px; }
+      .weekly-goals i { grid-column: 1 / -1; grid-row: 2; height: 4px; overflow: hidden; background: #10251a; }
+      .weekly-goals i b { display: block; height: 100%; background: #a8d181; }
+      .weekly-goals em { grid-column: 2; grid-row: 1; align-self: center; color: #dfe99b; font-size: 9px; font-style: normal; }
+      .weekly-goals .complete { border-color: rgba(223,233,155,.55); box-shadow: inset 0 2px rgba(223,233,155,.45); }
       .effort-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
-      .effort-grid > button, .effort-grid > label { min-height: 96px; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; color: #dce9df; background: rgba(9,37,25,.8); border: 1px solid rgba(129,181,137,.28); }
+      .effort-grid > button, .effort-grid > label { min-height: 72px; padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; color: #dce9df; background: rgba(9,37,25,.8); border: 1px solid rgba(129,181,137,.28); }
       .effort-grid > label strong, .effort-grid > button strong { color: #eaf0bd; font-size: 12px; letter-spacing: .07em; }
       .effort-grid > label small, .effort-grid > button small { margin-top: 5px; color: #849b8c; font: 10px/1.35 ui-monospace, monospace; letter-spacing: 0; text-align: left; }
       .effort-grid label span { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #8da393; font-size: 10px; }
       .effort-grid label button { padding: 8px 10px; font-size: 10px; }
-      .recent-log { margin-top: 14px; }
+      .recent-log { margin-top: 9px; }
       .recent-log h3 { margin-bottom: 6px; }
       .recent-log > span { display: inline-flex; gap: 7px; margin-right: 8px; padding: 6px 8px; color: #8da494; background: rgba(1,13,9,.38); font-size: 9px; }
       .recent-log > span b { color: #c7d7c9; }
       .recent-log > span em { color: #dfe99b; font-style: normal; }
       .recent-log p { color: #71877a; font-size: 11px; }
       .character-layout { display: grid; grid-template-columns: .9fr 1.1fr; gap: 22px; margin-top: 20px; }
-      .stat-list { display: grid; gap: 6px; }
-      .stat-list > div { display: grid; grid-template-columns: 38px 1fr 34px; align-items: center; padding: 7px 10px; background: rgba(3,18,12,.5); border: 1px solid rgba(139,181,144,.16); }
+      .stat-list { display: grid; gap: 4px; }
+      .stat-list > div { display: grid; grid-template-columns: 38px 1fr 34px; align-items: center; padding: 5px 9px; background: rgba(3,18,12,.5); border: 1px solid rgba(139,181,144,.16); }
       .stat-list > div > b { color: #a8bb80; font-size: 11px; }
       .stat-list span { display: flex; flex-direction: column; }
       .stat-list strong { font-size: 12px; }

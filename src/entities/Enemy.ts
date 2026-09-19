@@ -21,6 +21,7 @@ export interface EnemyOptions {
   patrolMinX?: number;
   patrolMaxX?: number;
   onGuardianAttack?: (attack: GuardianAttack, enemy: Enemy) => void;
+  onBossCue?: (cue: 'charge') => void;
   onDefeated?: () => void;
 }
 
@@ -35,6 +36,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly healthBar: Phaser.GameObjects.Graphics;
   private readonly attackTell?: Phaser.GameObjects.Text;
   private readonly onGuardianAttack?: (attack: GuardianAttack, enemy: Enemy) => void;
+  private readonly onBossCue?: (cue: 'charge') => void;
   private readonly onDefeated?: () => void;
   private health: number;
   private defeated = false;
@@ -50,6 +52,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly patrolMaxX: number;
   private traversingStep = false;
   private stepTween?: Phaser.Tweens.Tween;
+  private stepCooldownUntil = 0;
+  private lastProgressX: number;
+  private lastProgressAt: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string, groundLayer: Phaser.Tilemaps.TilemapLayer, options: EnemyOptions) {
     super(scene, x, y, textureKey);
@@ -60,10 +65,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.isBoss = options.isBoss ?? false;
     this.elite = options.elite ?? false;
     this.onGuardianAttack = options.onGuardianAttack;
+    this.onBossCue = options.onBossCue;
     this.onDefeated = options.onDefeated;
     this.idleTexture = textureKey;
     this.patrolMinX = options.patrolMinX ?? Number.NEGATIVE_INFINITY;
     this.patrolMaxX = options.patrolMaxX ?? Number.POSITIVE_INFINITY;
+    this.lastProgressX = x;
+    this.lastProgressAt = scene.time.now;
     this.health = this.isBoss ? (this.elite ? 10 : 5) : this.elite ? 2 : 1;
     this.maxHealth = this.health;
     if (this.isBoss) this.stateUntil = scene.time.now + 1800;
@@ -86,7 +94,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   get isDefeated(): boolean { return this.defeated; }
-  get stompSurfaceY(): number { return this.y - (this.isBoss ? 64 : 34); }
+  get stompSurfaceY(): number { return this.getCombatBounds().top + 3; }
+
+  setEncounterActive(active: boolean): void {
+    this.setActive(active).setVisible(active);
+    this.levelBadge.setVisible(active);
+    this.healthBar.setVisible(active);
+    this.attackTell?.setVisible(false);
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.enable = active;
+    if (active) {
+      body.moves = true;
+      body.setAllowGravity(true);
+      body.updateFromGameObject();
+    }
+  }
 
   /** Combat must follow the visible turtle even while its physics body is
    * temporarily disabled for a one-tile step tween. */
@@ -119,6 +141,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.drawStatus();
     if (this.traversingStep) return;
 
+    if (Math.abs(this.x - this.lastProgressX) >= 4) {
+      this.lastProgressX = this.x;
+      this.lastProgressAt = now;
+    } else if (!this.isBoss && this.patrols && body.blocked.down && now - this.lastProgressAt > 900) {
+      const recoveryX = this.direction > 0 ? body.right + 5 : body.left - 5;
+      const lowBlocked = !!this.groundLayer.getTileAtWorldXY(recoveryX, body.bottom - 6)?.collides;
+      const headClear = !this.groundLayer.getTileAtWorldXY(recoveryX, body.bottom - 24)?.collides;
+      this.lastProgressAt = now;
+      if (lowBlocked && headClear) this.traverseStep(this.direction, -16, PATROL_SPEED);
+      else this.turnFromObstacle();
+      return;
+    }
+
     if (this.elite && this.isBoss && this.updateGuardian(now, playerX, playerY, body)) return;
     if (now < this.hurtUntil || now < this.pauseUntil) { body.setVelocityX(0); return; }
     if (!this.patrols) { body.setVelocityX(0); return; }
@@ -137,11 +172,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       && wallAhead
       && this.groundLayer.getTileAtWorldXY(aheadX, body.bottom - 6)?.collides
       && !this.groundLayer.getTileAtWorldXY(aheadX, body.bottom - 22)?.collides;
-    if (body.blocked.down && oneTileStep) {
+    if (body.blocked.down && oneTileStep && now >= this.stepCooldownUntil) {
       this.traverseStep(this.direction, -16, seesPlayer ? CHASE_SPEED : PATROL_SPEED);
       return;
     }
-    if (body.blocked.down && !floorNear && floorLower) {
+    if (body.blocked.down && !floorNear && floorLower && now >= this.stepCooldownUntil) {
       this.traverseStep(this.direction, 16, seesPlayer ? CHASE_SPEED : PATROL_SPEED);
       return;
     }
@@ -241,19 +276,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     this.traversingStep = true;
     body.setVelocity(0, 0);
-    body.enable = false;
+    body.moves = false;
+    body.setAllowGravity(false);
     this.stepTween = this.scene.tweens.add({
       targets: this,
       x: this.x + direction * 18,
       y: this.y + deltaY,
       duration: 150,
       ease: 'Sine.easeInOut',
+      onUpdate: () => body.updateFromGameObject(),
       onComplete: () => {
         if (this.defeated) return;
-        body.enable = true;
+        body.moves = true;
+        body.setAllowGravity(true);
         body.updateFromGameObject();
         body.setVelocityX(direction * speed);
         this.traversingStep = false;
+        this.stepCooldownUntil = this.scene.time.now + 90;
         this.stepTween = undefined;
       }
     });
@@ -266,6 +305,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.traversingStep = false;
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
+    body.moves = true;
+    body.setAllowGravity(true);
     body.updateFromGameObject();
   }
 
@@ -277,6 +318,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bossState = 'charge';
       this.stateUntil = now + 680;
       this.attackTell?.setText('DASH!');
+      this.onBossCue?.('charge');
       return;
     }
     if (this.queuedAttack === 'fireball') {

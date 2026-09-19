@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
+import { GameAudio } from '../audio/GameAudio';
 import {
   activityStreak,
   addActivity,
@@ -9,7 +10,7 @@ import {
   currentLevelXp,
   PlayerProgress,
   totalStats,
-  workoutsThisWeek,
+  weeklyGoals,
   xpForLevel,
   type ActivityKind,
   type CharacterAppearance,
@@ -25,6 +26,7 @@ const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['strength', 'STR', 'Strength'],
   ['speed', 'SPD', 'Speed'],
   ['stamina', 'STA', 'Stamina'],
+  ['defense', 'DEF', 'Defense'],
   ['intelligence', 'INT', 'Intelligence'],
   ['focus', 'FOC', 'Focus'],
   ['discipline', 'DIS', 'Discipline']
@@ -33,7 +35,8 @@ const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
 const INPUTS: Array<{ key: keyof LifeInputs; label: string; hint: string; min: number; max: number; step?: number }> = [
   { key: 'pushups', label: 'Max push-ups', hint: 'Strength', min: 0, max: 200 },
   { key: 'sprintSeconds', label: '100 m run time', hint: 'Speed · seconds', min: 8, max: 60, step: .1 },
-  { key: 'distanceKm', label: 'Longest run or walk', hint: 'Stamina · km', min: 0, max: 100, step: .1 },
+  { key: 'mileSeconds', label: 'One-mile time', hint: 'Stamina · seconds', min: 240, max: 1800 },
+  { key: 'plankSeconds', label: 'Longest plank hold', hint: 'Defense · seconds', min: 0, max: 600 },
   { key: 'iqScore', label: 'IQ test score', hint: 'Intelligence · optional', min: 55, max: 160 },
   { key: 'focusMinutes', label: 'Longest focused session', hint: 'Focus · minutes', min: 0, max: 480 },
   { key: 'habitStreak', label: 'Longest habit streak', hint: 'Discipline · days', min: 0, max: 3650 }
@@ -80,13 +83,12 @@ export class TitleScene extends Phaser.Scene {
       <section class="title-card title-menu" aria-label="The Hollow Roots title menu">
         <p class="eyebrow">REAL EFFORT. IN-GAME POWER.</p>
         <h1>THE HOLLOW ROOTS</h1>
-        <p class="title-copy">The world is the reward. Train, move, learn, and keep promises in real life to grow here.</p>
+        <p class="title-copy">Real effort becomes power.</p>
         <div class="progress-strip"><strong>LV ${PlayerProgress.level}</strong><span>${levelXp} / ${levelCap} XP</span><i><b style="width:${Math.min(100, levelXp / levelCap * 100)}%"></b></i></div>
         <div class="title-actions">
           <button class="primary" data-action="continue">${PlayerProgress.currentSpawn === 'start' && CollectedItems.size === 0 ? 'ENTER THE WORLD' : 'CONTINUE JOURNEY'}</button>
           <button class="effort" data-action="checkin">＋ LOG REAL EFFORT</button>
-          <div class="action-pair"><button data-action="character">CHARACTER</button><button data-action="customize">CUSTOMIZE</button></div>
-          <button class="quiet" data-action="profile">UPDATE BASELINE</button>
+          <button data-action="character">EXPLORER</button>
         </div>
         <p class="save-note">AUTOSAVE ON · ${activityStreak()}-DAY ACTIVE STREAK</p>
       </section>
@@ -103,7 +105,7 @@ export class TitleScene extends Phaser.Scene {
     this.root.innerHTML = `
       <section class="title-card full-card profile-card" aria-label="Real-life baseline">
         <div class="panel-heading"><div><p class="eyebrow">STARTING ATTRIBUTES</p><h2>YOUR BASELINE</h2></div>${this.backButton()}</div>
-        <p class="panel-copy">Six simple benchmarks set your starting stats. They are self-reported game values, not health or clinical scores.</p>
+        <p class="panel-copy">Seven simple benchmarks set your starting stats. They are self-reported game values, not health or clinical scores.</p>
         <form data-profile-form>
           <div class="profile-grid">
             ${INPUTS.map(field => `<label><span>${field.label}<small>${field.hint}</small></span><input name="${field.key}" type="number" min="${field.min}" max="${field.max}" step="${field.step ?? 1}" value="${PlayerProgress.inputs[field.key]}"></label>`).join('')}
@@ -131,13 +133,16 @@ export class TitleScene extends Phaser.Scene {
 
   private renderCheckIn(): void {
     const recent = [...PlayerProgress.activities].reverse().slice(0, 4);
+    const goals = weeklyGoals();
     this.root.innerHTML = `
       <section class="title-card full-card checkin-card" aria-label="Log real-world effort">
         <div class="panel-heading"><div><p class="eyebrow">REAL-WORLD PROGRESSION</p><h2>LOG YOUR EFFORT</h2></div>${this.backButton()}</div>
-        <div class="checkin-summary"><span><b>${workoutsThisWeek()}/4</b> workouts this week</span><span><b>${activityStreak()}</b> day streak</span><span><b>${PlayerProgress.totalXp}</b> total XP</span></div>
+        <div class="checkin-summary"><span><b>${activityStreak()}</b> day streak</span><span><b>${PlayerProgress.totalXp}</b> total XP</span></div>
         ${this.feedback ? `<p class="feedback">${this.feedback}</p>` : ''}
+        <p class="weekly-label">WEEKLY GOALS · RESET MONDAY</p>
+        <div class="weekly-goals">${goals.map(goal => `<div class="${goal.claimed ? 'complete' : ''}"><span><strong>${goal.label}</strong><small>+${goal.reward} XP</small></span><i><b style="width:${goal.current / goal.target * 100}%"></b></i><em>${goal.current}/${goal.target} ${goal.unit}</em></div>`).join('')}</div>
         <div class="effort-grid">
-          <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DIS<br>4th day earns +200 bonus</small></button>
+          <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DEF / DIS</small></button>
           <button data-log="steps"><strong>5,000+ STEPS</strong><small>+50 XP · STA / DIS<br>once per day</small></button>
           <label><strong>RUN / WALK</strong><small>Distance builds SPD / STA</small><span><input data-amount="run" type="number" min="0.1" max="100" step="0.1" value="2"> km <button data-log="run">LOG</button></span></label>
           <label><strong>DEEP FOCUS</strong><small>Learning builds INT / FOC</small><span><input data-amount="focus" type="number" min="5" max="480" step="5" value="30"> min <button data-log="focus">LOG</button></span></label>
@@ -164,13 +169,14 @@ export class TitleScene extends Phaser.Scene {
       ['Iron Greatblade', 'Weapon', s.strength >= 14, 'STR 14'],
       ['Gale Daggers', 'Weapon', s.speed >= 14, 'SPD 14'],
       ['Runebound Staff', 'Weapon', s.intelligence >= 14, 'INT 14'],
+      ['Bastion Shield', 'Weapon', s.defense >= 14, 'DEF 14'],
       ['Second Wind', 'Skill', s.stamina >= 15, 'STA 15'],
       ['Perfect Guard', 'Skill', s.focus >= 15, 'FOC 15'],
       ['Unbroken Will', 'Skill', s.discipline >= 15, 'DIS 15']
     ] as const;
     this.root.innerHTML = `
       <section class="title-card full-card character-card" aria-label="Character stats and unlocks">
-        <div class="panel-heading"><div><p class="eyebrow">REAL LIFE → GAMEPLAY</p><h2>CHARACTER</h2></div>${this.backButton()}</div>
+        <div class="panel-heading"><div><p class="eyebrow">REAL LIFE → GAMEPLAY</p><h2>EXPLORER</h2></div><div class="panel-tools"><button data-action="profile">BASELINE</button><button data-action="customize">APPEARANCE</button>${this.backButton()}</div></div>
         <div class="character-layout">
           <div class="stat-list">${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${PlayerProgress.statXp[key] % 250} / 250 toward next point</small></span><em>${s[key]}</em></div>`).join('')}</div>
           <div class="unlock-list"><h3>ARSENAL & SKILLS</h3>${unlocks.map(([name, type, unlocked, requirement]) => `<div class="${unlocked ? 'ready' : 'locked'}"><span><strong>${name}</strong><small>${type}</small></span><b>${unlocked ? 'UNLOCKED' : requirement}</b></div>`).join('')}</div>
@@ -178,6 +184,8 @@ export class TitleScene extends Phaser.Scene {
         <p class="panel-copy character-note">Enemies give challenge and world progress. Character XP comes from logged real effort.</p>
       </section>`;
     this.bindBack();
+    this.root.querySelector('[data-action="profile"]')?.addEventListener('click', () => { this.view = 'profile'; this.render(); });
+    this.root.querySelector('[data-action="customize"]')?.addEventListener('click', () => { this.view = 'customize'; this.render(); });
   }
 
   private renderCustomize(): void {
@@ -235,6 +243,8 @@ export class TitleScene extends Phaser.Scene {
   private startGame(): void {
     if (!PlayerProgress.profileCompleted) { this.view = 'profile'; this.render(); return; }
     GameSave.save();
+    GameAudio.unlock();
+    GameAudio.startAmbient();
     this.scene.start('ZoneScene', { zoneKey: PlayerProgress.currentZone, spawnName: PlayerProgress.currentSpawn });
   }
 

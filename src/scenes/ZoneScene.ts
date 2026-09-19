@@ -7,6 +7,7 @@ import { getObjectProperties } from '../zones/TiledObjects';
 import { PlayerProgress } from '../progress/PlayerProgress';
 import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
+import { GameAudio } from '../audio/GameAudio';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
@@ -91,6 +92,8 @@ export class ZoneScene extends Phaser.Scene {
   private bossProjectiles?: Phaser.Physics.Arcade.Group;
   private bossWaves?: Phaser.Physics.Arcade.Group;
   private menuKey!: Phaser.Input.Keyboard.Key;
+  private portalPrompt?: Phaser.GameObjects.Text;
+  private bossInLair = false;
 
   constructor() {
     super('ZoneScene');
@@ -157,10 +160,11 @@ export class ZoneScene extends Phaser.Scene {
     this.checkpoints = [];
     this.enemyAttackIds = new WeakMap<Enemy, number>();
     this.playerInvulnerableUntil = 0;
-    this.maxHealth = Phaser.Math.Clamp(3 + Math.floor((PlayerProgress.stats.stamina - 8) / 3), 3, 6);
+    this.maxHealth = Phaser.Math.Clamp(3 + Math.floor((PlayerProgress.stats.defense - 8) / 3), 3, 7);
     this.health = this.maxHealth;
     this.dying = false;
     this.guardian = undefined;
+    this.bossInLair = false;
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.menuKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
@@ -249,9 +253,12 @@ export class ZoneScene extends Phaser.Scene {
       .setDepth(90)
       .setVisible(false);
 
+    this.createBossPortal();
+
     this.createHud();
     if(this.zoneKey === 'biosphere') this.createWorldMap(map,groundLayer);
     this.cameras.main.fadeIn(500,6,17,14);
+    GameAudio.startAmbient();
   }
 
   update(time: number, delta: number): void {
@@ -264,9 +271,10 @@ export class ZoneScene extends Phaser.Scene {
       return;
     }
     this.player.update(time, delta);
+    this.portalPrompt?.setVisible(false);
     this.updateInteractions();
     for (const enemy of this.enemies) {
-      if (!enemy.isDefeated) enemy.update(this.player.x, this.player.y);
+      if (enemy.active && !enemy.isDefeated) enemy.update(this.player.x, this.player.y);
     }
     this.updatePlayerAttacks();
     this.mapDot?.setPosition(747 + this.player.x / this.mapWidth * 192, 20 + this.player.y / this.mapHeight * 57);
@@ -370,12 +378,15 @@ export class ZoneScene extends Phaser.Scene {
             patrolMinX: 282 * TILE_SIZE,
             patrolMaxX: 337 * TILE_SIZE,
             onGuardianAttack: (attack, enemy) => this.handleGuardianAttack(attack, enemy),
+            onBossCue: () => GameAudio.playSfx('charge'),
             onDefeated: () => {
               PlayerProgress.guardianDefeated = true;
               GameSave.save();
+              GameAudio.startAmbient();
               this.showMessage('Guardian defeated • Guardian cloak unlocked • Autosaved', 2800);
             }
           });
+          this.guardian.setEncounterActive(false);
           this.enemies.push(this.guardian);
         }
         continue;
@@ -400,16 +411,17 @@ export class ZoneScene extends Phaser.Scene {
   private handleEnemyOverlap(enemy: Enemy): void {
     if (enemy.isDefeated) return;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const enemyBody = enemy.body as Phaser.Physics.Arcade.Body;
+    const enemyBounds = enemy.getCombatBounds();
     const previousBottom = body.prev.y + body.height;
     const stompY = enemy.stompSurfaceY;
-    const horizontalContact = body.right > enemyBody.left + 3 && body.left < enemyBody.right - 3;
+    const horizontalContact = body.right > enemyBounds.left + 3 && body.left < enemyBounds.right - 3;
     const crossedShell = previousBottom <= stompY + 10 && body.bottom >= stompY - 3;
     const isStomp = body.velocity.y > 70 && horizontalContact && crossedShell;
 
     if (isStomp) {
       this.player.setY(stompY);
       enemy.takeHit(this.player.x);
+      GameAudio.playSfx('stomp');
       body.setVelocityY(PHYSICS.jumpVelocity * 0.68);
       this.cameras.main.shake(60, 0.002);
       return;
@@ -417,11 +429,11 @@ export class ZoneScene extends Phaser.Scene {
 
     if (this.player.isAttackActive) {
       const attackBounds = this.player.getAttackBounds();
-      const enemyBounds = enemy.getCombatBounds();
       if (Phaser.Geom.Intersects.RectangleToRectangle(attackBounds, enemyBounds)) {
         this.enemyAttackIds.set(enemy, this.player.currentAttackId);
         const damage = PlayerProgress.stats.strength >= 17 ? 2 : 1;
         enemy.takeHit(this.player.x, damage);
+        GameAudio.playSfx('hit');
         return;
       }
     }
@@ -458,6 +470,7 @@ export class ZoneScene extends Phaser.Scene {
       this.enemyAttackIds.set(enemy, this.player.currentAttackId);
       const damage = PlayerProgress.stats.strength >= 17 ? 2 : 1;
       enemy.takeHit(this.player.x, damage);
+      GameAudio.playSfx('hit');
       this.cameras.main.shake(45, 0.0015);
     }
   }
@@ -711,6 +724,56 @@ export class ZoneScene extends Phaser.Scene {
     }
   }
 
+  private createBossPortal(): void {
+    if (this.zoneKey !== 'biosphere' || !this.guardian || PlayerProgress.guardianDefeated) return;
+    const portalX = 4704;
+    const floorY = 928;
+    const portal = this.add.graphics().setDepth(7);
+    portal.fillStyle(0x071b18, 0.82).fillEllipse(portalX, floorY - 48, 58, 94);
+    portal.lineStyle(5, 0x79e5ad, 0.85).strokeEllipse(portalX, floorY - 48, 58, 94);
+    portal.lineStyle(2, 0xd8ffb0, 0.7).strokeEllipse(portalX, floorY - 48, 38, 70);
+    const glow = this.add.ellipse(portalX, floorY - 48, 42, 76, 0x80f2b4, 0.2).setDepth(6);
+    this.tweens.add({ targets: [portal, glow], alpha: { from: 0.55, to: 1 }, scaleX: { from: 0.92, to: 1.04 }, duration: 820, yoyo: true, repeat: -1 });
+
+    const gate = this.add.graphics().setDepth(8);
+    gate.fillStyle(0x07140f, 0.94).fillRect(4856, 704, 18, 224);
+    gate.lineStyle(3, 0x66875a, 0.9);
+    for (let y = 704; y < floorY; y += 32) gate.lineBetween(4858, y, 4872, y + 18);
+    const gateZone = this.add.zone(4865, 816, 20, 224);
+    this.physics.add.existing(gateZone, true);
+    this.physics.add.collider(this.player, gateZone);
+
+    this.portalPrompt = this.add.text(portalX, floorY - 105, 'E  ENTER GUARDIAN LAIR', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#07110b', backgroundColor: '#d8ffb0'
+    }).setPadding(5, 3, 5, 3).setOrigin(0.5, 1).setDepth(90).setVisible(false);
+
+    const zone = this.add.zone(portalX, floorY - 46, 76, 108);
+    this.physics.add.existing(zone, true);
+    this.physics.add.overlap(this.player, zone, () => {
+      if (this.bossInLair || this.transitionLocked) return;
+      this.portalPrompt?.setVisible(true);
+      if (!Phaser.Input.Keyboard.JustDown(this.interactKey)) return;
+      this.bossInLair = true;
+      this.transitionLocked = true;
+      this.portalPrompt?.setVisible(false);
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      body.enable = false;
+      GameAudio.playSfx('portal');
+      this.cameras.main.fadeOut(260, 5, 18, 13);
+      this.time.delayedCall(290, () => {
+        this.player.setPosition(4936, floorY);
+        body.enable = true;
+        body.updateFromGameObject();
+        this.guardian?.setEncounterActive(true);
+        GameAudio.startBoss();
+        GameAudio.playSfx('roar');
+        this.cameras.main.fadeIn(380, 5, 18, 13);
+        this.showMessage('THE VERDANT GUARDIAN AWAKENS', 1900);
+        this.time.delayedCall(500, () => { this.transitionLocked = false; });
+      });
+    });
+  }
+
   private generateCombatTextures(): void {
     if (!this.textures.exists('guardian-fireball')) {
       const g = this.make.graphics({ x: 0, y: 0 });
@@ -768,7 +831,7 @@ export class ZoneScene extends Phaser.Scene {
 
   private createHud(): void {
     const objectives: Record<string, string> = {
-      biosphere: 'Cross the canopy • Defeat the eastern guardian',
+      biosphere: 'Cross the canopy • Enter the guardian lair',
       rustsea: 'Follow the tide terraces east',
       forge: 'Climb the furnace chimney',
       crystal: 'Reach the crown of the spire'

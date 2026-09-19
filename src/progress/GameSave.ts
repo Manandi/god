@@ -16,13 +16,14 @@ import {
 const STORAGE_KEY = 'hollow-roots-save-v1';
 
 interface SaveSnapshot {
-  version: 2;
+  version: 3;
   updatedAt: string;
   profileCompleted: boolean;
   inputs: LifeInputs;
   statXp: Record<StatKey, number>;
   stats: CharacterStats;
   activities: ActivityEntry[];
+  claimedWeeklyGoals: string[];
   appearance: CharacterAppearance;
   progress: {
     level: number;
@@ -44,7 +45,8 @@ function sanitizeInputs(value: Record<string, unknown> | undefined): LifeInputs 
   return {
     pushups: finite(value?.pushups, DEFAULT_INPUTS.pushups, 0, 200),
     sprintSeconds: finite(value?.sprintSeconds, DEFAULT_INPUTS.sprintSeconds, 8, 60),
-    distanceKm: finite(value?.distanceKm, DEFAULT_INPUTS.distanceKm, 0, 100),
+    mileSeconds: finite(value?.mileSeconds, DEFAULT_INPUTS.mileSeconds, 240, 1800),
+    plankSeconds: finite(value?.plankSeconds, DEFAULT_INPUTS.plankSeconds, 0, 600),
     iqScore: finite(value?.iqScore, DEFAULT_INPUTS.iqScore, 55, 160),
     focusMinutes: finite(value?.focusMinutes, DEFAULT_INPUTS.focusMinutes, 0, 480),
     habitStreak: finite(value?.habitStreak, DEFAULT_INPUTS.habitStreak, 0, 3650)
@@ -81,6 +83,9 @@ export const GameSave = {
       PlayerProgress.activities = Array.isArray(saved.activities)
         ? saved.activities.filter(entry => entry && typeof entry.date === 'string' && typeof entry.kind === 'string').slice(-180)
         : [];
+      PlayerProgress.claimedWeeklyGoals = Array.isArray(saved.claimedWeeklyGoals)
+        ? saved.claimedWeeklyGoals.filter(value => typeof value === 'string').slice(-32)
+        : [];
       PlayerProgress.appearance = sanitizeAppearance(saved.appearance);
       PlayerProgress.totalXp = finite(saved.progress?.totalXp, 0, 0, 100000000);
       recalculateLevel();
@@ -97,13 +102,14 @@ export const GameSave = {
 
   save(): void {
     const snapshot: SaveSnapshot = {
-      version: 2,
+      version: 3,
       updatedAt: new Date().toISOString(),
       profileCompleted: PlayerProgress.profileCompleted,
       inputs: { ...PlayerProgress.inputs },
       statXp: { ...PlayerProgress.statXp },
       stats: { ...PlayerProgress.stats },
       activities: [...PlayerProgress.activities],
+      claimedWeeklyGoals: [...PlayerProgress.claimedWeeklyGoals],
       appearance: { ...PlayerProgress.appearance },
       progress: {
         level: PlayerProgress.level,

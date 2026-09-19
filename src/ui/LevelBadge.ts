@@ -22,6 +22,10 @@ export class LevelBadge {
     this.text.setPosition(x, y - clearanceAboveHead);
   }
 
+  setVisible(visible: boolean): void {
+    this.text.setVisible(visible);
+  }
+
   destroy(): void {
     this.text.destroy();
   }
