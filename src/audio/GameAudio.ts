@@ -19,12 +19,16 @@ export class GameAudio {
       this.master = this.context.createGain();
       this.music = this.context.createGain();
       this.sfxBus = this.context.createGain();
-      this.master.gain.value = 0.72;
-      this.music.gain.value = 0.22;
-      this.sfxBus.gain.value = 0.5;
+      const compressor = this.context.createDynamicsCompressor();
+      compressor.threshold.value = -16;
+      compressor.knee.value = 14;
+      compressor.ratio.value = 5;
+      this.master.gain.value = 0.9;
+      this.music.gain.value = 0.58;
+      this.sfxBus.gain.value = 0.92;
       this.music.connect(this.master);
       this.sfxBus.connect(this.master);
-      this.master.connect(this.context.destination);
+      this.master.connect(compressor).connect(this.context.destination);
     }
     if (this.context.state === 'suspended') void this.context.resume();
   }
@@ -34,13 +38,19 @@ export class GameAudio {
 
   private static startTrack(track: Track): void {
     this.unlock();
-    if (!this.context || !this.music || this.track === track) return;
+    if (!this.context || !this.music || (this.track === track && this.timer !== undefined)) return;
     this.track = track;
     if (this.timer !== undefined) window.clearInterval(this.timer);
-    this.music.gain.cancelScheduledValues(this.context.currentTime);
-    this.music.gain.setTargetAtTime(track === 'boss' ? 0.3 : 0.22, this.context.currentTime, 0.25);
-    this.playPhrase(track);
-    this.timer = window.setInterval(() => this.playPhrase(track), track === 'boss' ? 3200 : 6400);
+    this.timer = undefined;
+    const begin = (): void => {
+      if (!this.context || !this.music || this.track !== track || this.timer !== undefined) return;
+      this.music.gain.cancelScheduledValues(this.context.currentTime);
+      this.music.gain.setTargetAtTime(track === 'boss' ? 0.72 : 0.58, this.context.currentTime, 0.12);
+      this.playPhrase(track);
+      this.timer = window.setInterval(() => this.playPhrase(track), track === 'boss' ? 2400 : 4000);
+    };
+    if (this.context.state === 'running') begin();
+    else void this.context.resume().then(begin);
   }
 
   private static playPhrase(track: Track): void {
@@ -51,20 +61,24 @@ export class GameAudio {
     if (track === 'ambient') {
       const chords = [[110, 130.81, 164.81], [98, 123.47, 146.83], [87.31, 110, 130.81], [98, 123.47, 164.81]];
       chords.forEach((chord, index) => chord.forEach((frequency, voice) => {
-        this.tone(frequency, start + index * 1.6, 1.55, voice === 0 ? 'sine' : 'triangle', 0.045, output, 900);
+        this.tone(frequency, start + index, 0.98, voice === 0 ? 'sine' : 'triangle', voice === 0 ? 0.11 : 0.075, output, 1050);
       }));
       [329.63, 392, 440, 392, 293.66, 329.63, 246.94, 293.66].forEach((frequency, index) => {
-        this.tone(frequency, start + index * 0.8, 0.22, 'sine', 0.035, output, 1500);
+        this.tone(frequency, start + index * 0.5, 0.28, 'sine', 0.065, output, 1800);
       });
-      for (let i = 0; i < 13; i += 1) this.noise(start + i * 0.48, 0.035, 0.008, output, 2600);
+      for (let i = 0; i < 8; i += 1) {
+        if (i % 4 === 0) this.sweep(82, 48, start + i * 0.5, 0.14, 'sine', 0.16, output);
+        if (i % 4 === 2) this.noise(start + i * 0.5, 0.11, 0.055, output, 1250);
+        this.noise(start + i * 0.5 + 0.25, 0.025, 0.018, output, 4200);
+      }
     } else {
       const bass = [82.41, 82.41, 98, 110];
-      bass.forEach((frequency, index) => this.tone(frequency, start + index * 0.8, 0.58, 'sawtooth', 0.055, output, 620));
+      bass.forEach((frequency, index) => this.tone(frequency, start + index * 0.6, 0.46, 'sawtooth', 0.12, output, 720));
       const arp = [329.63, 392, 493.88, 587.33, 493.88, 392, 349.23, 440, 523.25, 659.25, 523.25, 440, 392, 493.88, 587.33, 698.46];
-      arp.forEach((frequency, index) => this.tone(frequency, start + index * 0.2, 0.14, 'square', 0.026, output, 1800));
-      for (let i = 0; i < 7; i += 1) {
-        this.tone(58, start + i * 0.48, 0.09, 'sine', 0.13, output, 500);
-        this.noise(start + i * 0.48 + 0.24, 0.05, 0.025, output, 3200);
+      arp.forEach((frequency, index) => this.tone(frequency, start + index * 0.15, 0.12, 'square', 0.052, output, 2200));
+      for (let i = 0; i < 10; i += 1) {
+        if (i % 2 === 0) this.sweep(72, 43, start + i * 0.24, 0.12, 'sine', 0.24, output);
+        this.noise(start + i * 0.24 + 0.12, 0.045, 0.045, output, 3800);
       }
     }
   }
@@ -74,22 +88,29 @@ export class GameAudio {
     const ctx = this.context;
     const output = this.sfxBus;
     if (!ctx || !output) return;
-    const now = ctx.currentTime;
-    if (kind === 'stomp') {
-      this.sweep(150, 58, now, 0.16, 'triangle', 0.24, output);
-      this.noise(now, 0.09, 0.12, output, 900);
-    } else if (kind === 'hit') {
-      this.sweep(260, 105, now, 0.09, 'square', 0.12, output);
-      this.noise(now, 0.055, 0.08, output, 1800);
-    } else if (kind === 'portal') {
-      [196, 293.66, 440, 659.25].forEach((frequency, index) => this.tone(frequency, now + index * 0.08, 0.5, 'sine', 0.11, output, 2400));
-    } else if (kind === 'roar') {
-      this.sweep(105, 42, now, 0.75, 'sawtooth', 0.28, output);
-      this.noise(now, 0.62, 0.16, output, 620);
-    } else {
-      this.sweep(90, 310, now, 0.34, 'sawtooth', 0.16, output);
-      this.noise(now + 0.12, 0.18, 0.09, output, 1500);
-    }
+    const play = (): void => {
+      const now = ctx.currentTime + 0.01;
+      if (kind === 'stomp') {
+        this.sweep(190, 46, now, 0.2, 'triangle', 0.48, output);
+        this.noise(now, 0.12, 0.24, output, 1050);
+      } else if (kind === 'hit') {
+        this.sweep(340, 92, now, 0.12, 'square', 0.3, output);
+        this.noise(now, 0.08, 0.2, output, 2200);
+      } else if (kind === 'portal') {
+        [196, 293.66, 440, 659.25].forEach((frequency, index) => this.tone(frequency, now + index * 0.08, 0.6, 'sine', 0.22, output, 2800));
+        this.sweep(70, 420, now, 0.7, 'triangle', 0.2, output);
+      } else if (kind === 'roar') {
+        this.sweep(128, 38, now, 0.92, 'sawtooth', 0.55, output);
+        this.sweep(86, 31, now + 0.05, 0.88, 'square', 0.25, output);
+        this.noise(now, 0.78, 0.38, output, 760);
+      } else {
+        this.sweep(72, 390, now, 0.42, 'sawtooth', 0.4, output);
+        this.noise(now + 0.1, 0.24, 0.22, output, 1900);
+        this.sweep(120, 52, now + 0.32, 0.18, 'triangle', 0.36, output);
+      }
+    };
+    if (ctx.state === 'running') play();
+    else void ctx.resume().then(play);
   }
 
   private static tone(frequency: number, start: number, duration: number, type: OscillatorType, volume: number, output: AudioNode, cutoff: number): void {
