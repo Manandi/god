@@ -16,7 +16,7 @@ import {
 const STORAGE_KEY = 'hollow-roots-save-v1';
 
 interface SaveSnapshot {
-  version: 3;
+  version: 4;
   updatedAt: string;
   profileCompleted: boolean;
   inputs: LifeInputs;
@@ -47,9 +47,7 @@ function sanitizeInputs(value: Record<string, unknown> | undefined): LifeInputs 
     sprintSeconds: finite(value?.sprintSeconds, DEFAULT_INPUTS.sprintSeconds, 8, 60),
     mileSeconds: finite(value?.mileSeconds, DEFAULT_INPUTS.mileSeconds, 240, 1800),
     plankSeconds: finite(value?.plankSeconds, DEFAULT_INPUTS.plankSeconds, 0, 600),
-    iqScore: finite(value?.iqScore, DEFAULT_INPUTS.iqScore, 55, 160),
-    focusMinutes: finite(value?.focusMinutes, DEFAULT_INPUTS.focusMinutes, 0, 480),
-    habitStreak: finite(value?.habitStreak, DEFAULT_INPUTS.habitStreak, 0, 3650)
+    iqScore: finite(value?.iqScore, DEFAULT_INPUTS.iqScore, 55, 160)
   };
 }
 
@@ -79,10 +77,10 @@ export const GameSave = {
       PlayerProgress.profileCompleted = saved.profileCompleted === true;
       PlayerProgress.inputs = inputs;
       PlayerProgress.statXp = statXp;
-      PlayerProgress.stats = calculateStats(inputs, statXp);
       PlayerProgress.activities = Array.isArray(saved.activities)
         ? saved.activities.filter(entry => entry && typeof entry.date === 'string' && typeof entry.kind === 'string').slice(-180)
         : [];
+      PlayerProgress.stats = calculateStats(inputs, statXp, PlayerProgress.activities);
       PlayerProgress.claimedWeeklyGoals = Array.isArray(saved.claimedWeeklyGoals)
         ? saved.claimedWeeklyGoals.filter(value => typeof value === 'string').slice(-32)
         : [];
@@ -102,7 +100,7 @@ export const GameSave = {
 
   save(): void {
     const snapshot: SaveSnapshot = {
-      version: 3,
+      version: 4,
       updatedAt: new Date().toISOString(),
       profileCompleted: PlayerProgress.profileCompleted,
       inputs: { ...PlayerProgress.inputs },
