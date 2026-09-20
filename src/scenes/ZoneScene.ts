@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PHYSICS, TILE_SIZE, PARTICLE_TEXTURE_KEY } from '../config';
+import { GAME_HEIGHT, GAME_WIDTH, PHYSICS, TILE_SIZE, PARTICLE_TEXTURE_KEY } from '../config';
 import { Player } from '../entities/Player';
 import { Enemy, GuardianAttack } from '../entities/Enemy';
 import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistry';
@@ -94,6 +94,10 @@ export class ZoneScene extends Phaser.Scene {
   private menuKey!: Phaser.Input.Keyboard.Key;
   private portalPrompt?: Phaser.GameObjects.Text;
   private bossInLair = false;
+  private guardianCutsceneActive = false;
+  private guardianCutsceneCanSkip = false;
+  private guardianCutsceneObjects: Phaser.GameObjects.GameObject[] = [];
+  private guardianCutsceneTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
     super('ZoneScene');
@@ -165,6 +169,10 @@ export class ZoneScene extends Phaser.Scene {
     this.dying = false;
     this.guardian = undefined;
     this.bossInLair = false;
+    this.guardianCutsceneActive = false;
+    this.guardianCutsceneCanSkip = false;
+    this.guardianCutsceneObjects = [];
+    this.guardianCutsceneTimers = [];
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.menuKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
@@ -263,6 +271,10 @@ export class ZoneScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if(this.dying) return;
+    if (this.guardianCutsceneActive) {
+      if (this.guardianCutsceneCanSkip && Phaser.Input.Keyboard.JustDown(this.interactKey)) this.finishGuardianCutscene();
+      return;
+    }
     if (Phaser.Input.Keyboard.JustDown(this.menuKey)) {
       PlayerProgress.currentZone = this.zoneKey;
       PlayerProgress.currentSpawn = this.activeCheckpoint;
@@ -730,32 +742,45 @@ export class ZoneScene extends Phaser.Scene {
   private createBossPortal(): void {
     if (this.zoneKey !== 'biosphere' || !this.guardian || PlayerProgress.guardianDefeated) return;
     const portalX = 4704;
-    const floorY = 928;
+    const portalFloorY = 928;
+    const arenaFloorY = 928;
+    this.createGuardianLairAtmosphere(arenaFloorY);
     const portal = this.add.graphics().setDepth(7);
-    portal.fillStyle(0x071b18, 0.82).fillEllipse(portalX, floorY - 48, 58, 94);
-    portal.lineStyle(5, 0x79e5ad, 0.85).strokeEllipse(portalX, floorY - 48, 58, 94);
-    portal.lineStyle(2, 0xd8ffb0, 0.7).strokeEllipse(portalX, floorY - 48, 38, 70);
-    const glow = this.add.ellipse(portalX, floorY - 48, 42, 76, 0x80f2b4, 0.2).setDepth(6);
+    portal.fillStyle(0x071b18, 0.82).fillEllipse(portalX, portalFloorY - 48, 58, 94);
+    portal.lineStyle(5, 0x79e5ad, 0.85).strokeEllipse(portalX, portalFloorY - 48, 58, 94);
+    portal.lineStyle(2, 0xd8ffb0, 0.7).strokeEllipse(portalX, portalFloorY - 48, 38, 70);
+    const glow = this.add.ellipse(portalX, portalFloorY - 48, 42, 76, 0x80f2b4, 0.2).setDepth(6);
     this.tweens.add({ targets: [portal, glow], alpha: { from: 0.55, to: 1 }, scaleX: { from: 0.92, to: 1.04 }, duration: 820, yoyo: true, repeat: -1 });
 
     const gate = this.add.graphics().setDepth(8);
-    gate.fillStyle(0x07140f, 0.94).fillRect(4856, 704, 18, 224);
+    gate.fillStyle(0x07140f, 0.94).fillRect(4760, 704, 22, 224);
     gate.lineStyle(3, 0x66875a, 0.9);
-    for (let y = 704; y < floorY; y += 32) gate.lineBetween(4858, y, 4872, y + 18);
-    const gateZone = this.add.zone(4865, 816, 20, 224);
+    for (let y = 704; y < arenaFloorY; y += 32) gate.lineBetween(4763, y, 4779, y + 18);
+    const gateZone = this.add.zone(4771, 816, 24, 224);
     this.physics.add.existing(gateZone, true);
     this.physics.add.collider(this.player, gateZone);
 
-    this.portalPrompt = this.add.text(portalX, floorY - 105, 'E  ENTER GUARDIAN LAIR', {
+    // Once the portal is used, the entrance gate dissolves and a new seal
+    // grows behind the player. This opens the entire 944px guardian court
+    // while still preventing escape during the encounter.
+    const arenaSeal = this.add.graphics().setDepth(8).setVisible(false);
+    arenaSeal.fillStyle(0x06110d, 0.98).fillRect(4438, 704, 24, 224);
+    arenaSeal.lineStyle(4, 0x82ad63, 0.9);
+    for (let y = 704; y < arenaFloorY; y += 28) arenaSeal.lineBetween(4441, y + 20, 4459, y);
+    const sealZone = this.add.zone(4450, 816, 26, 224);
+    this.physics.add.existing(sealZone, true);
+    const sealBody = sealZone.body as Phaser.Physics.Arcade.StaticBody;
+    sealBody.enable = false;
+    this.physics.add.collider(this.player, sealZone);
+
+    this.portalPrompt = this.add.text(portalX, portalFloorY - 105, 'E  ENTER GUARDIAN LAIR', {
       fontFamily: 'monospace', fontSize: '11px', color: '#07110b', backgroundColor: '#d8ffb0'
     }).setPadding(5, 3, 5, 3).setOrigin(0.5, 1).setDepth(90).setVisible(false);
 
-    const zone = this.add.zone(portalX, floorY - 46, 76, 108);
+    const zone = this.add.zone(portalX, portalFloorY - 46, 76, 108);
     this.physics.add.existing(zone, true);
-    this.physics.add.overlap(this.player, zone, () => {
+    const enterLair = (): void => {
       if (this.bossInLair || this.transitionLocked) return;
-      this.portalPrompt?.setVisible(true);
-      if (!Phaser.Input.Keyboard.JustDown(this.interactKey)) return;
       this.bossInLair = true;
       this.transitionLocked = true;
       this.portalPrompt?.setVisible(false);
@@ -764,17 +789,98 @@ export class ZoneScene extends Phaser.Scene {
       GameAudio.playSfx('portal');
       this.cameras.main.fadeOut(260, 5, 18, 13);
       this.time.delayedCall(290, () => {
-        this.player.setPosition(4936, floorY);
-        body.enable = true;
+        gate.setVisible(false);
+        (gateZone.body as Phaser.Physics.Arcade.StaticBody).enable = false;
+        arenaSeal.setVisible(true);
+        sealBody.enable = true;
+        this.player.setPosition(4544, arenaFloorY);
         body.updateFromGameObject();
-        this.guardian?.setEncounterActive(true);
         GameAudio.startBoss();
-        GameAudio.playSfx('roar');
-        this.cameras.main.fadeIn(380, 5, 18, 13);
-        this.showMessage('THE VERDANT GUARDIAN AWAKENS', 1900);
-        this.time.delayedCall(500, () => { this.transitionLocked = false; });
+        this.beginGuardianCutscene(body);
       });
+    };
+    this.physics.add.overlap(this.player, zone, () => {
+      if (this.bossInLair || this.transitionLocked) return;
+      this.portalPrompt?.setVisible(true);
+      if (Phaser.Input.Keyboard.JustDown(this.interactKey)) enterLair();
     });
+  }
+
+  private createGuardianLairAtmosphere(floorY: number): void {
+    const left = 4448;
+    const right = 5424;
+    this.add.rectangle((left + right) / 2, floorY - 180, right - left, 360, 0x020b0b, 0.52).setDepth(-7);
+    const roots = this.add.graphics().setDepth(-6);
+    roots.fillStyle(0x061813, 0.96);
+    for (const x of [4490, 4650, 5230, 5380]) {
+      roots.fillEllipse(x, floorY - 180, 76, 360);
+      roots.fillTriangle(x - 38, floorY, x + 38, floorY, x, floorY - 250);
+    }
+    roots.lineStyle(5, 0x315d44, 0.55);
+    for (let x = left + 35; x < right; x += 110) roots.lineBetween(x, floorY - 330, x + 42, floorY - 20);
+    for (const x of [4610, 4936, 5260]) {
+      const light = this.add.circle(x, floorY - 126, 10, 0xa8ff9a, 0.78).setDepth(-4);
+      const halo = this.add.circle(x, floorY - 126, 48, 0x76d890, 0.1).setDepth(-5);
+      this.tweens.add({ targets: [light, halo], alpha: { from: 0.45, to: 0.95 }, scale: { from: 0.88, to: 1.12 }, duration: 850, yoyo: true, repeat: -1 });
+    }
+  }
+
+  private beginGuardianCutscene(playerBody: Phaser.Physics.Arcade.Body): void {
+    this.guardianCutsceneActive = true;
+    this.guardianCutsceneCanSkip = false;
+    this.cameras.main.stopFollow();
+    this.cameras.main.fadeIn(380, 3, 10, 9);
+    this.cameras.main.pan(4960, 820, 1300, 'Sine.easeInOut');
+
+    const topBar = this.add.rectangle(0, 0, GAME_WIDTH, 68, 0x020706, 0.96).setOrigin(0).setScrollFactor(0).setDepth(180);
+    const bottomBar = this.add.rectangle(0, GAME_HEIGHT - 104, GAME_WIDTH, 104, 0x020706, 0.96).setOrigin(0).setScrollFactor(0).setDepth(180);
+    const title = this.add.text(GAME_WIDTH / 2, 25, 'BENEATH THE EASTERN ROOTS', {
+      fontFamily: 'Georgia, serif', fontSize: '20px', color: '#dff2a3', letterSpacing: 4
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(181);
+    const dialogue = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 64, 'The roots remember a war the surface forgot.', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#e6f4e9', align: 'center', wordWrap: { width: 760 }
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(181);
+    const skip = this.add.text(GAME_WIDTH - 18, GAME_HEIGHT - 17, 'E  SKIP', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#82998b'
+    }).setOrigin(1).setScrollFactor(0).setDepth(181);
+    this.guardianCutsceneObjects = [topBar, bottomBar, title, dialogue, skip];
+
+    const later = (delay: number, callback: () => void): void => {
+      this.guardianCutsceneTimers.push(this.time.delayedCall(delay, callback));
+    };
+    later(650, () => { this.guardianCutsceneCanSkip = true; });
+    later(1700, () => dialogue.setText('At the forest\'s heart sleeps the last Heartseed—\nand below it, the Blight still claws upward.'));
+    later(3600, () => {
+      this.guardian?.setEncounterActive(true);
+      const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
+      if (guardianBody) guardianBody.enable = false;
+      GameAudio.playSfx('roar');
+      this.cameras.main.shake(240, 0.006);
+      dialogue.setText('VERDANT GUARDIAN\n“I held it below while your world forgot my name.”');
+    });
+    later(5900, () => dialogue.setText('“Prove you can bear the Heartseed...\nor become another root in its prison.”'));
+    later(7900, () => this.finishGuardianCutscene());
+    playerBody.setVelocity(0, 0);
+  }
+
+  private finishGuardianCutscene(): void {
+    if (!this.guardianCutsceneActive) return;
+    for (const timer of this.guardianCutsceneTimers) timer.remove(false);
+    this.guardianCutsceneTimers = [];
+    for (const object of this.guardianCutsceneObjects) object.destroy();
+    this.guardianCutsceneObjects = [];
+    this.guardianCutsceneActive = false;
+    this.guardianCutsceneCanSkip = false;
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    body.updateFromGameObject();
+    const needsRoar = this.guardian?.visible !== true;
+    this.guardian?.setEncounterActive(true);
+    if (needsRoar) GameAudio.playSfx('roar');
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.cameras.main.shake(150, 0.004);
+    this.transitionLocked = false;
+    this.showMessage('THE VERDANT GUARDIAN · WARDEN OF THE HEARTSEED', 2100);
   }
 
   private generateCombatTextures(): void {
