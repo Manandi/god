@@ -10,6 +10,7 @@ export class GameAudio {
   private static sfxBus?: GainNode;
   private static timer?: number;
   private static track?: Track;
+  private static readonly musicVoices = new Set<AudioScheduledSourceNode>();
 
   static unlock(): void {
     if (!this.context) {
@@ -39,15 +40,19 @@ export class GameAudio {
   private static startTrack(track: Track): void {
     this.unlock();
     if (!this.context || !this.music || (this.track === track && this.timer !== undefined)) return;
+    const changed = this.track !== track;
     this.track = track;
     if (this.timer !== undefined) window.clearInterval(this.timer);
     this.timer = undefined;
+    if (changed) this.stopMusicVoices();
     const begin = (): void => {
       if (!this.context || !this.music || this.track !== track || this.timer !== undefined) return;
+      const now = this.context.currentTime;
       this.music.gain.cancelScheduledValues(this.context.currentTime);
-      this.music.gain.setTargetAtTime(track === 'boss' ? 0.72 : 0.58, this.context.currentTime, 0.12);
+      this.music.gain.setValueAtTime(0.0001, now);
+      this.music.gain.linearRampToValueAtTime(track === 'boss' ? 0.78 : 0.58, now + 0.06);
       this.playPhrase(track);
-      this.timer = window.setInterval(() => this.playPhrase(track), track === 'boss' ? 2400 : 4000);
+      this.timer = window.setInterval(() => this.playPhrase(track), track === 'boss' ? 2857 : 4000);
     };
     if (this.context.state === 'running') begin();
     else void this.context.resume().then(begin);
@@ -72,13 +77,26 @@ export class GameAudio {
         this.noise(start + i * 0.5 + 0.25, 0.025, 0.018, output, 4200);
       }
     } else {
-      const bass = [82.41, 82.41, 98, 110];
-      bass.forEach((frequency, index) => this.tone(frequency, start + index * 0.6, 0.46, 'sawtooth', 0.12, output, 720));
-      const arp = [329.63, 392, 493.88, 587.33, 493.88, 392, 349.23, 440, 523.25, 659.25, 523.25, 440, 392, 493.88, 587.33, 698.46];
-      arp.forEach((frequency, index) => this.tone(frequency, start + index * 0.15, 0.12, 'square', 0.052, output, 2200));
-      for (let i = 0; i < 10; i += 1) {
-        if (i % 2 === 0) this.sweep(72, 43, start + i * 0.24, 0.12, 'sine', 0.24, output);
-        this.noise(start + i * 0.24 + 0.12, 0.045, 0.045, output, 3800);
+      // Original 168 BPM battle cue: rapid monster-battle energy without
+      // borrowing a melody or recording from an existing game.
+      const beat = 60 / 168;
+      const bass = [82.41, 82.41, 98, 110, 82.41, 123.47, 110, 98];
+      bass.forEach((frequency, index) => {
+        this.tone(frequency, start + index * beat, beat * 0.72, 'sawtooth', 0.14, output, 820);
+      });
+      const lead = [329.63, 392, 493.88, 587.33, 493.88, 659.25, 587.33, 493.88, 349.23, 440, 523.25, 698.46, 659.25, 523.25, 440, 392];
+      lead.forEach((frequency, index) => {
+        this.tone(frequency, start + index * beat / 2, beat * 0.38, index % 4 === 3 ? 'sawtooth' : 'square', 0.065, output, 2600);
+      });
+      const stabs = [[164.81, 196, 246.94], [146.83, 196, 220], [164.81, 207.65, 246.94], [146.83, 185, 220]];
+      stabs.forEach((chord, index) => chord.forEach(frequency => {
+        this.tone(frequency, start + index * beat * 2, beat * 0.7, 'triangle', 0.075, output, 1500);
+      }));
+      for (let i = 0; i < 16; i += 1) {
+        const hit = start + i * beat / 2;
+        if (i % 2 === 0) this.sweep(92, 45, hit, 0.13, 'sine', 0.3, output);
+        if (i % 4 === 2) this.noise(hit, 0.13, 0.12, output, 1500);
+        this.noise(hit + beat * 0.25, 0.028, 0.04, output, 5200);
       }
     }
   }
@@ -126,6 +144,7 @@ export class GameAudio {
     gain.gain.exponentialRampToValueAtTime(volume, start + 0.025);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(filter).connect(gain).connect(output);
+    this.trackMusicVoice(oscillator, output);
     oscillator.start(start);
     oscillator.stop(start + duration + 0.03);
   }
@@ -140,6 +159,7 @@ export class GameAudio {
     gain.gain.setValueAtTime(volume, start);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain).connect(output);
+    this.trackMusicVoice(oscillator, output);
     oscillator.start(start);
     oscillator.stop(start + duration + 0.02);
   }
@@ -158,6 +178,20 @@ export class GameAudio {
     gain.gain.setValueAtTime(volume, start);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     source.connect(filter).connect(gain).connect(output);
+    this.trackMusicVoice(source, output);
     source.start(start);
+  }
+
+  private static trackMusicVoice(source: AudioScheduledSourceNode, output: AudioNode): void {
+    if (output !== this.music) return;
+    this.musicVoices.add(source);
+    source.addEventListener('ended', () => this.musicVoices.delete(source), { once: true });
+  }
+
+  private static stopMusicVoices(): void {
+    for (const source of this.musicVoices) {
+      try { source.stop(); } catch { /* A voice may already have ended. */ }
+    }
+    this.musicVoices.clear();
   }
 }
