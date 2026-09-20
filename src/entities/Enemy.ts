@@ -82,8 +82,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (options.animKey) this.play(options.animKey);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const bodyWidth = Math.min(this.isBoss ? 80 : 44, this.width);
-    const bodyHeight = Math.min(this.isBoss ? 54 : 28, this.height);
+    // The guardian art is 128×96 and its former 80×54 body left much of the
+    // shell and legs unhittable. The arena is flat, so a larger body is both
+    // stable and much closer to the visible silhouette.
+    const bodyWidth = Math.min(this.isBoss ? 106 : 44, this.width);
+    const bodyHeight = Math.min(this.isBoss ? 70 : 28, this.height);
     body.setSize(bodyWidth, bodyHeight);
     body.setOffset((this.width - bodyWidth) / 2, this.height - bodyHeight - 2);
 
@@ -120,6 +123,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * temporarily disabled for a one-tile step tween. */
   getCombatBounds(): Phaser.Geom.Rectangle {
     const body = this.body as Phaser.Physics.Arcade.Body;
+    if (this.isBoss) {
+      return new Phaser.Geom.Rectangle(this.x - 56, this.y - 76, 112, 74);
+    }
     if (!this.traversingStep && body.enable) {
       return new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
     }
