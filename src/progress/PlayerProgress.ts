@@ -1,9 +1,15 @@
 export interface LifeInputs {
   pushups: number;
+  pullups: number;
   sprintSeconds: number;
+  verticalJumpCm: number;
   mileSeconds: number;
+  restingHeartRate: number;
   plankSeconds: number;
+  sleepHours: number;
+  studyHoursPerWeek: number;
   iqScore: number;
+  habitStreakDays: number;
 }
 
 export interface CharacterStats {
@@ -36,12 +42,49 @@ export interface CharacterAppearance {
   hair: HairId;
 }
 
+/** Each metric's value at 1, 5, 10, 15 and 20 points. Descending rows are
+ * metrics where lower is better. DEFAULT_INPUTS sits on the 10 anchor, so an
+ * untouched profile reads as dead average. */
+export const STAT_ANCHORS = {
+  pushups: [0, 5, 15, 35, 60],
+  pullups: [0, 1, 5, 12, 22],
+  sprintSeconds: [22, 18, 15, 13, 11],
+  verticalJumpCm: [10, 25, 40, 55, 70],
+  mileSeconds: [900, 720, 600, 480, 360],
+  restingHeartRate: [90, 78, 68, 58, 45],
+  plankSeconds: [10, 40, 90, 180, 300],
+  sleepHours: [4, 5.5, 7, 8, 8.5],
+  studyHoursPerWeek: [0, 2, 5, 10, 20],
+  iqScore: [70, 90, 100, 115, 135],
+  habitStreakDays: [0, 3, 10, 30, 90]
+} as const satisfies Record<keyof LifeInputs, readonly number[]>;
+
+export const INPUT_BOUNDS = {
+  pushups: [0, 300],
+  pullups: [0, 100],
+  sprintSeconds: [9, 60],
+  verticalJumpCm: [0, 150],
+  mileSeconds: [200, 2400],
+  restingHeartRate: [30, 140],
+  plankSeconds: [0, 1200],
+  sleepHours: [0, 14],
+  studyHoursPerWeek: [0, 80],
+  iqScore: [55, 200],
+  habitStreakDays: [0, 3650]
+} as const satisfies Record<keyof LifeInputs, readonly [number, number]>;
+
 export const DEFAULT_INPUTS: LifeInputs = {
-  pushups: 10,
-  sprintSeconds: 20,
-  mileSeconds: 720,
-  plankSeconds: 45,
-  iqScore: 100
+  pushups: 15,
+  pullups: 5,
+  sprintSeconds: 15,
+  verticalJumpCm: 40,
+  mileSeconds: 600,
+  restingHeartRate: 68,
+  plankSeconds: 90,
+  sleepHours: 7,
+  studyHoursPerWeek: 5,
+  iqScore: 100,
+  habitStreakDays: 10
 };
 
 export const DEFAULT_STATS: CharacterStats = {
@@ -50,7 +93,7 @@ export const DEFAULT_STATS: CharacterStats = {
   stamina: 10,
   defense: 10,
   intelligence: 10,
-  discipline: 8
+  discipline: 10
 };
 
 export const DEFAULT_STAT_XP: Record<StatKey, number> = {
@@ -68,19 +111,40 @@ export const DEFAULT_APPEARANCE: CharacterAppearance = {
   hair: 'raven'
 };
 
-const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
-const baseline = (value: number): number => Math.round(8 + clamp01(value) * 10);
+const POINTS = [1, 5, 10, 15, 20];
 
-/** A compact, universal starting assessment. Ongoing real-world activity adds
- * permanent stat XP after the baseline is created. */
+/** Scores one measurement on a 1-20 scale by interpolating between its real
+ * anchor values. The old formula compressed every answer into 8-18, so a
+ * beginner and an athlete came out nearly identical; anchors spread them. */
+export function scoreMetric(key: keyof LifeInputs, value: number): number {
+  const anchors = STAT_ANCHORS[key];
+  const ascending = anchors[4] > anchors[0];
+  const atOrBelowFloor = ascending ? value <= anchors[0] : value >= anchors[0];
+  const atOrAboveCeiling = ascending ? value >= anchors[4] : value <= anchors[4];
+  if (atOrBelowFloor) return POINTS[0];
+  if (atOrAboveCeiling) return POINTS[4];
+  for (let i = 0; i < 4; i += 1) {
+    const low = anchors[i];
+    const high = anchors[i + 1];
+    const inBand = ascending ? value >= low && value <= high : value <= low && value >= high;
+    if (inBand) return Math.round(POINTS[i] + ((value - low) / (high - low)) * (POINTS[i + 1] - POINTS[i]));
+  }
+  return POINTS[2];
+}
+
+const pair = (a: number, b: number): number => Math.round((a + b) / 2);
+
+/** Two real-world measurements feed each stat, so no single answer decides a
+ * whole attribute. Ongoing logged activity adds permanent stat XP on top. */
 export function calculateBaseStats(input: LifeInputs, activities: ActivityEntry[] = []): CharacterStats {
+  const score = (key: keyof LifeInputs): number => scoreMetric(key, input[key]);
   return {
-    strength: baseline(input.pushups / 60),
-    speed: baseline((30 - input.sprintSeconds) / 19),
-    stamina: baseline((900 - input.mileSeconds) / 600),
-    defense: baseline(input.plankSeconds / 180),
-    intelligence: baseline((input.iqScore - 70) / 60),
-    discipline: disciplineFromHistory(activities)
+    strength: pair(score('pushups'), score('pullups')),
+    speed: pair(score('sprintSeconds'), score('verticalJumpCm')),
+    stamina: pair(score('mileSeconds'), score('restingHeartRate')),
+    defense: pair(score('plankSeconds'), score('sleepHours')),
+    intelligence: pair(score('studyHoursPerWeek'), score('iqScore')),
+    discipline: disciplineFromHistory(activities, score('habitStreakDays'))
   };
 }
 
@@ -299,7 +363,7 @@ export function totalStats(stats: CharacterStats = PlayerProgress.stats): number
 
 /** Discipline is deliberately earned, never self-reported. It combines recent
  * consistency with the current streak and updates whenever effort is logged. */
-function disciplineFromHistory(activities: ActivityEntry[]): number {
+function disciplineFromHistory(activities: ActivityEntry[], seed = 10): number {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setUTCDate(cutoff.getUTCDate() - 27);
@@ -309,5 +373,8 @@ function disciplineFromHistory(activities: ActivityEntry[]): number {
   const streak = consecutiveDays(active);
   const consistency = Math.min(1, recentDays / 20);
   const streakScore = Math.min(1, streak / 14);
-  return baseline(consistency * 0.75 + streakScore * 0.25);
+  const logged = Math.round(1 + (consistency * 0.75 + streakScore * 0.25) * 19);
+  // The self-reported streak seeds Discipline at character creation; once
+  // there is real logged history it becomes the better signal and takes over.
+  return activities.length >= 12 ? logged : Math.max(seed, logged);
 }

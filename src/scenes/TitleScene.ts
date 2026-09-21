@@ -8,7 +8,10 @@ import {
   addActivity,
   calculateStats,
   currentLevelXp,
+  DEFAULT_INPUTS,
+  INPUT_BOUNDS,
   PlayerProgress,
+  scoreMetric,
   totalStats,
   weeklyGoals,
   xpForLevel,
@@ -20,7 +23,7 @@ import {
   type LifeInputs
 } from '../progress/PlayerProgress';
 
-type TitleView = 'menu' | 'profile' | 'customize' | 'checkin' | 'character' | 'leaderboard';
+type TitleView = 'menu' | 'create' | 'questions' | 'summary' | 'customize' | 'checkin' | 'character' | 'leaderboard';
 
 const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['strength', 'STR', 'Strength'],
@@ -31,12 +34,30 @@ const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['discipline', 'DIS', 'Discipline']
 ];
 
-const INPUTS: Array<{ key: keyof LifeInputs; label: string; hint: string; min: number; max: number; step?: number }> = [
-  { key: 'pushups', label: 'Strict push-ups', hint: 'Strength · max clean reps', min: 0, max: 200 },
-  { key: 'sprintSeconds', label: '100 m sprint', hint: 'Speed · seconds', min: 8, max: 60, step: .1 },
-  { key: 'mileSeconds', label: 'One-mile run', hint: 'Stamina · total seconds', min: 240, max: 1800 },
-  { key: 'plankSeconds', label: 'Forearm plank', hint: 'Defense · max seconds', min: 0, max: 600 },
-  { key: 'iqScore', label: 'Validated IQ score', hint: 'IQ · optional', min: 55, max: 160 }
+interface Question {
+  key: keyof LifeInputs;
+  stat: keyof CharacterStats;
+  prompt: string;
+  help: string;
+  unit: string;
+  step: number;
+  /** Asked as minutes + seconds rather than one raw seconds field. */
+  asDuration?: boolean;
+  optional?: boolean;
+}
+
+const QUESTIONS: Question[] = [
+  { key: 'pushups', stat: 'strength', prompt: 'How many push-ups can you do?', help: 'Strict form, one unbroken set, going to failure.', unit: 'reps', step: 1 },
+  { key: 'pullups', stat: 'strength', prompt: 'How many pull-ups can you do?', help: 'Dead hang to chin over the bar. Zero is a normal answer.', unit: 'reps', step: 1 },
+  { key: 'sprintSeconds', stat: 'speed', prompt: 'How fast can you run 100 metres?', help: 'A flat-out sprint. Estimate if you have never timed one.', unit: 'seconds', step: 0.1 },
+  { key: 'verticalJumpCm', stat: 'speed', prompt: 'How high can you jump?', help: 'Standing vertical leap — reach up, then jump and mark the difference.', unit: 'cm', step: 1 },
+  { key: 'mileSeconds', stat: 'stamina', prompt: 'What is your one-mile time?', help: 'Best effort over a mile, roughly four laps of a running track.', unit: '', step: 1, asDuration: true },
+  { key: 'restingHeartRate', stat: 'stamina', prompt: 'What is your resting heart rate?', help: 'Beats per minute, measured sitting still. Lower means better conditioning.', unit: 'bpm', step: 1 },
+  { key: 'plankSeconds', stat: 'defense', prompt: 'How long can you hold a plank?', help: 'Forearm plank, flat back, held until form breaks.', unit: 'seconds', step: 1 },
+  { key: 'sleepHours', stat: 'defense', prompt: 'How many hours do you sleep?', help: 'On an average night. Recovery is what lets you absorb punishment.', unit: 'hours', step: 0.5 },
+  { key: 'studyHoursPerWeek', stat: 'intelligence', prompt: 'How many hours a week do you learn?', help: 'Reading, studying, practising a skill — deliberate learning only.', unit: 'hours/week', step: 0.5 },
+  { key: 'iqScore', stat: 'intelligence', prompt: 'Do you know your IQ score?', help: 'From a validated test. Skip this and it stays at the average of 100.', unit: 'score', step: 1, optional: true },
+  { key: 'habitStreakDays', stat: 'discipline', prompt: 'How long is your current streak?', help: 'Consecutive days you have kept any daily habit. This seeds Discipline until the game has its own record of your consistency.', unit: 'days', step: 1 }
 ];
 
 const SKIN_COLORS = ['#8d5c3c', '#b97950', '#d9a675', '#efc394', '#7a4930'];
@@ -47,6 +68,8 @@ export class TitleScene extends Phaser.Scene {
   private root!: HTMLDivElement;
   private view: TitleView = 'menu';
   private feedback = '';
+  private questionIndex = 0;
+  private draft: LifeInputs = { ...PlayerProgress.inputs };
 
   constructor() { super('TitleScene'); }
 
@@ -61,12 +84,14 @@ export class TitleScene extends Phaser.Scene {
     this.root = document.createElement('div');
     this.root.className = 'title-root';
     this.add.dom(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.root);
-    this.view = PlayerProgress.profileCompleted ? 'menu' : 'profile';
+    this.view = PlayerProgress.profileCompleted ? 'menu' : 'create';
     this.render();
   }
 
   private render(): void {
-    if (this.view === 'profile') this.renderProfile();
+    if (this.view === 'create') this.renderCreate();
+    else if (this.view === 'questions') this.renderQuestion();
+    else if (this.view === 'summary') this.renderSummary();
     else if (this.view === 'customize') this.renderCustomize();
     else if (this.view === 'checkin') this.renderCheckIn();
     else if (this.view === 'character') this.renderCharacter();
@@ -100,34 +125,173 @@ export class TitleScene extends Phaser.Scene {
     this.bindViewButtons();
   }
 
-  private renderProfile(): void {
+  /** Step one of character creation: decide who you are before the game asks
+   * what you can do. Returning players reach the same controls via CUSTOMIZE. */
+  private renderCreate(): void {
+    const { cloaks, hairs } = this.appearanceOptions();
     this.root.innerHTML = `
-      <section class="title-card full-card profile-card" aria-label="Real-life baseline">
-        <div class="panel-heading"><div><p class="eyebrow">STARTING ATTRIBUTES</p><h2>YOUR BASELINE</h2></div>${this.backButton()}</div>
-        <p class="panel-copy">Five repeatable benchmarks set your starting power. Discipline is calculated automatically from your logged consistency.</p>
-        <form data-profile-form>
-          <div class="profile-grid">
-            ${INPUTS.map(field => `<label><span>${field.label}<small>${field.hint}</small></span><input name="${field.key}" type="number" min="${field.min}" max="${field.max}" step="${field.step ?? 1}" value="${PlayerProgress.inputs[field.key]}"></label>`).join('')}
-          </div>
-          <div class="live-stats" data-live-stats>${this.statRunes(PlayerProgress.stats)}</div>
-          <div class="form-actions"><button class="primary" type="submit">SAVE BASELINE</button></div>
-        </form>
-      </section>`;
-    const form = this.root.querySelector<HTMLFormElement>('[data-profile-form]');
-    form?.addEventListener('input', () => {
-      const display = this.root.querySelector<HTMLElement>('[data-live-stats]');
-      if (display) display.innerHTML = this.statRunes(calculateStats(this.readInputs(form), PlayerProgress.statXp));
+      <section class="title-card customize-card" aria-label="Create your explorer">
+        <div class="panel-heading"><div><p class="eyebrow">STEP 1 OF 2 · WHO YOU ARE</p><h2>CREATE EXPLORER</h2></div></div>
+        <div class="custom-section"><h3>SKIN TONE</h3><div class="choice-row">${SKIN_COLORS.map((color, index) => `<button class="swatch ${PlayerProgress.appearance.skinIndex === index ? 'selected' : ''}" style="--swatch:${color}" data-skin="${index}" aria-label="Skin tone ${index + 1}"></button>`).join('')}</div></div>
+        <div class="custom-section"><h3>CLOAK</h3><div class="option-grid">${cloaks.map(option => this.customOption('cloak', option.id, option.label, option.unlocked, option.requirement, PlayerProgress.appearance.cloak === option.id)).join('')}</div></div>
+        <div class="custom-section"><h3>HAIR</h3><div class="option-grid">${hairs.map(option => this.customOption('hair', option.id, option.label, option.unlocked, option.requirement, PlayerProgress.appearance.hair === option.id)).join('')}</div></div>
+        <div class="question-nav"><span></span><button class="primary" data-action="begin">BEGIN ASSESSMENT →</button></div>
+      </section>
+      <aside class="title-character custom-preview"><canvas data-preview width="180" height="260"></canvas><strong>YOUR EXPLORER</strong><span>MORE UNLOCKS AS YOU TRAIN</span></aside>`;
+    this.drawPreview();
+    this.bindAppearanceButtons(() => this.renderCreate());
+    this.root.querySelector('[data-action="begin"]')?.addEventListener('click', () => {
+      this.draft = { ...PlayerProgress.inputs };
+      this.questionIndex = 0;
+      this.view = 'questions';
+      this.render();
     });
-    form?.addEventListener('submit', event => {
-      event.preventDefault();
-      PlayerProgress.inputs = this.readInputs(form);
-      PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
-      PlayerProgress.profileCompleted = true;
-      GameSave.save();
-      this.view = 'menu';
+  }
+
+  /** Step two: one question per screen, each showing what it does to the stat
+   * it feeds, so the number on screen always means something. */
+  private renderQuestion(): void {
+    const question = QUESTIONS[this.questionIndex];
+    const [min, max] = INPUT_BOUNDS[question.key];
+    const value = this.draft[question.key];
+    const preview = calculateStats(this.draft, PlayerProgress.statXp);
+    const statName = STAT_LABELS.find(([key]) => key === question.stat)?.[2] ?? '';
+    const field = question.asDuration
+      ? `<span class="duration-input"><input data-minutes type="number" min="0" max="${Math.floor(max / 60)}" step="1" value="${Math.floor(value / 60)}" aria-label="Minutes"><b>min</b><input data-seconds type="number" min="0" max="59" step="1" value="${Math.round(value % 60)}" aria-label="Seconds"><b>sec</b></span>`
+      : `<span class="single-input"><input data-answer type="number" min="${min}" max="${max}" step="${question.step}" value="${value}" aria-label="${question.prompt}"><b>${question.unit}</b></span>`;
+    this.root.innerHTML = `
+      <section class="title-card full-card question-card" aria-label="Baseline assessment">
+        <div class="panel-heading"><div><p class="eyebrow">QUESTION ${this.questionIndex + 1} OF ${QUESTIONS.length}</p><h2>${question.prompt}</h2></div>${PlayerProgress.profileCompleted ? this.backButton() : ''}</div>
+        <i class="question-progress"><b style="width:${(this.questionIndex + 1) / QUESTIONS.length * 100}%"></b></i>
+        <p class="panel-copy">${question.help}</p>
+        <div class="question-answer">
+          ${field}
+          <p class="question-feeds">FEEDS <b>${statName.toUpperCase()}</b> · NOW <em data-stat-preview>${preview[question.stat]}</em></p>
+        </div>
+        <div class="live-stats" data-live-stats>${this.statRunes(preview)}</div>
+        <div class="question-nav">
+          <button data-action="prev" ${this.questionIndex === 0 ? 'disabled' : ''}>← BACK</button>
+          <span>${question.optional ? '<button class="quiet" data-action="skip">SKIP THIS</button>' : ''}</span>
+          <button class="primary" data-action="next">${this.questionIndex === QUESTIONS.length - 1 ? 'SEE RESULTS' : 'NEXT →'}</button>
+        </div>
+      </section>`;
+
+    const readAnswer = (): number => {
+      if (question.asDuration) {
+        const minutes = Number(this.root.querySelector<HTMLInputElement>('[data-minutes]')?.value ?? 0);
+        const seconds = Number(this.root.querySelector<HTMLInputElement>('[data-seconds]')?.value ?? 0);
+        return (Number.isFinite(minutes) ? minutes : 0) * 60 + (Number.isFinite(seconds) ? seconds : 0);
+      }
+      const raw = Number(this.root.querySelector<HTMLInputElement>('[data-answer]')?.value ?? 0);
+      return Number.isFinite(raw) ? raw : 0;
+    };
+    const commit = (): void => {
+      this.draft[question.key] = Phaser.Math.Clamp(readAnswer(), min, max);
+    };
+    for (const input of this.root.querySelectorAll<HTMLInputElement>('input')) {
+      input.addEventListener('input', () => {
+        commit();
+        const live = calculateStats(this.draft, PlayerProgress.statXp);
+        const runes = this.root.querySelector<HTMLElement>('[data-live-stats]');
+        const single = this.root.querySelector<HTMLElement>('[data-stat-preview]');
+        if (runes) runes.innerHTML = this.statRunes(live);
+        if (single) single.textContent = String(live[question.stat]);
+      });
+    }
+    this.root.querySelector<HTMLInputElement>('input')?.focus();
+
+    const step = (delta: number): void => {
+      commit();
+      const next = this.questionIndex + delta;
+      if (next < 0) return;
+      if (next >= QUESTIONS.length) { this.finishAssessment(); return; }
+      this.questionIndex = next;
+      this.render();
+    };
+    this.root.querySelector('[data-action="next"]')?.addEventListener('click', () => step(1));
+    this.root.querySelector('[data-action="prev"]')?.addEventListener('click', () => step(-1));
+    this.root.querySelector('[data-action="skip"]')?.addEventListener('click', () => {
+      this.draft[question.key] = DEFAULT_INPUTS[question.key];
+      const next = this.questionIndex + 1;
+      if (next >= QUESTIONS.length) { this.finishAssessment(); return; }
+      this.questionIndex = next;
       this.render();
     });
     this.bindBack();
+  }
+
+  private finishAssessment(): void {
+    PlayerProgress.inputs = { ...this.draft };
+    PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
+    PlayerProgress.profileCompleted = true;
+    GameSave.save();
+    this.view = 'summary';
+    this.render();
+  }
+
+  /** The payoff: what every answer added up to, and where each number came from. */
+  private renderSummary(): void {
+    const stats = PlayerProgress.stats;
+    const sources: Record<keyof CharacterStats, Question[]> = {
+      strength: [], speed: [], stamina: [], defense: [], intelligence: [], discipline: []
+    };
+    for (const question of QUESTIONS) sources[question.stat].push(question);
+    this.root.innerHTML = `
+      <section class="title-card full-card character-card" aria-label="Your starting attributes">
+        <div class="panel-heading"><div><p class="eyebrow">ASSESSMENT COMPLETE</p><h2>YOUR BASELINE</h2></div></div>
+        <p class="panel-copy">This is where you start. Every stat moves only when you log real effort — the world gets easier because you got stronger, not because you ground out enemies.</p>
+        <div class="stat-list summary-list">
+          ${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${sources[key].map(question => this.answerSummary(question)).join(' · ')}</small></span><em>${stats[key]}</em></div>`).join('')}
+        </div>
+        <div class="question-nav">
+          <button data-action="redo">← REDO ASSESSMENT</button>
+          <span></span>
+          <button class="primary" data-action="enter">ENTER THE HOLLOW ROOTS →</button>
+        </div>
+      </section>`;
+    this.root.querySelector('[data-action="redo"]')?.addEventListener('click', () => {
+      this.draft = { ...PlayerProgress.inputs };
+      this.questionIndex = 0;
+      this.view = 'questions';
+      this.render();
+    });
+    this.root.querySelector('[data-action="enter"]')?.addEventListener('click', () => { this.view = 'menu'; this.render(); });
+  }
+
+  /** "15 reps → 10" — the answer next to the points it earned, so the summary
+   * shows why a stat landed where it did rather than just asserting a number. */
+  private answerSummary(question: Question): string {
+    const value = PlayerProgress.inputs[question.key];
+    const shown = question.asDuration
+      ? `${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`
+      : `${value}${question.unit ? ` ${question.unit}` : ''}`;
+    return `${shown} → ${scoreMetric(question.key, value)}`;
+  }
+
+  private appearanceOptions(): {
+    cloaks: Array<{ id: CloakId; label: string; unlocked: boolean; requirement: string }>;
+    hairs: Array<{ id: HairId; label: string; unlocked: boolean; requirement: string }>;
+  } {
+    const scoreTotal = totalStats();
+    return {
+      cloaks: [
+        { id: 'moss', label: 'Moss', unlocked: true, requirement: 'Starter' },
+        { id: 'sunroot', label: 'Sunroot', unlocked: scoreTotal >= 72, requirement: '72 total stats' },
+        { id: 'moonfern', label: 'Moonfern', unlocked: CollectedItems.size >= 2, requirement: '2 relics' },
+        { id: 'guardian', label: 'Guardian', unlocked: PlayerProgress.guardianDefeated, requirement: 'Defeat guardian' }
+      ],
+      hairs: [
+        { id: 'raven', label: 'Raven', unlocked: true, requirement: 'Available' },
+        { id: 'earth', label: 'Earth', unlocked: true, requirement: 'Available' },
+        { id: 'silver', label: 'Silver', unlocked: PlayerProgress.level >= 3, requirement: 'Reach level 3' }
+      ]
+    };
+  }
+
+  private bindAppearanceButtons(rerender: () => void): void {
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-skin]')) button.addEventListener('click', () => { PlayerProgress.appearance.skinIndex = Number(button.dataset.skin); GameSave.save(); rerender(); });
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-cloak]:not([disabled])')) button.addEventListener('click', () => { PlayerProgress.appearance.cloak = button.dataset.cloak as CloakId; GameSave.save(); rerender(); });
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-hair]:not([disabled])')) button.addEventListener('click', () => { PlayerProgress.appearance.hair = button.dataset.hair as HairId; GameSave.save(); rerender(); });
   }
 
   private renderCheckIn(): void {
@@ -174,7 +338,7 @@ export class TitleScene extends Phaser.Scene {
     ] as const;
     this.root.innerHTML = `
       <section class="title-card full-card character-card" aria-label="Character stats and unlocks">
-        <div class="panel-heading"><div><p class="eyebrow">REAL LIFE → GAMEPLAY</p><h2>EXPLORER</h2></div><div class="panel-tools"><button data-action="profile">BASELINE</button><button data-action="customize">APPEARANCE</button>${this.backButton()}</div></div>
+        <div class="panel-heading"><div><p class="eyebrow">REAL LIFE → GAMEPLAY</p><h2>EXPLORER</h2></div><div class="panel-tools"><button data-action="assessment">BASELINE</button><button data-action="customize">APPEARANCE</button>${this.backButton()}</div></div>
         <div class="character-layout">
           <div class="stat-list">${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${key === 'discipline' ? 'Automatic · 28-day consistency + streak' : `${PlayerProgress.statXp[key] % 250} / 250 toward next point`}</small></span><em>${s[key]}</em></div>`).join('')}</div>
           <div class="unlock-list"><h3>ARSENAL & SKILLS</h3>${unlocks.map(([name, type, unlocked, requirement]) => `<div class="${unlocked ? 'ready' : 'locked'}"><span><strong>${name}</strong><small>${type}</small></span><b>${unlocked ? 'UNLOCKED' : requirement}</b></div>`).join('')}</div>
@@ -182,7 +346,7 @@ export class TitleScene extends Phaser.Scene {
         <p class="panel-copy character-note">Enemies give challenge and world progress. Character XP comes from logged real effort.</p>
       </section>`;
     this.bindBack();
-    this.root.querySelector('[data-action="profile"]')?.addEventListener('click', () => { this.view = 'profile'; this.render(); });
+    this.root.querySelector('[data-action="assessment"]')?.addEventListener('click', () => this.openAssessment());
     this.root.querySelector('[data-action="customize"]')?.addEventListener('click', () => { this.view = 'customize'; this.render(); });
   }
 
@@ -203,19 +367,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private renderCustomize(): void {
-    const collected = CollectedItems.size;
     const scoreTotal = totalStats();
-    const cloaks: Array<{ id: CloakId; label: string; unlocked: boolean; requirement: string }> = [
-      { id: 'moss', label: 'Moss', unlocked: true, requirement: 'Starter' },
-      { id: 'sunroot', label: 'Sunroot', unlocked: scoreTotal >= 72, requirement: '72 total stats' },
-      { id: 'moonfern', label: 'Moonfern', unlocked: collected >= 2, requirement: '2 relics' },
-      { id: 'guardian', label: 'Guardian', unlocked: PlayerProgress.guardianDefeated, requirement: 'Defeat guardian' }
-    ];
-    const hairs: Array<{ id: HairId; label: string; unlocked: boolean; requirement: string }> = [
-      { id: 'raven', label: 'Raven', unlocked: true, requirement: 'Available' },
-      { id: 'earth', label: 'Earth', unlocked: true, requirement: 'Available' },
-      { id: 'silver', label: 'Silver', unlocked: PlayerProgress.level >= 3, requirement: 'Reach level 3' }
-    ];
+    const { cloaks, hairs } = this.appearanceOptions();
     this.root.innerHTML = `
       <section class="title-card customize-card" aria-label="Character customization">
         <div class="panel-heading"><div><p class="eyebrow">EQUIPMENT ALTAR</p><h2>CUSTOMIZE</h2></div>${this.backButton()}</div>
@@ -227,26 +380,25 @@ export class TitleScene extends Phaser.Scene {
       <aside class="title-character custom-preview"><canvas data-preview width="180" height="260"></canvas><strong>YOUR EXPLORER</strong><span>${scoreTotal} TOTAL STATS</span></aside>`;
     this.drawPreview();
     this.bindBack();
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-skin]')) button.addEventListener('click', () => { PlayerProgress.appearance.skinIndex = Number(button.dataset.skin); GameSave.save(); this.renderCustomize(); });
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-cloak]:not([disabled])')) button.addEventListener('click', () => { PlayerProgress.appearance.cloak = button.dataset.cloak as CloakId; GameSave.save(); this.renderCustomize(); });
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-hair]:not([disabled])')) button.addEventListener('click', () => { PlayerProgress.appearance.hair = button.dataset.hair as HairId; GameSave.save(); this.renderCustomize(); });
+    this.bindAppearanceButtons(() => this.renderCustomize());
   }
 
   private bindViewButtons(): void {
     this.root.querySelector('[data-action="continue"]')?.addEventListener('click', () => this.startGame());
-    for (const view of ['profile', 'customize', 'checkin', 'character', 'leaderboard'] as TitleView[]) this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => { this.view = view; this.feedback = ''; this.render(); });
+    this.root.querySelector('[data-action="assessment"]')?.addEventListener('click', () => this.openAssessment());
+    for (const view of ['customize', 'checkin', 'character', 'leaderboard'] as TitleView[]) this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => { this.view = view; this.feedback = ''; this.render(); });
+  }
+
+  private openAssessment(): void {
+    this.draft = { ...PlayerProgress.inputs };
+    this.questionIndex = 0;
+    this.feedback = '';
+    this.view = 'questions';
+    this.render();
   }
 
   private bindBack(): void { this.root.querySelector('[data-action="back"]')?.addEventListener('click', () => { this.view = 'menu'; this.feedback = ''; this.render(); }); }
   private backButton(): string { return PlayerProgress.profileCompleted ? '<button class="back" data-action="back">← TITLE</button>' : ''; }
-
-  private readInputs(form: HTMLFormElement): LifeInputs {
-    const data = new FormData(form);
-    return Object.fromEntries(INPUTS.map(field => {
-      const value = Number(data.get(field.key));
-      return [field.key, Phaser.Math.Clamp(Number.isFinite(value) ? value : 0, field.min, field.max)];
-    })) as unknown as LifeInputs;
-  }
 
   private statRunes(stats: CharacterStats): string { return STAT_LABELS.map(([key, label]) => `<span><b>${label}</b><strong>${stats[key]}</strong></span>`).join(''); }
 
@@ -255,7 +407,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private startGame(): void {
-    if (!PlayerProgress.profileCompleted) { this.view = 'profile'; this.render(); return; }
+    if (!PlayerProgress.profileCompleted) { this.view = 'create'; this.render(); return; }
     GameSave.save();
     GameAudio.unlock();
     GameAudio.startAmbient();

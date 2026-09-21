@@ -118,6 +118,20 @@
       .custom-option.selected { border-color: #dfe7a1; box-shadow: inset 3px 0 #dfe7a1; }
       .custom-option.locked { opacity: .46; cursor: not-allowed; }
       .custom-preview { right: 20px; top: 55px; }
+      .question-card h2 { font-size: 26px; line-height: 1.12; max-width: 720px; }
+      .question-progress { display: block; height: 3px; margin: 14px 0 16px; overflow: hidden; background: #10271b; }
+      .question-progress b { display: block; height: 100%; background: linear-gradient(90deg,#72af73,#d2dc89); transition: width 180ms ease; }
+      .question-answer { display: flex; align-items: center; gap: 26px; margin: 4px 0 18px; flex-wrap: wrap; }
+      .single-input, .duration-input { display: flex; align-items: baseline; gap: 9px; }
+      .question-card input { width: 132px; padding: 12px 10px; color: #f1f6d7; background: #071710; border: 1px solid #5c8668; font: 800 30px ui-monospace, monospace; text-align: center; }
+      .duration-input input { width: 92px; }
+      .single-input b, .duration-input b { color: #8da393; font-size: 12px; letter-spacing: .08em; }
+      .question-feeds { margin: 0; color: #8da393; font-size: 11px; letter-spacing: .1em; }
+      .question-feeds b { color: #cbd78e; }
+      .question-feeds em { color: #eff4ca; font: 800 22px ui-monospace, monospace; font-style: normal; vertical-align: -2px; }
+      .question-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+      .question-nav button:disabled { opacity: .35; cursor: default; }
+      .summary-list { grid-template-columns: 1fr 1fr; display: grid; gap: 6px; }
       @media (max-width: 760px), (max-height: 500px) { .title-root { transform: scale(.78); transform-origin: center; } }
     </style>
   </head>

@@ -4,6 +4,7 @@ import {
   DEFAULT_APPEARANCE,
   DEFAULT_INPUTS,
   DEFAULT_STAT_XP,
+  INPUT_BOUNDS,
   PlayerProgress,
   recalculateLevel,
   type ActivityEntry,
@@ -16,7 +17,7 @@ import {
 const STORAGE_KEY = 'hollow-roots-save-v1';
 
 interface SaveSnapshot {
-  version: 4;
+  version: 5;
   updatedAt: string;
   profileCompleted: boolean;
   inputs: LifeInputs;
@@ -42,13 +43,10 @@ function finite(value: unknown, fallback: number, min: number, max: number): num
 }
 
 function sanitizeInputs(value: Record<string, unknown> | undefined): LifeInputs {
-  return {
-    pushups: finite(value?.pushups, DEFAULT_INPUTS.pushups, 0, 200),
-    sprintSeconds: finite(value?.sprintSeconds, DEFAULT_INPUTS.sprintSeconds, 8, 60),
-    mileSeconds: finite(value?.mileSeconds, DEFAULT_INPUTS.mileSeconds, 240, 1800),
-    plankSeconds: finite(value?.plankSeconds, DEFAULT_INPUTS.plankSeconds, 0, 600),
-    iqScore: finite(value?.iqScore, DEFAULT_INPUTS.iqScore, 55, 160)
-  };
+  return Object.fromEntries((Object.keys(DEFAULT_INPUTS) as Array<keyof LifeInputs>).map(key => {
+    const [min, max] = INPUT_BOUNDS[key];
+    return [key, finite(value?.[key], DEFAULT_INPUTS[key], min, max)];
+  })) as unknown as LifeInputs;
 }
 
 function sanitizeStatXp(value: Partial<Record<StatKey, unknown>> | undefined): Record<StatKey, number> {
@@ -100,7 +98,7 @@ export const GameSave = {
 
   save(): void {
     const snapshot: SaveSnapshot = {
-      version: 4,
+      version: 5,
       updatedAt: new Date().toISOString(),
       profileCompleted: PlayerProgress.profileCompleted,
       inputs: { ...PlayerProgress.inputs },

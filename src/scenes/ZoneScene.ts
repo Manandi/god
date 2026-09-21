@@ -950,6 +950,13 @@ export class ZoneScene extends Phaser.Scene {
     body.updateFromGameObject();
     const needsRoar = this.guardian?.visible !== true;
     this.guardian?.setEncounterActive(true);
+    // The cutscene freezes the guardian's body so it holds its pose; without
+    // this the boss stays inert once the cutscene plays out in full.
+    const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
+    if (guardianBody) {
+      guardianBody.enable = true;
+      guardianBody.updateFromGameObject();
+    }
     if (needsRoar) GameAudio.playSfx('roar');
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.shake(150, 0.004);
