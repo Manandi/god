@@ -36,6 +36,7 @@ interface CheckpointEntry {
   x: number;
   y: number;
   light: Phaser.GameObjects.Arc;
+  requiredLevel: number;
 }
 
 const TRANSITION_COOLDOWN_MS = 400;
@@ -98,6 +99,7 @@ export class ZoneScene extends Phaser.Scene {
   private guardianCutsceneCanSkip = false;
   private guardianCutsceneObjects: Phaser.GameObjects.GameObject[] = [];
   private guardianCutsceneTimers: Phaser.Time.TimerEvent[] = [];
+  private checkpointLockedMessageUntil = 0;
 
   constructor() {
     super('ZoneScene');
@@ -173,6 +175,7 @@ export class ZoneScene extends Phaser.Scene {
     this.guardianCutsceneCanSkip = false;
     this.guardianCutsceneObjects = [];
     this.guardianCutsceneTimers = [];
+    this.checkpointLockedMessageUntil = 0;
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.menuKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
@@ -369,12 +372,18 @@ export class ZoneScene extends Phaser.Scene {
       const y = (obj.y ?? 0) + TILE_SIZE;
 
       if (kind === 'turtle') {
+        const isOpeningTurtle = this.zoneKey === 'biosphere' && x < 32 * TILE_SIZE;
         this.enemies.push(
           new Enemy(this, x, y, 'turtle_idle', groundLayer, {
             patrols: true,
             animKey: TURTLE_WALK_ANIM,
             elite: this.zoneKey === 'biosphere',
-            level: 1
+            level: 1,
+            // Keep the tutorial turtle on its broad opening shelf. Other
+            // turtles still traverse the stepped terrain, but this one no
+            // longer oscillates forever on the very first staircase.
+            patrolMinX: isOpeningTurtle ? 12 * TILE_SIZE : undefined,
+            patrolMaxX: isOpeningTurtle ? 20 * TILE_SIZE : undefined
           })
         );
         continue;
@@ -431,7 +440,13 @@ export class ZoneScene extends Phaser.Scene {
     const isStomp = body.velocity.y > 70 && horizontalContact && crossedShell;
 
     if (isStomp) {
-      this.player.setY(stompY);
+      // Separate the player from the shell before the next overlap pass and
+      // grant a very short stomp-only grace window. Without both, Arcade can
+      // report another overlap one frame later and hurt the player for the
+      // same successful stomp.
+      this.player.setY(stompY - 2);
+      body.updateFromGameObject();
+      this.playerInvulnerableUntil = Math.max(this.playerInvulnerableUntil, this.time.now + 260);
       enemy.takeHit(this.player.x);
       GameAudio.playSfx('stomp');
       body.setVelocityY(PHYSICS.jumpVelocity * 0.68);
@@ -719,12 +734,29 @@ export class ZoneScene extends Phaser.Scene {
       const name = obj.name || 'start';
       const x = obj.x ?? 0;
       const y = obj.y ?? 0;
-      const light = this.add.circle(x, y - 12, 9, 0x79f2b2, 0.35).setStrokeStyle(2, 0xd9ffe8, 0.9).setDepth(4);
+      const props = getObjectProperties(obj);
+      const requiredLevel = Math.max(0, Number(props.requiredLevel ?? 0));
+      const locked = PlayerProgress.level < requiredLevel;
+      const light = this.add.circle(x, y - 12, 9, locked ? 0x34463b : 0x79f2b2, locked ? 0.5 : 0.35)
+        .setStrokeStyle(2, locked ? 0x718076 : 0xd9ffe8, locked ? 0.65 : 0.9)
+        .setDepth(4);
+      if (requiredLevel > 0) {
+        this.add.text(x, y - 35, `LV ${requiredLevel}`, {
+          fontFamily: 'monospace', fontSize: '10px', color: locked ? '#829087' : '#d9ffe8', backgroundColor: '#07110bcc'
+        }).setPadding(4, 2, 4, 2).setOrigin(0.5, 1).setDepth(5);
+      }
       const zone = this.add.zone(x, y - 12, 32, 54);
       this.physics.add.existing(zone, true);
-      const checkpoint = { name, x, y, light };
+      const checkpoint = { name, x, y, light, requiredLevel };
       this.checkpoints.push(checkpoint);
       this.physics.add.overlap(this.player, zone, () => {
+        if (PlayerProgress.level < requiredLevel) {
+          if (this.time.now >= this.checkpointLockedMessageUntil) {
+            this.checkpointLockedMessageUntil = this.time.now + LOCKED_MESSAGE_MS;
+            this.showMessage(`Dormant sanctuary — reach Level ${requiredLevel} to awaken it`, LOCKED_MESSAGE_MS);
+          }
+          return;
+        }
         if (this.activeCheckpoint === name) return;
         this.activeCheckpoint = name;
         PlayerProgress.currentZone = this.zoneKey;
