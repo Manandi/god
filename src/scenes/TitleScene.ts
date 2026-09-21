@@ -20,7 +20,7 @@ import {
   type LifeInputs
 } from '../progress/PlayerProgress';
 
-type TitleView = 'menu' | 'profile' | 'customize' | 'checkin' | 'character';
+type TitleView = 'menu' | 'profile' | 'customize' | 'checkin' | 'character' | 'leaderboard';
 
 const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['strength', 'STR', 'Strength'],
@@ -70,6 +70,7 @@ export class TitleScene extends Phaser.Scene {
     else if (this.view === 'customize') this.renderCustomize();
     else if (this.view === 'checkin') this.renderCheckIn();
     else if (this.view === 'character') this.renderCharacter();
+    else if (this.view === 'leaderboard') this.renderLeaderboard();
     else this.renderMenu();
   }
 
@@ -83,9 +84,10 @@ export class TitleScene extends Phaser.Scene {
         <p class="title-copy">Real effort becomes power.</p>
         <div class="progress-strip"><strong>LV ${PlayerProgress.level}</strong><span>${levelXp} / ${levelCap} XP</span><i><b style="width:${Math.min(100, levelXp / levelCap * 100)}%"></b></i></div>
         <div class="title-actions">
-          <button class="primary" data-action="continue">${PlayerProgress.currentSpawn === 'start' && CollectedItems.size === 0 ? 'ENTER THE WORLD' : 'CONTINUE JOURNEY'}</button>
-          <button class="effort" data-action="checkin">＋ LOG REAL EFFORT</button>
-          <button data-action="character">EXPLORER</button>
+          <button class="primary" data-action="continue">CONTINUE</button>
+          <button data-action="customize">CUSTOMIZE</button>
+          <button class="effort" data-action="checkin">WEEKLY QUEST</button>
+          <button data-action="leaderboard">LEADERBOARD</button>
         </div>
         <p class="save-note">AUTOSAVE ON · ${activityStreak()}-DAY ACTIVE STREAK</p>
       </section>
@@ -133,12 +135,12 @@ export class TitleScene extends Phaser.Scene {
     const goals = weeklyGoals();
     this.root.innerHTML = `
       <section class="title-card full-card checkin-card" aria-label="Log real-world effort">
-        <div class="panel-heading"><div><p class="eyebrow">REAL-WORLD PROGRESSION</p><h2>LOG YOUR EFFORT</h2></div>${this.backButton()}</div>
+        <div class="panel-heading"><div><p class="eyebrow">RESETS EVERY MONDAY</p><h2>WEEKLY QUEST</h2></div>${this.backButton()}</div>
         <div class="checkin-summary"><span><b>${activityStreak()}</b> day streak</span><span><b>${PlayerProgress.totalXp}</b> total XP</span></div>
         ${this.feedback ? `<p class="feedback">${this.feedback}</p>` : ''}
-        <p class="weekly-label">WEEKLY GOALS · RESET MONDAY</p>
+        <p class="weekly-label">THIS WEEK</p>
         <div class="weekly-goals">${goals.map(goal => `<div class="${goal.claimed ? 'complete' : ''}"><span><strong>${goal.label}</strong><small>+${goal.reward} XP</small></span><i><b style="width:${goal.current / goal.target * 100}%"></b></i><em>${goal.current}/${goal.target} ${goal.unit}</em></div>`).join('')}</div>
-        <div class="effort-grid">
+        <p class="weekly-label">ACTIVITY LOG</p><div class="effort-grid">
           <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DEF</small></button>
           <button data-log="steps"><strong>5,000+ STEPS</strong><small>+50 XP · STA<br>once per day</small></button>
           <label><strong>RUN / WALK</strong><small>Distance builds SPD / STA</small><span><input data-amount="run" type="number" min="0.1" max="100" step="0.1" value="2"> km <button data-log="run">LOG</button></span></label>
@@ -184,6 +186,22 @@ export class TitleScene extends Phaser.Scene {
     this.root.querySelector('[data-action="customize"]')?.addEventListener('click', () => { this.view = 'customize'; this.render(); });
   }
 
+  private renderLeaderboard(): void {
+    const stats = PlayerProgress.stats;
+    this.root.innerHTML = `
+      <section class="title-card full-card character-card" aria-label="Online explorer leaderboard">
+        <div class="panel-heading"><div><p class="eyebrow">ONLINE EXPLORERS</p><h2>LEADERBOARD</h2></div>${this.backButton()}</div>
+        <div class="checkin-summary"><span><b>${totalStats()}</b> total stats</span><span><b>LV ${PlayerProgress.level}</b> explorer level</span><span><b>${activityStreak()}</b> day streak</span></div>
+        <div class="leaderboard-table" role="table" aria-label="Explorer rankings">
+          <div class="leaderboard-head" role="row"><span>RANK</span><span>EXPLORER</span><span>LEVEL</span><span>TOTAL</span></div>
+          <div class="leaderboard-self" role="row"><b>—</b><span><strong>YOU</strong><small>Saved on this device</small></span><b>LV ${PlayerProgress.level}</b><b>${totalStats()}</b></div>
+        </div>
+        <div class="live-stats leaderboard-stats">${this.statRunes(stats)}</div>
+        <p class="panel-copy character-note">No other explorers have synced yet. Online rankings will list shared Strength, IQ, Stamina, Speed, Defense, and overall totals here.</p>
+      </section>`;
+    this.bindBack();
+  }
+
   private renderCustomize(): void {
     const collected = CollectedItems.size;
     const scoreTotal = totalStats();
@@ -216,7 +234,7 @@ export class TitleScene extends Phaser.Scene {
 
   private bindViewButtons(): void {
     this.root.querySelector('[data-action="continue"]')?.addEventListener('click', () => this.startGame());
-    for (const view of ['profile', 'customize', 'checkin', 'character'] as TitleView[]) this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => { this.view = view; this.feedback = ''; this.render(); });
+    for (const view of ['profile', 'customize', 'checkin', 'character', 'leaderboard'] as TitleView[]) this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => { this.view = view; this.feedback = ''; this.render(); });
   }
 
   private bindBack(): void { this.root.querySelector('[data-action="back"]')?.addEventListener('click', () => { this.view = 'menu'; this.feedback = ''; this.render(); }); }
