@@ -366,12 +366,17 @@ for (const [index, layout] of layouts.slice(0, 1).entries()) {
     for(let y=0;y<H;y++) grid[y]=next[y];
   }
   const spawns=[spawnPoint('start',5,surfaces[5]),spawnPoint('fromWest',5,surfaces[5]),spawnPoint('fromEast',W-6,surfaces[W-6])];
-  const checkpointCols=[286];
-  const checkpoints=checkpointCols.map((x,i)=>{
-    const name='rest'+i;
+  const checkpointDefs=[
+    // A midpoint sanctuary that becomes usable once real-world progression
+    // reaches Level 2, plus the existing pre-guardian sanctuary. Keep the
+    // latter named rest0 so existing autosaves still respawn in the same spot.
+    {x:170,name:'midrest',requiredLevel:2},
+    {x:286,name:'rest0',requiredLevel:0}
+  ];
+  const checkpoints=checkpointDefs.map(({x,name,requiredLevel})=>{
     const surface=findSurfaceRow(grid,x,W,H);
     spawns.push(spawnPoint(name,x,surface-1));
-    return marker('checkpoint',name,x,surface);
+    return marker('checkpoint',name,x,surface,[{name:'requiredLevel',type:'int',value:requiredLevel}]);
   });
   // Keep each turtle's complete sprite clear of spike beds at spawn. The old
   // column 150 marker was only one tile beyond hazard1, so half the turtle
