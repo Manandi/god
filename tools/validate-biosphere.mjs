@@ -54,7 +54,12 @@ for(const layer of map.layers.filter(l=>l.objects)) for(const o of layer.objects
 }
 const spawnNames=new Set(map.layers.find(l=>l.name==='spawns').objects.map(o=>o.name));
 const checkpoints=map.layers.find(l=>l.name==='checkpoints').objects;
-assert.equal(checkpoints.length,1,'Biosphere should have one sanctuary before the guardian');
+assert.equal(checkpoints.length,2,'Biosphere should have midpoint and pre-guardian sanctuaries');
+const midpoint=checkpoints.find(o=>o.name==='midrest');
+assert(midpoint,'Level 2 midpoint sanctuary is missing');
+const midpointProps=Object.fromEntries((midpoint.properties||[]).map(p=>[p.name,p.value]));
+assert.equal(midpointProps.requiredLevel,2,'Midpoint sanctuary must require Level 2');
+assert(checkpoints.some(o=>o.name==='rest0'),'Existing pre-guardian sanctuary must keep its autosave name');
 for(const o of checkpoints) assert(spawnNames.has(o.name));
 const encounters=map.layers.find(l=>l.name==='encounters').objects;
 for(const checkpoint of checkpoints) {
