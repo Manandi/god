@@ -48,8 +48,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lastAttack: BossAttack = 'jump';
   private stateUntil = 1000;
   private readonly idleTexture: string;
-  private readonly patrolMinX: number;
-  private readonly patrolMaxX: number;
+  private patrolMinX: number;
+  private patrolMaxX: number;
   private traversingStep = false;
   private stepTween?: Phaser.Tweens.Tween;
   private stepCooldownUntil = 0;
@@ -103,6 +103,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   addHazardBounds(bounds: Phaser.Geom.Rectangle): void {
     this.hazardBounds.push(bounds);
+  }
+
+  setPatrolBounds(minX: number, maxX: number): void {
+    this.patrolMinX = minX;
+    this.patrolMaxX = maxX;
   }
 
   setEncounterActive(active: boolean): void {
