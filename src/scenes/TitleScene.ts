@@ -87,6 +87,7 @@ export class TitleScene extends Phaser.Scene {
   private questionIndex = 0;
   private draft: LifeInputs = { ...PlayerProgress.inputs };
   private introLine = 0;
+  private confirmingReset = false;
   private introTyper?: Phaser.Time.TimerEvent;
   private introTyping = false;
   private quizIndex = 0;
@@ -139,6 +140,7 @@ export class TitleScene extends Phaser.Scene {
           <button data-action="customize">CUSTOMIZE</button>
           <button class="effort" data-action="checkin">WEEKLY QUEST</button>
           <button data-action="leaderboard">LEADERBOARD</button>
+          <button class="${this.confirmingReset ? 'danger' : 'quiet'}" data-action="reset">${this.confirmingReset ? 'ERASE EVERYTHING — TAP AGAIN' : 'NEW GAME'}</button>
         </div>
         <p class="save-note">AUTOSAVE ON · ${activityStreak()}-DAY ACTIVE STREAK</p>
       </section>
@@ -613,7 +615,31 @@ export class TitleScene extends Phaser.Scene {
   private bindViewButtons(): void {
     this.root.querySelector('[data-action="continue"]')?.addEventListener('click', () => this.startGame());
     this.root.querySelector('[data-action="assessment"]')?.addEventListener('click', () => this.openAssessment());
-    for (const view of ['customize', 'checkin', 'character', 'leaderboard'] as TitleView[]) this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => { this.view = view; this.feedback = ''; this.render(); });
+    this.root.querySelector('[data-action="reset"]')?.addEventListener('click', () => this.resetSave());
+    for (const view of ['customize', 'checkin', 'character', 'leaderboard'] as TitleView[]) {
+      this.root.querySelector(`[data-action="${view}"]`)?.addEventListener('click', () => {
+        this.view = view;
+        this.feedback = '';
+        this.confirmingReset = false;
+        this.render();
+      });
+    }
+  }
+
+  /** Erasing a save is unrecoverable, so the first press only arms the button. */
+  private resetSave(): void {
+    if (!this.confirmingReset) {
+      this.confirmingReset = true;
+      this.render();
+      return;
+    }
+    GameSave.reset();
+    this.confirmingReset = false;
+    this.introLine = 0;
+    this.questionIndex = 0;
+    this.draft = { ...PlayerProgress.inputs };
+    this.view = 'intro';
+    this.render();
   }
 
   private openAssessment(): void {

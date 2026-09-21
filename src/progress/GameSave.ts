@@ -130,6 +130,27 @@ export const GameSave = {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Gameplay continues without storage. */ }
   },
 
+  /** Wipes the stored save and returns everything to a first-run state, so the
+   * next load starts at Mycel's intro with no history behind it. */
+  reset(): void {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* Nothing stored to clear. */ }
+    PlayerProgress.level = 1;
+    PlayerProgress.totalXp = 0;
+    PlayerProgress.profileCompleted = false;
+    PlayerProgress.inputs = { ...DEFAULT_INPUTS };
+    PlayerProgress.statXp = { ...DEFAULT_STAT_XP };
+    PlayerProgress.activities = [];
+    PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp, []);
+    PlayerProgress.claimedWeeklyGoals = [];
+    PlayerProgress.appearance = { ...DEFAULT_APPEARANCE };
+    PlayerProgress.currentZone = 'biosphere';
+    PlayerProgress.currentSpawn = 'start';
+    PlayerProgress.guardianDefeated = false;
+    PlayerProgress.decayApplied = 0;
+    PlayerProgress.iqTakenAt = '';
+    CollectedItems.clear();
+  },
+
   startNewJourney(): void {
     PlayerProgress.currentZone = 'biosphere';
     PlayerProgress.currentSpawn = 'start';
