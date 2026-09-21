@@ -10,7 +10,7 @@
   "tileheight": 16,
   "infinite": false,
   "nextlayerid": 11,
-  "nextobjectid": 35,
+  "nextobjectid": 37,
   "tilesets": [
     {
       "firstgid": 1,
@@ -27251,7 +27251,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 20,
+          "id": 22,
           "name": "east",
           "type": "door",
           "x": 5424,
@@ -27327,6 +27327,18 @@
         },
         {
           "id": 4,
+          "name": "midrest",
+          "type": "spawn",
+          "point": true,
+          "x": 2720,
+          "y": 928,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": []
+        },
+        {
+          "id": 6,
           "name": "rest0",
           "type": "spawn",
           "point": true,
@@ -27350,7 +27362,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 6,
+          "id": 8,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27368,7 +27380,7 @@
           ]
         },
         {
-          "id": 7,
+          "id": 9,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27386,7 +27398,7 @@
           ]
         },
         {
-          "id": 8,
+          "id": 10,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27404,7 +27416,7 @@
           ]
         },
         {
-          "id": 9,
+          "id": 11,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27422,7 +27434,7 @@
           ]
         },
         {
-          "id": 10,
+          "id": 12,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27440,7 +27452,7 @@
           ]
         },
         {
-          "id": 11,
+          "id": 13,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27458,7 +27470,7 @@
           ]
         },
         {
-          "id": 12,
+          "id": 14,
           "name": "turtle",
           "type": "encounter",
           "point": true,
@@ -27476,7 +27488,7 @@
           ]
         },
         {
-          "id": 13,
+          "id": 15,
           "name": "turtle-boss",
           "type": "encounter",
           "point": true,
@@ -27506,7 +27518,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 14,
+          "id": 16,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -27529,7 +27541,7 @@
           ]
         },
         {
-          "id": 15,
+          "id": 17,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -27552,7 +27564,7 @@
           ]
         },
         {
-          "id": 16,
+          "id": 18,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -27575,7 +27587,7 @@
           ]
         },
         {
-          "id": 17,
+          "id": 19,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -27598,7 +27610,7 @@
           ]
         },
         {
-          "id": 18,
+          "id": 20,
           "name": "chest",
           "type": "interactable",
           "point": true,
@@ -27621,7 +27633,7 @@
           ]
         },
         {
-          "id": 19,
+          "id": 21,
           "name": "lore",
           "type": "interactable",
           "point": true,
@@ -27656,7 +27668,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 24,
+          "id": 26,
           "name": "shaft0",
           "type": "climbable",
           "x": 608,
@@ -27673,7 +27685,7 @@
           ]
         },
         {
-          "id": 25,
+          "id": 27,
           "name": "shaft1",
           "type": "climbable",
           "x": 784,
@@ -27690,7 +27702,7 @@
           ]
         },
         {
-          "id": 26,
+          "id": 28,
           "name": "shaft2",
           "type": "climbable",
           "x": 1616,
@@ -27707,7 +27719,7 @@
           ]
         },
         {
-          "id": 27,
+          "id": 29,
           "name": "shaft3",
           "type": "climbable",
           "x": 2112,
@@ -27724,7 +27736,7 @@
           ]
         },
         {
-          "id": 28,
+          "id": 30,
           "name": "shaft4",
           "type": "climbable",
           "x": 2624,
@@ -27741,7 +27753,7 @@
           ]
         },
         {
-          "id": 29,
+          "id": 31,
           "name": "shaft5",
           "type": "climbable",
           "x": 3072,
@@ -27758,7 +27770,7 @@
           ]
         },
         {
-          "id": 30,
+          "id": 32,
           "name": "shaft6",
           "type": "climbable",
           "x": 4160,
@@ -27787,7 +27799,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 21,
+          "id": 23,
           "name": "hazard0",
           "type": "hazard",
           "x": 480,
@@ -27798,7 +27810,7 @@
           "properties": []
         },
         {
-          "id": 22,
+          "id": 24,
           "name": "hazard1",
           "type": "hazard",
           "x": 2336,
@@ -27809,7 +27821,7 @@
           "properties": []
         },
         {
-          "id": 23,
+          "id": 25,
           "name": "hazard2",
           "type": "hazard",
           "x": 3520,
@@ -27833,6 +27845,29 @@
       "objects": [
         {
           "id": 5,
+          "name": "midrest",
+          "type": "checkpoint",
+          "point": true,
+          "x": 2720,
+          "y": 944,
+          "width": 0,
+          "height": 0,
+          "visible": true,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "midrest"
+            },
+            {
+              "name": "requiredLevel",
+              "type": "int",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "id": 7,
           "name": "rest0",
           "type": "checkpoint",
           "point": true,
@@ -27846,6 +27881,11 @@
               "name": "kind",
               "type": "string",
               "value": "rest0"
+            },
+            {
+              "name": "requiredLevel",
+              "type": "int",
+              "value": 0
             }
           ]
         }
@@ -27862,7 +27902,7 @@
       "y": 0,
       "objects": [
         {
-          "id": 31,
+          "id": 33,
           "name": "Waking grove",
           "type": "region",
           "point": true,
@@ -27880,7 +27920,7 @@
           ]
         },
         {
-          "id": 32,
+          "id": 34,
           "name": "Hollow roots",
           "type": "region",
           "point": true,
@@ -27898,7 +27938,7 @@
           ]
         },
         {
-          "id": 33,
+          "id": 35,
           "name": "Keeper overlook",
           "type": "region",
           "point": true,
@@ -27916,7 +27956,7 @@
           ]
         },
         {
-          "id": 34,
+          "id": 36,
           "name": "Guardian court",
           "type": "region",
           "point": true,
