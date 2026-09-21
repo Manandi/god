@@ -204,6 +204,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     const seesPlayer = Math.abs(playerX - this.x) < (this.isBoss ? 280 : 150) && Math.abs(playerY - this.y) < 52;
     if (seesPlayer && now > this.turnUntil) this.direction = playerX < this.x ? -1 : 1;
+    if (this.x <= this.patrolMinX) {
+      this.direction = 1;
+      this.turnUntil = now + 420;
+    } else if (this.x >= this.patrolMaxX) {
+      this.direction = -1;
+      this.turnUntil = now + 420;
+    }
     body.setVelocityX((seesPlayer ? CHASE_SPEED : PATROL_SPEED) * this.direction);
     this.applyFacing();
 
