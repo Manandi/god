@@ -3,6 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
+import { QUIZ_LENGTH, QUIZ_SECONDS, quizForToday, quizScore, type QuizQuestion } from '../progress/ReasoningQuiz';
 import {
   activityStreak,
   addActivity,
@@ -23,7 +24,7 @@ import {
   type LifeInputs
 } from '../progress/PlayerProgress';
 
-type TitleView = 'menu' | 'create' | 'questions' | 'summary' | 'customize' | 'checkin' | 'character' | 'leaderboard';
+type TitleView = 'intro' | 'menu' | 'create' | 'questions' | 'quiz' | 'summary' | 'customize' | 'checkin' | 'character' | 'leaderboard';
 
 const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['strength', 'STR', 'Strength'],
@@ -46,18 +47,33 @@ interface Question {
   optional?: boolean;
 }
 
+/** Intelligence's second input comes from the reasoning quiz that runs after
+ * these, and Discipline has no question at all — it reads off consistency. */
 const QUESTIONS: Question[] = [
   { key: 'pushups', stat: 'strength', prompt: 'How many push-ups can you do?', help: 'Strict form, one unbroken set, going to failure.', unit: 'reps', step: 1 },
   { key: 'pullups', stat: 'strength', prompt: 'How many pull-ups can you do?', help: 'Dead hang to chin over the bar. Zero is a normal answer.', unit: 'reps', step: 1 },
-  { key: 'sprintSeconds', stat: 'speed', prompt: 'How fast can you run 100 metres?', help: 'A flat-out sprint. Estimate if you have never timed one.', unit: 'seconds', step: 0.1 },
-  { key: 'verticalJumpCm', stat: 'speed', prompt: 'How high can you jump?', help: 'Standing vertical leap — reach up, then jump and mark the difference.', unit: 'cm', step: 1 },
+  { key: 'dashSeconds', stat: 'speed', prompt: 'How fast is your 40-yard dash?', help: 'Roughly 37 metres from a standing start. An untrained adult is around 5.5 seconds; NFL combine times run near 4.4.', unit: 'seconds', step: 0.1 },
+  { key: 'verticalJumpCm', stat: 'speed', prompt: 'How high can you jump?', help: 'Standing vertical leap. Chalk your fingers, reach up against a wall, then jump and measure the gap.', unit: 'cm', step: 1 },
   { key: 'mileSeconds', stat: 'stamina', prompt: 'What is your one-mile time?', help: 'Best effort over a mile, roughly four laps of a running track.', unit: '', step: 1, asDuration: true },
   { key: 'restingHeartRate', stat: 'stamina', prompt: 'What is your resting heart rate?', help: 'Beats per minute, measured sitting still. Lower means better conditioning.', unit: 'bpm', step: 1 },
   { key: 'plankSeconds', stat: 'defense', prompt: 'How long can you hold a plank?', help: 'Forearm plank, flat back, held until form breaks.', unit: 'seconds', step: 1 },
-  { key: 'sleepHours', stat: 'defense', prompt: 'How many hours do you sleep?', help: 'On an average night. Recovery is what lets you absorb punishment.', unit: 'hours', step: 0.5 },
-  { key: 'studyHoursPerWeek', stat: 'intelligence', prompt: 'How many hours a week do you learn?', help: 'Reading, studying, practising a skill — deliberate learning only.', unit: 'hours/week', step: 0.5 },
-  { key: 'iqScore', stat: 'intelligence', prompt: 'Do you know your IQ score?', help: 'From a validated test. Skip this and it stays at the average of 100.', unit: 'score', step: 1, optional: true },
-  { key: 'habitStreakDays', stat: 'discipline', prompt: 'How long is your current streak?', help: 'Consecutive days you have kept any daily habit. This seeds Discipline until the game has its own record of your consistency.', unit: 'days', step: 1 }
+  { key: 'benchPressKg', stat: 'defense', prompt: 'What is your best bench press?', help: 'Heaviest single rep with good form, bar included. Enter 0 if you have never tested it.', unit: 'kg', step: 2.5 },
+  { key: 'sleepHours', stat: 'intelligence', prompt: 'How many hours do you sleep?', help: 'On an average night. Sleep is what consolidates everything you learn.', unit: 'hours', step: 0.5 }
+];
+
+const NARRATOR_NAME = 'MYCEL';
+
+const INTRO_LINES = [
+  'Ah. Another one stirs beneath the roots.',
+  'Welcome to the Hollow Roots — what is left of a world that grew too fast and forgot how to stop.',
+  'I am Mycel. I have kept the Heartseed since before your grandparents had a name for the sky.',
+  'Listen closely, because this place does not work the way other worlds do.',
+  'Here you will not grow strong by killing things. Slay every creature in the canopy and your arms will be exactly as they were this morning.',
+  'In the Hollow Roots, your strength is YOUR strength. What you lift out there, you lift in here.',
+  'What you can run, you can run. How you sleep decides how clearly you think. What you have practised, you know.',
+  'And it cuts both ways. Let the days slip past and the roots take it back — you will weaken here exactly as you weaken there.',
+  'So before you take another step down, I must take your measure.',
+  'Show me what you are, and I will show you what you could become.'
 ];
 
 const SKIN_COLORS = ['#8d5c3c', '#b97950', '#d9a675', '#efc394', '#7a4930'];
@@ -70,6 +86,13 @@ export class TitleScene extends Phaser.Scene {
   private feedback = '';
   private questionIndex = 0;
   private draft: LifeInputs = { ...PlayerProgress.inputs };
+  private introLine = 0;
+  private introTyper?: Phaser.Time.TimerEvent;
+  private introTyping = false;
+  private quizIndex = 0;
+  private quizAnswers: number[] = [];
+  private quizDeadline = 0;
+  private quizTicker?: Phaser.Time.TimerEvent;
 
   constructor() { super('TitleScene'); }
 
@@ -84,12 +107,15 @@ export class TitleScene extends Phaser.Scene {
     this.root = document.createElement('div');
     this.root.className = 'title-root';
     this.add.dom(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.root);
-    this.view = PlayerProgress.profileCompleted ? 'menu' : 'create';
+    this.view = PlayerProgress.profileCompleted ? 'menu' : 'intro';
     this.render();
   }
 
   private render(): void {
-    if (this.view === 'create') this.renderCreate();
+    if (this.view !== 'quiz') this.stopQuizTicker();
+    if (this.view === 'intro') this.renderIntro();
+    else if (this.view === 'quiz') this.renderQuiz();
+    else if (this.view === 'create') this.renderCreate();
     else if (this.view === 'questions') this.renderQuestion();
     else if (this.view === 'summary') this.renderSummary();
     else if (this.view === 'customize') this.renderCustomize();
@@ -123,6 +149,199 @@ export class TitleScene extends Phaser.Scene {
       </aside>`;
     this.drawPreview();
     this.bindViewButtons();
+  }
+
+  /** Mycel sets up the premise before the game asks anything of the player:
+   * power here is real-world power, and it leaves the same way it arrives. */
+  private renderIntro(): void {
+    const isLast = this.introLine === INTRO_LINES.length - 1;
+    this.root.innerHTML = `
+      <section class="intro-stage" aria-label="Introduction">
+        <canvas data-narrator width="220" height="220"></canvas>
+        <div class="intro-box">
+          <p class="intro-name">${NARRATOR_NAME}</p>
+          <p class="intro-line" data-intro-text></p>
+          <div class="intro-nav">
+            <button class="quiet" data-action="skip-intro">SKIP</button>
+            <button class="primary" data-action="advance">${isLast ? 'BEGIN →' : 'NEXT ▸'}</button>
+          </div>
+        </div>
+      </section>`;
+    this.drawNarrator();
+    this.typeIntroLine(INTRO_LINES[this.introLine]);
+
+    const advance = (): void => {
+      const target = this.root.querySelector<HTMLElement>('[data-intro-text]');
+      if (this.introTyping) {
+        this.introTyper?.remove(false);
+        this.introTyping = false;
+        if (target) target.textContent = INTRO_LINES[this.introLine];
+        return;
+      }
+      if (isLast) { this.beginCreation(); return; }
+      this.introLine += 1;
+      this.render();
+    };
+    this.root.querySelector('[data-action="advance"]')?.addEventListener('click', advance);
+    this.root.querySelector<HTMLElement>('.intro-box')?.addEventListener('click', event => {
+      if (!(event.target as HTMLElement).closest('button')) advance();
+    });
+    this.root.querySelector('[data-action="skip-intro"]')?.addEventListener('click', () => this.beginCreation());
+  }
+
+  private typeIntroLine(text: string): void {
+    const target = this.root.querySelector<HTMLElement>('[data-intro-text]');
+    if (!target) return;
+    this.introTyper?.remove(false);
+    this.introTyping = true;
+    target.textContent = '';
+    let shown = 0;
+    this.introTyper = this.time.addEvent({
+      delay: 24,
+      repeat: Math.max(0, text.length - 1),
+      callback: () => {
+        shown += 1;
+        target.textContent = text.slice(0, shown);
+        if (shown >= text.length) this.introTyping = false;
+      }
+    });
+  }
+
+  private beginCreation(): void {
+    this.introTyper?.remove(false);
+    this.introTyping = false;
+    this.view = 'create';
+    this.render();
+  }
+
+  /** A short timed reasoning paper standing in for a formal IQ test. The copy
+   * never calls the result a real IQ, because it is not one. */
+  private renderQuiz(): void {
+    const questions = quizForToday();
+    const question = questions[this.quizIndex];
+    const chosen = this.quizAnswers[this.quizIndex];
+    this.root.innerHTML = `
+      <section class="title-card full-card quiz-card" aria-label="Reasoning assessment">
+        <div class="panel-heading">
+          <div><p class="eyebrow">REASONING · ${this.quizIndex + 1} OF ${questions.length}</p><h2>Take your measure</h2></div>
+          <p class="quiz-clock" data-clock>${this.clockText()}</p>
+        </div>
+        <i class="question-progress"><b style="width:${(this.quizIndex + 1) / questions.length * 100}%"></b></i>
+        <pre class="quiz-prompt">${question.prompt}</pre>
+        <div class="quiz-options">
+          ${question.options.map((option, index) => `<button class="quiz-option ${chosen === index ? 'selected' : ''}" data-option="${index}">${option}</button>`).join('')}
+        </div>
+        <div class="question-nav">
+          <button data-action="prev" ${this.quizIndex === 0 ? 'disabled' : ''}>← BACK</button>
+          <span class="quiz-note">Estimates reasoning only — not a clinical IQ score.</span>
+          <button class="primary" data-action="next">${this.quizIndex === questions.length - 1 ? 'FINISH' : 'NEXT →'}</button>
+        </div>
+      </section>`;
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-option]')) {
+      button.addEventListener('click', () => {
+        this.quizAnswers[this.quizIndex] = Number(button.dataset.option);
+        if (this.quizIndex < questions.length - 1) { this.quizIndex += 1; this.render(); return; }
+        this.render();
+      });
+    }
+    this.root.querySelector('[data-action="next"]')?.addEventListener('click', () => {
+      if (this.quizIndex === questions.length - 1) { this.finishQuiz(questions); return; }
+      this.quizIndex += 1;
+      this.render();
+    });
+    this.root.querySelector('[data-action="prev"]')?.addEventListener('click', () => {
+      if (this.quizIndex === 0) return;
+      this.quizIndex -= 1;
+      this.render();
+    });
+    this.startQuizTicker(questions);
+  }
+
+  private clockText(): string {
+    const remaining = Math.max(0, Math.ceil((this.quizDeadline - Date.now()) / 1000));
+    return `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
+  }
+
+  private startQuizTicker(questions: QuizQuestion[]): void {
+    this.quizTicker?.remove(false);
+    this.quizTicker = this.time.addEvent({
+      delay: 250,
+      loop: true,
+      callback: () => {
+        const clock = this.root.querySelector<HTMLElement>('[data-clock]');
+        if (clock) clock.textContent = this.clockText();
+        if (Date.now() >= this.quizDeadline) this.finishQuiz(questions);
+      }
+    });
+  }
+
+  private stopQuizTicker(): void {
+    this.quizTicker?.remove(false);
+    this.quizTicker = undefined;
+  }
+
+  private finishQuiz(questions: QuizQuestion[]): void {
+    this.stopQuizTicker();
+    const correct = questions.reduce((total, question, index) => total + (this.quizAnswers[index] === question.answer ? 1 : 0), 0);
+    this.draft.iqScore = quizScore(correct, questions.length);
+    PlayerProgress.iqTakenAt = new Date().toISOString().slice(0, 10);
+    this.finishAssessment();
+  }
+
+  private startQuiz(): void {
+    this.quizIndex = 0;
+    this.quizAnswers = new Array(QUIZ_LENGTH).fill(-1);
+    this.quizDeadline = Date.now() + QUIZ_SECONDS * 1000;
+    this.view = 'quiz';
+    this.render();
+  }
+
+  /** A fungal keeper of the Heartseed, drawn in the same blocky idiom as the
+   * player preview so the two read as the same world. */
+  private drawNarrator(): void {
+    const canvas = this.root.querySelector<HTMLCanvasElement>('[data-narrator]');
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingEnabled = false;
+    const scale = 6;
+    const rect = (color: string, x: number, y: number, width: number, height: number): void => {
+      context.fillStyle = color;
+      context.fillRect(x * scale, y * scale, width * scale, height * scale);
+    };
+    const cap = '#c7d98a', capLit = '#e2efb4', capDark = '#8da05c', body = '#2c4a36', bodyDark = '#17291e', glow = '#eaffd0';
+    const center = 18;
+    const band = (color: string, y: number, width: number, height = 1): void => rect(color, center - width / 2, y, width, height);
+
+    context.shadowColor = 'rgba(190, 240, 150, .4)';
+    context.shadowBlur = 24;
+    band(capLit, 2, 10);
+    context.shadowBlur = 0;
+    band(capLit, 3, 14);
+    band(cap, 4, 18);
+    band(cap, 5, 21);
+    band(cap, 6, 23);
+    band(capDark, 7, 23);
+    band(capDark, 8, 19);
+    band(bodyDark, 9, 15);
+
+    band(body, 10, 11, 9);
+    band(bodyDark, 19, 11);
+    band(body, 20, 9);
+    band(bodyDark, 21, 7);
+
+    rect(glow, 14, 13, 2, 2);
+    rect(glow, 20, 13, 2, 2);
+    // Freckles of spore-light across the cap.
+    rect(capLit, 12, 5, 2, 1);
+    rect(capLit, 22, 4, 2, 1);
+    rect(capLit, 17, 3, 2, 1);
+
+    // Root tendrils, tapering as they fall.
+    for (const [x, length, width] of [[13, 7, 2], [16, 10, 2], [19, 8, 2], [21, 5, 1]] as Array<[number, number, number]>) {
+      rect(body, x, 22, width, length);
+      rect(bodyDark, x, 22 + length, width, 2);
+    }
   }
 
   /** Step one of character creation: decide who you are before the game asks
@@ -204,7 +423,9 @@ export class TitleScene extends Phaser.Scene {
       commit();
       const next = this.questionIndex + delta;
       if (next < 0) return;
-      if (next >= QUESTIONS.length) { this.finishAssessment(); return; }
+      // The typed questions are followed by the reasoning quiz, which supplies
+      // Intelligence's second input before the summary can be shown.
+      if (next >= QUESTIONS.length) { this.startQuiz(); return; }
       this.questionIndex = next;
       this.render();
     };
@@ -213,7 +434,7 @@ export class TitleScene extends Phaser.Scene {
     this.root.querySelector('[data-action="skip"]')?.addEventListener('click', () => {
       this.draft[question.key] = DEFAULT_INPUTS[question.key];
       const next = this.questionIndex + 1;
-      if (next >= QUESTIONS.length) { this.finishAssessment(); return; }
+      if (next >= QUESTIONS.length) { this.startQuiz(); return; }
       this.questionIndex = next;
       this.render();
     });
@@ -236,12 +457,18 @@ export class TitleScene extends Phaser.Scene {
       strength: [], speed: [], stamina: [], defense: [], intelligence: [], discipline: []
     };
     for (const question of QUESTIONS) sources[question.stat].push(question);
+    const detail = (key: keyof CharacterStats): string => {
+      if (key === 'discipline') return 'Starts at 10 · rises and falls with your consistency';
+      const parts = sources[key].map(question => this.answerSummary(question));
+      if (key === 'intelligence') parts.push(`quiz ${PlayerProgress.inputs.iqScore} → ${scoreMetric('iqScore', PlayerProgress.inputs.iqScore)}`);
+      return parts.join(' · ');
+    };
     this.root.innerHTML = `
       <section class="title-card full-card character-card" aria-label="Your starting attributes">
         <div class="panel-heading"><div><p class="eyebrow">ASSESSMENT COMPLETE</p><h2>YOUR BASELINE</h2></div></div>
-        <p class="panel-copy">This is where you start. Every stat moves only when you log real effort — the world gets easier because you got stronger, not because you ground out enemies.</p>
+        <p class="panel-copy">This is where you start. Every stat moves only when you log real effort — and slides back when you stop, so these numbers stay honest.</p>
         <div class="stat-list summary-list">
-          ${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${sources[key].map(question => this.answerSummary(question)).join(' · ')}</small></span><em>${stats[key]}</em></div>`).join('')}
+          ${STAT_LABELS.map(([key, short, name]) => `<div><b>${short}</b><span><strong>${name}</strong><small>${detail(key)}</small></span><em>${stats[key]}</em></div>`).join('')}
         </div>
         <div class="question-nav">
           <button data-action="redo">← REDO ASSESSMENT</button>

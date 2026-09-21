@@ -132,6 +132,21 @@
       .question-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
       .question-nav button:disabled { opacity: .35; cursor: default; }
       .summary-list { grid-template-columns: 1fr 1fr; display: grid; gap: 6px; }
+      .intro-stage { position: relative; width: 900px; height: 500px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+      .intro-stage canvas { width: 220px; height: 220px; filter: drop-shadow(0 16px 20px rgba(0,0,0,.6)); animation: mycel-float 4.5s ease-in-out infinite; }
+      @keyframes mycel-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+      @media (prefers-reduced-motion: reduce) { .intro-stage canvas { animation: none; } }
+      .intro-box { width: 100%; min-height: 176px; padding: 20px 26px 16px; display: flex; flex-direction: column; cursor: pointer; border: 1px solid rgba(158,209,163,.42); border-radius: 5px; background: linear-gradient(145deg, rgba(4,20,14,.97), rgba(8,34,24,.95)); box-shadow: 0 20px 60px rgba(0,0,0,.6), inset 0 0 50px rgba(93,150,96,.07); }
+      .intro-name { margin: 0 0 9px; color: #cbd78e; font-size: 12px; letter-spacing: .24em; font-weight: 800; }
+      .intro-line { flex: 1; margin: 0; color: #e6f4e9; font-size: 17px; line-height: 1.5; max-width: 780px; min-height: 76px; }
+      .intro-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .quiz-card h2 { font-size: 24px; }
+      .quiz-clock { margin: 0; color: #e7eca9; font: 800 22px ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+      .quiz-prompt { margin: 6px 0 16px; color: #eff6d2; font: 600 17px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+      .quiz-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+      .title-root .quiz-option { padding: 14px 16px; font-size: 14px; text-align: left; letter-spacing: .02em; }
+      .title-root .quiz-option.selected { color: #102117; border-color: #eff4ca; background: linear-gradient(90deg,#a9d48d,#d8df8f); }
+      .quiz-note { color: #71877a; font-size: 10px; letter-spacing: .04em; }
       @media (max-width: 760px), (max-height: 500px) { .title-root { transform: scale(.78); transform-origin: center; } }
     </style>
   </head>

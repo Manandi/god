@@ -1,5 +1,6 @@
 import { CollectedItems } from './CollectedItems';
 import {
+  applyInactivityDecay,
   calculateStats,
   DEFAULT_APPEARANCE,
   DEFAULT_INPUTS,
@@ -17,7 +18,7 @@ import {
 const STORAGE_KEY = 'hollow-roots-save-v1';
 
 interface SaveSnapshot {
-  version: 5;
+  version: 6;
   updatedAt: string;
   profileCompleted: boolean;
   inputs: LifeInputs;
@@ -34,6 +35,8 @@ interface SaveSnapshot {
     guardianDefeated: boolean;
     collectedItems: string[];
   };
+  decayApplied: number;
+  iqTakenAt: string;
 }
 
 let autosaveInstalled = false;
@@ -52,7 +55,9 @@ function sanitizeInputs(value: Record<string, unknown> | undefined): LifeInputs 
 function sanitizeStatXp(value: Partial<Record<StatKey, unknown>> | undefined): Record<StatKey, number> {
   return Object.fromEntries((Object.keys(DEFAULT_STAT_XP) as StatKey[]).map(key => [
     key,
-    finite(value?.[key], 0, 0, 1000000)
+    // The floor is negative: decay drives stat XP below zero, and clamping it
+    // at zero here would refund every lapse on the next page load.
+    finite(value?.[key], 0, -1000000, 1000000)
   ])) as Record<StatKey, number>;
 }
 
@@ -90,6 +95,10 @@ export const GameSave = {
       PlayerProgress.guardianDefeated = saved.progress?.guardianDefeated === true;
       CollectedItems.clear();
       for (const id of saved.progress?.collectedItems ?? []) if (typeof id === 'string') CollectedItems.add(id);
+      PlayerProgress.decayApplied = finite(saved.decayApplied, 0, 0, 10000000);
+      PlayerProgress.iqTakenAt = typeof saved.iqTakenAt === 'string' ? saved.iqTakenAt : '';
+      // Charge any lapse that happened while the game was closed.
+      applyInactivityDecay();
       return true;
     } catch {
       return false;
@@ -98,7 +107,7 @@ export const GameSave = {
 
   save(): void {
     const snapshot: SaveSnapshot = {
-      version: 5,
+      version: 6,
       updatedAt: new Date().toISOString(),
       profileCompleted: PlayerProgress.profileCompleted,
       inputs: { ...PlayerProgress.inputs },
@@ -114,7 +123,9 @@ export const GameSave = {
         currentSpawn: PlayerProgress.currentSpawn,
         guardianDefeated: PlayerProgress.guardianDefeated,
         collectedItems: [...CollectedItems]
-      }
+      },
+      decayApplied: PlayerProgress.decayApplied,
+      iqTakenAt: PlayerProgress.iqTakenAt
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Gameplay continues without storage. */ }
   },

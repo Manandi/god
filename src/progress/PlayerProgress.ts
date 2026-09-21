@@ -1,15 +1,14 @@
 export interface LifeInputs {
   pushups: number;
   pullups: number;
-  sprintSeconds: number;
+  dashSeconds: number;
   verticalJumpCm: number;
   mileSeconds: number;
   restingHeartRate: number;
   plankSeconds: number;
+  benchPressKg: number;
   sleepHours: number;
-  studyHoursPerWeek: number;
   iqScore: number;
-  habitStreakDays: number;
 }
 
 export interface CharacterStats {
@@ -48,43 +47,40 @@ export interface CharacterAppearance {
 export const STAT_ANCHORS = {
   pushups: [0, 5, 15, 35, 60],
   pullups: [0, 1, 5, 12, 22],
-  sprintSeconds: [22, 18, 15, 13, 11],
+  dashSeconds: [7.5, 6.3, 5.5, 4.9, 4.4],
   verticalJumpCm: [10, 25, 40, 55, 70],
   mileSeconds: [900, 720, 600, 480, 360],
   restingHeartRate: [90, 78, 68, 58, 45],
   plankSeconds: [10, 40, 90, 180, 300],
+  benchPressKg: [10, 35, 60, 90, 130],
   sleepHours: [4, 5.5, 7, 8, 8.5],
-  studyHoursPerWeek: [0, 2, 5, 10, 20],
-  iqScore: [70, 90, 100, 115, 135],
-  habitStreakDays: [0, 3, 10, 30, 90]
+  iqScore: [70, 90, 100, 115, 135]
 } as const satisfies Record<keyof LifeInputs, readonly number[]>;
 
 export const INPUT_BOUNDS = {
   pushups: [0, 300],
   pullups: [0, 100],
-  sprintSeconds: [9, 60],
+  dashSeconds: [3.5, 20],
   verticalJumpCm: [0, 150],
   mileSeconds: [200, 2400],
   restingHeartRate: [30, 140],
   plankSeconds: [0, 1200],
+  benchPressKg: [0, 300],
   sleepHours: [0, 14],
-  studyHoursPerWeek: [0, 80],
-  iqScore: [55, 200],
-  habitStreakDays: [0, 3650]
+  iqScore: [55, 200]
 } as const satisfies Record<keyof LifeInputs, readonly [number, number]>;
 
 export const DEFAULT_INPUTS: LifeInputs = {
   pushups: 15,
   pullups: 5,
-  sprintSeconds: 15,
+  dashSeconds: 5.5,
   verticalJumpCm: 40,
   mileSeconds: 600,
   restingHeartRate: 68,
   plankSeconds: 90,
+  benchPressKg: 60,
   sleepHours: 7,
-  studyHoursPerWeek: 5,
-  iqScore: 100,
-  habitStreakDays: 10
+  iqScore: 100
 };
 
 export const DEFAULT_STATS: CharacterStats = {
@@ -140,11 +136,11 @@ export function calculateBaseStats(input: LifeInputs, activities: ActivityEntry[
   const score = (key: keyof LifeInputs): number => scoreMetric(key, input[key]);
   return {
     strength: pair(score('pushups'), score('pullups')),
-    speed: pair(score('sprintSeconds'), score('verticalJumpCm')),
+    speed: pair(score('dashSeconds'), score('verticalJumpCm')),
     stamina: pair(score('mileSeconds'), score('restingHeartRate')),
-    defense: pair(score('plankSeconds'), score('sleepHours')),
-    intelligence: pair(score('studyHoursPerWeek'), score('iqScore')),
-    discipline: disciplineFromHistory(activities, score('habitStreakDays'))
+    defense: pair(score('plankSeconds'), score('benchPressKg')),
+    intelligence: pair(score('sleepHours'), score('iqScore')),
+    discipline: disciplineFromHistory(activities)
   };
 }
 
@@ -152,7 +148,9 @@ export function calculateStats(input: LifeInputs, statXp: Record<StatKey, number
   const base = calculateBaseStats(input, activities);
   return Object.fromEntries((Object.keys(base) as StatKey[]).map(key => [
     key,
-    key === 'discipline' ? base[key] : Math.min(30, base[key] + Math.floor(Math.max(0, statXp[key]) / 250))
+    // statXp is allowed to go negative, so lapsed effort can pull a stat
+    // below the baseline it was originally tested at.
+    key === 'discipline' ? base[key] : Math.max(1, Math.min(30, base[key] + Math.trunc(statXp[key] / 250)))
   ])) as unknown as CharacterStats;
 }
 
@@ -169,6 +167,11 @@ export const PlayerProgress: {
   currentZone: string;
   currentSpawn: string;
   guardianDefeated: boolean;
+  /** Stat XP already burned off for the current run of idle days, so reloading
+   * the page does not charge the same lapse twice. */
+  decayApplied: number;
+  /** Date of the last reasoning quiz, gating the monthly retake. */
+  iqTakenAt: string;
 } = {
   level: 1,
   totalXp: 0,
@@ -181,8 +184,40 @@ export const PlayerProgress: {
   appearance: { ...DEFAULT_APPEARANCE },
   currentZone: 'biosphere',
   currentSpawn: 'start',
-  guardianDefeated: false
+  guardianDefeated: false,
+  decayApplied: 0,
+  iqTakenAt: ''
 };
+
+export const DECAY_GRACE_DAYS = 3;
+export const DECAY_XP_PER_IDLE_DAY = 25;
+
+/** Days of silence ending today, counting back until a logged day is found. */
+function idleDayCount(): number {
+  const logged = new Set(PlayerProgress.activities.map(entry => entry.date));
+  const cursor = new Date();
+  let idle = 0;
+  while (idle < 400) {
+    if (logged.has(cursor.toISOString().slice(0, 10))) break;
+    idle += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return idle;
+}
+
+/** Effort that stops has to cost something, or the stats stop meaning anything.
+ * Past a grace window every idle day drains stat XP, and because statXp may go
+ * negative a long enough lapse drops stats below their tested baseline.
+ * Returns the XP removed by this call so the UI can report the loss. */
+export function applyInactivityDecay(): number {
+  const owed = Math.max(0, idleDayCount() - DECAY_GRACE_DAYS) * DECAY_XP_PER_IDLE_DAY;
+  const unpaid = owed - PlayerProgress.decayApplied;
+  PlayerProgress.decayApplied = owed;
+  if (unpaid <= 0) return 0;
+  for (const key of Object.keys(PlayerProgress.statXp) as StatKey[]) PlayerProgress.statXp[key] -= unpaid;
+  PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
+  return unpaid;
+}
 
 export function xpForLevel(level: number): number {
   return 500 + Math.max(0, level - 1) * 150;
@@ -255,6 +290,8 @@ export function addActivity(kind: ActivityKind, amount = 1, note?: string): { ok
     PlayerProgress.totalXp += weekly.xp;
     PlayerProgress.activities[PlayerProgress.activities.length - 1].xp += weekly.xp;
   }
+  // Today now counts as logged, so the next lapse starts its own decay run.
+  PlayerProgress.decayApplied = 0;
   PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
   recalculateLevel();
   const message = weekly.names.length
@@ -316,12 +353,24 @@ export function weeklyGoals(): WeeklyGoal[] {
     reward,
     claimed: PlayerProgress.claimedWeeklyGoals.includes(`${week}:${id}`)
   });
+  const tier = weeksSinceFirstActivity();
+  // Targets climb with every week played, so the quest keeps pace instead of
+  // staying trivial once the habit is established. Rewards climb with them.
+  const grow = (base: number, perWeek: number, cap: number): number => Math.min(cap, Math.round(base + tier * perWeek));
   return [
-    make('train4', 'Train 4 days', workoutDays, 4, 'days', 250),
-    make('steps4', '5K steps on 4 days', stepDays, 4, 'days', 150),
-    make('distance5', 'Move 5 km', runKm, 5, 'km', 200),
-    make('study120', 'Learn 120 min', studyMinutes, 120, 'min', 180)
+    make('train', `Train ${grow(3, 0.25, 6)} days`, workoutDays, grow(3, 0.25, 6), 'days', 250 + tier * 25),
+    make('steps', `5K steps on ${grow(3, 0.25, 7)} days`, stepDays, grow(3, 0.25, 7), 'days', 150 + tier * 20),
+    make('distance', `Move ${grow(5, 1, 30)} km`, runKm, grow(5, 1, 30), 'km', 200 + tier * 25),
+    make('study', `Learn ${grow(120, 15, 420)} min`, studyMinutes, grow(120, 15, 420), 'min', 180 + tier * 20)
   ];
+}
+
+/** Whole weeks since the player first logged anything, used to escalate goals. */
+export function weeksSinceFirstActivity(): number {
+  const first = PlayerProgress.activities[0]?.date;
+  if (!first) return 0;
+  const elapsed = Date.now() - Date.parse(`${first}T00:00:00Z`);
+  return Math.max(0, Math.floor(elapsed / (7 * 24 * 60 * 60 * 1000)));
 }
 
 function awardWeeklyGoals(): { xp: number; names: string[] } {
@@ -363,7 +412,12 @@ export function totalStats(stats: CharacterStats = PlayerProgress.stats): number
 
 /** Discipline is deliberately earned, never self-reported. It combines recent
  * consistency with the current streak and updates whenever effort is logged. */
-function disciplineFromHistory(activities: ActivityEntry[], seed = 10): number {
+export const DISCIPLINE_BASE = 10;
+
+/** The one stat with no baseline question. It starts at 10 and reads purely
+ * off logged consistency, climbing toward 20 while effort stays regular and
+ * sliding back toward 1 once it stops. */
+function disciplineFromHistory(activities: ActivityEntry[]): number {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setUTCDate(cutoff.getUTCDate() - 27);
@@ -371,10 +425,10 @@ function disciplineFromHistory(activities: ActivityEntry[], seed = 10): number {
   const recentDays = new Set(activities.filter(entry => entry.date >= cutoffKey).map(entry => entry.date)).size;
   const active = new Set(activities.map(entry => entry.date));
   const streak = consecutiveDays(active);
+  if (activities.length === 0) return DISCIPLINE_BASE;
   const consistency = Math.min(1, recentDays / 20);
   const streakScore = Math.min(1, streak / 14);
-  const logged = Math.round(1 + (consistency * 0.75 + streakScore * 0.25) * 19);
-  // The self-reported streak seeds Discipline at character creation; once
-  // there is real logged history it becomes the better signal and takes over.
-  return activities.length >= 12 ? logged : Math.max(seed, logged);
+  const score = consistency * 0.75 + streakScore * 0.25;
+  // Half marks hold the base; anything above climbs, anything below slides.
+  return Math.max(1, Math.min(20, Math.round(DISCIPLINE_BASE + (score - 0.5) * 20)));
 }
