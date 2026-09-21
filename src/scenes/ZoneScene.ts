@@ -52,6 +52,11 @@ const GUARDIAN_WALK_ANIM = 'guardian-walk-v3';
 // and jitter as the animation advanced.
 const TURTLE_FRAME_KEYS = ['turtle_idle', 'turtle_walk_1'];
 const BIOSPHERE_TERRAIN_KEY = 'biosphere-terrain-seamless-v2';
+const OVERWORLD_PORTAL_X = 4704;
+const GUARDIAN_ARENA_LEFT = 6048;
+const GUARDIAN_ARENA_RIGHT = 7248;
+const GUARDIAN_ARENA_FLOOR_Y = 928;
+const GUARDIAN_ARENA_CENTER_X = (GUARDIAN_ARENA_LEFT + GUARDIAN_ARENA_RIGHT) / 2;
 const DECOR_KEYS = [
   'bush',
   'cactus',
@@ -88,6 +93,7 @@ export class ZoneScene extends Phaser.Scene {
   private mapDot?: Phaser.GameObjects.Arc;
   private mapWidth = 1;
   private mapHeight = 1;
+  private worldMapObjects: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | Phaser.GameObjects.Arc> = [];
   private regions: {x:number; name:string}[] = [];
   private dying = false;
   private bossProjectiles?: Phaser.Physics.Arcade.Group;
@@ -176,6 +182,7 @@ export class ZoneScene extends Phaser.Scene {
     this.guardianCutsceneObjects = [];
     this.guardianCutsceneTimers = [];
     this.checkpointLockedMessageUntil = 0;
+    this.worldMapObjects = [];
     this.activeCheckpoint = this.spawnName;
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.menuKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.M);
@@ -221,7 +228,9 @@ export class ZoneScene extends Phaser.Scene {
 
     const mapWidthPx = map.widthInPixels;
     const mapHeightPx = map.heightInPixels;
-    this.mapWidth = mapWidthPx;
+    // The overworld map ends at the guardian doorway. The separate lair is
+    // deliberately excluded from navigation and minimap coordinates.
+    this.mapWidth = this.zoneKey === 'biosphere' ? OVERWORLD_PORTAL_X : mapWidthPx;
     this.mapHeight = mapHeightPx;
     this.regions = (map.getObjectLayer('regions')?.objects ?? []).map(o=>({x:o.x ?? 0,name:o.name}));
 
@@ -229,7 +238,8 @@ export class ZoneScene extends Phaser.Scene {
     this.createAmbientParticles(config, mapWidthPx, mapHeightPx);
 
     this.physics.world.gravity.y = PHYSICS.gravityY;
-    this.physics.world.setBounds(0, 0, mapWidthPx, mapHeightPx);
+    const worldWidthPx = this.zoneKey === 'biosphere' ? GUARDIAN_ARENA_RIGHT + 96 : mapWidthPx;
+    this.physics.world.setBounds(0, 0, worldWidthPx, mapHeightPx);
 
     const spawn = this.findSpawnPosition(map, this.spawnName);
     this.player = new Player(this, spawn.x, spawn.y);
@@ -246,7 +256,7 @@ export class ZoneScene extends Phaser.Scene {
     this.createCheckpoints(map);
 
     const camera = this.cameras.main;
-    camera.setBounds(0, 0, mapWidthPx, mapHeightPx);
+    camera.setBounds(0, 0, worldWidthPx, mapHeightPx);
     camera.setDeadzone(160, 100);
     camera.startFollow(this.player, true, 0.1, 0.1);
 
@@ -292,9 +302,13 @@ export class ZoneScene extends Phaser.Scene {
       if (enemy.active && !enemy.isDefeated) enemy.update(this.player.x, this.player.y);
     }
     this.updatePlayerAttacks();
-    this.mapDot?.setPosition(747 + this.player.x / this.mapWidth * 192, 20 + this.player.y / this.mapHeight * 57);
-    const region = [...this.regions].reverse().find(r=>this.player.x>=r.x);
-    this.regionText?.setText(region?.name.toUpperCase() ?? 'BIOSPHERE');
+    this.mapDot?.setPosition(747 + Phaser.Math.Clamp(this.player.x / this.mapWidth, 0, 1) * 192, 20 + this.player.y / this.mapHeight * 57);
+    if (this.bossInLair && !PlayerProgress.guardianDefeated) {
+      this.regionText?.setText('HEARTSEED PRISON');
+    } else {
+      const region = [...this.regions].reverse().find(r=>this.player.x>=r.x);
+      this.regionText?.setText(region?.name.toUpperCase() ?? 'BIOSPHERE');
+    }
   }
 
   private findSpawnPosition(map: Phaser.Tilemaps.Tilemap, spawnName: string): { x: number; y: number } {
@@ -404,7 +418,7 @@ export class ZoneScene extends Phaser.Scene {
               PlayerProgress.guardianDefeated = true;
               GameSave.save();
               GameAudio.startAmbient();
-              this.showMessage('Guardian defeated • Guardian cloak unlocked • Autosaved', 2800);
+              this.completeGuardianEncounter();
             }
           });
           this.guardian.setEncounterActive(false);
@@ -773,37 +787,22 @@ export class ZoneScene extends Phaser.Scene {
 
   private createBossPortal(): void {
     if (this.zoneKey !== 'biosphere' || !this.guardian || PlayerProgress.guardianDefeated) return;
-    const portalX = 4704;
+    const portalX = OVERWORLD_PORTAL_X;
     const portalFloorY = 928;
-    const arenaFloorY = 928;
-    this.createGuardianLairAtmosphere(arenaFloorY);
+    this.createGuardianLairAtmosphere();
     const portal = this.add.graphics().setDepth(7);
     portal.fillStyle(0x071b18, 0.82).fillEllipse(portalX, portalFloorY - 48, 58, 94);
     portal.lineStyle(5, 0x79e5ad, 0.85).strokeEllipse(portalX, portalFloorY - 48, 58, 94);
     portal.lineStyle(2, 0xd8ffb0, 0.7).strokeEllipse(portalX, portalFloorY - 48, 38, 70);
-    const glow = this.add.ellipse(portalX, portalFloorY - 48, 42, 76, 0x80f2b4, 0.2).setDepth(6);
-    this.tweens.add({ targets: [portal, glow], alpha: { from: 0.55, to: 1 }, scaleX: { from: 0.92, to: 1.04 }, duration: 820, yoyo: true, repeat: -1 });
+    this.add.ellipse(portalX, portalFloorY - 48, 42, 76, 0x80f2b4, 0.2).setDepth(6);
 
     const gate = this.add.graphics().setDepth(8);
     gate.fillStyle(0x07140f, 0.94).fillRect(4760, 704, 22, 224);
     gate.lineStyle(3, 0x66875a, 0.9);
-    for (let y = 704; y < arenaFloorY; y += 32) gate.lineBetween(4763, y, 4779, y + 18);
+    for (let y = 704; y < portalFloorY; y += 32) gate.lineBetween(4763, y, 4779, y + 18);
     const gateZone = this.add.zone(4771, 816, 24, 224);
     this.physics.add.existing(gateZone, true);
     this.physics.add.collider(this.player, gateZone);
-
-    // Once the portal is used, the entrance gate dissolves and a new seal
-    // grows behind the player. This opens the entire 944px guardian court
-    // while still preventing escape during the encounter.
-    const arenaSeal = this.add.graphics().setDepth(8).setVisible(false);
-    arenaSeal.fillStyle(0x06110d, 0.98).fillRect(4438, 704, 24, 224);
-    arenaSeal.lineStyle(4, 0x82ad63, 0.9);
-    for (let y = 704; y < arenaFloorY; y += 28) arenaSeal.lineBetween(4441, y + 20, 4459, y);
-    const sealZone = this.add.zone(4450, 816, 26, 224);
-    this.physics.add.existing(sealZone, true);
-    const sealBody = sealZone.body as Phaser.Physics.Arcade.StaticBody;
-    sealBody.enable = false;
-    this.physics.add.collider(this.player, sealZone);
 
     this.portalPrompt = this.add.text(portalX, portalFloorY - 105, 'E  ENTER GUARDIAN LAIR', {
       fontFamily: 'monospace', fontSize: '11px', color: '#07110b', backgroundColor: '#d8ffb0'
@@ -823,10 +822,14 @@ export class ZoneScene extends Phaser.Scene {
       this.time.delayedCall(290, () => {
         gate.setVisible(false);
         (gateZone.body as Phaser.Physics.Arcade.StaticBody).enable = false;
-        arenaSeal.setVisible(true);
-        sealBody.enable = true;
-        this.player.setPosition(4544, arenaFloorY);
+        for (const object of this.worldMapObjects) object.setVisible(false);
+        this.regionText?.setText('HEARTSEED PRISON');
+        this.player.setPosition(GUARDIAN_ARENA_LEFT + 150, GUARDIAN_ARENA_FLOOR_Y);
         body.updateFromGameObject();
+        this.guardian?.setPosition(GUARDIAN_ARENA_RIGHT - 210, GUARDIAN_ARENA_FLOOR_Y);
+        this.guardian?.setPatrolBounds(GUARDIAN_ARENA_LEFT + 70, GUARDIAN_ARENA_RIGHT - 70);
+        const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
+        guardianBody?.updateFromGameObject();
         GameAudio.startBoss();
         this.beginGuardianCutscene(body);
       });
@@ -838,22 +841,40 @@ export class ZoneScene extends Phaser.Scene {
     });
   }
 
-  private createGuardianLairAtmosphere(floorY: number): void {
-    const left = 4448;
-    const right = 5424;
+  private createGuardianLairAtmosphere(): void {
+    const left = GUARDIAN_ARENA_LEFT;
+    const right = GUARDIAN_ARENA_RIGHT;
+    const floorY = GUARDIAN_ARENA_FLOOR_Y;
     this.add.rectangle((left + right) / 2, floorY - 180, right - left, 360, 0x020b0b, 0.52).setDepth(-7);
     const roots = this.add.graphics().setDepth(-6);
     roots.fillStyle(0x061813, 0.96);
-    for (const x of [4490, 4650, 5230, 5380]) {
+    for (const x of [left + 42, left + 210, right - 210, right - 42]) {
       roots.fillEllipse(x, floorY - 180, 76, 360);
       roots.fillTriangle(x - 38, floorY, x + 38, floorY, x, floorY - 250);
     }
     roots.lineStyle(5, 0x315d44, 0.55);
     for (let x = left + 35; x < right; x += 110) roots.lineBetween(x, floorY - 330, x + 42, floorY - 20);
-    for (const x of [4610, 4936, 5260]) {
+    for (const x of [left + 190, GUARDIAN_ARENA_CENTER_X, right - 190]) {
       const light = this.add.circle(x, floorY - 126, 10, 0xa8ff9a, 0.78).setDepth(-4);
       const halo = this.add.circle(x, floorY - 126, 48, 0x76d890, 0.1).setDepth(-5);
       this.tweens.add({ targets: [light, halo], alpha: { from: 0.45, to: 0.95 }, scale: { from: 0.88, to: 1.12 }, duration: 850, yoyo: true, repeat: -1 });
+    }
+
+    const terrain = this.add.graphics().setDepth(2);
+    terrain.fillStyle(0x0b1812, 1).fillRect(left, floorY, right - left, 240);
+    terrain.fillStyle(0x203b2a, 1).fillRect(left, floorY, right - left, 18);
+    terrain.lineStyle(5, 0x6c9254, 0.88).lineBetween(left, floorY, right, floorY);
+    const floor = this.add.zone(GUARDIAN_ARENA_CENTER_X, floorY + 24, right - left, 48);
+    const leftWall = this.add.zone(left - 12, floorY - 150, 24, 300);
+    const rightWall = this.add.zone(right + 12, floorY - 150, 24, 300);
+    for (const zone of [floor, leftWall, rightWall]) this.physics.add.existing(zone, true);
+    this.physics.add.collider(this.player, floor);
+    this.physics.add.collider(this.player, leftWall);
+    this.physics.add.collider(this.player, rightWall);
+    if (this.guardian) {
+      this.physics.add.collider(this.guardian, floor);
+      this.physics.add.collider(this.guardian, leftWall, () => this.guardian?.turnAwayFrom(left));
+      this.physics.add.collider(this.guardian, rightWall, () => this.guardian?.turnAwayFrom(right));
     }
   }
 
@@ -862,7 +883,7 @@ export class ZoneScene extends Phaser.Scene {
     this.guardianCutsceneCanSkip = false;
     this.cameras.main.stopFollow();
     this.cameras.main.fadeIn(380, 3, 10, 9);
-    this.cameras.main.pan(4960, 820, 1300, 'Sine.easeInOut');
+    this.cameras.main.pan(GUARDIAN_ARENA_CENTER_X, 820, 1300, 'Sine.easeInOut');
 
     const topBar = this.add.rectangle(0, 0, GAME_WIDTH, 68, 0x020706, 0.96).setOrigin(0).setScrollFactor(0).setDepth(180);
     const bottomBar = this.add.rectangle(0, GAME_HEIGHT - 104, GAME_WIDTH, 104, 0x020706, 0.96).setOrigin(0).setScrollFactor(0).setDepth(180);
@@ -913,6 +934,30 @@ export class ZoneScene extends Phaser.Scene {
     this.cameras.main.shake(150, 0.004);
     this.transitionLocked = false;
     this.showMessage('THE VERDANT GUARDIAN · WARDEN OF THE HEARTSEED', 2100);
+  }
+
+  private completeGuardianEncounter(): void {
+    if (!this.bossInLair) {
+      this.showMessage('Guardian defeated • Guardian cloak unlocked • Autosaved', 2800);
+      return;
+    }
+    this.transitionLocked = true;
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    body.enable = false;
+    this.bossProjectiles?.clear(true, true);
+    this.bossWaves?.clear(true, true);
+    this.cameras.main.fadeOut(420, 3, 10, 9);
+    this.time.delayedCall(460, () => {
+      this.player.setPosition(4832, 928);
+      body.enable = true;
+      body.updateFromGameObject();
+      for (const object of this.worldMapObjects) object.setVisible(true);
+      this.regionText?.setText('GUARDIAN COURT');
+      this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+      this.cameras.main.fadeIn(420, 6, 17, 14);
+      this.transitionLocked = false;
+      this.showMessage('Guardian defeated • Guardian cloak unlocked • Passage opened • Autosaved', 3000);
+    });
   }
 
   private generateCombatTextures(): void {
@@ -990,12 +1035,14 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private createWorldMap(map: Phaser.Tilemaps.Tilemap, layer: Phaser.Tilemaps.TilemapLayer): void {
-    this.add.rectangle(840,49,208,76,0x061510,0.9).setStrokeStyle(1,0x638275,0.6).setScrollFactor(0).setDepth(109);
+    const frame = this.add.rectangle(840,49,208,76,0x061510,0.9).setStrokeStyle(1,0x638275,0.6).setScrollFactor(0).setDepth(109);
     const g=this.add.graphics().setScrollFactor(0).setDepth(110).fillStyle(0x47755a,0.8);
-    for(let y=0;y<map.height;y+=2) for(let x=0;x<map.width;x+=2) {
-      if(layer.getTileAt(x,y)?.collides) g.fillRect(747+x/map.width*192,20+y/map.height*57,1.6,1.6);
+    const visibleCols = this.zoneKey === 'biosphere' ? Math.floor(OVERWORLD_PORTAL_X / TILE_SIZE) : map.width;
+    for(let y=0;y<map.height;y+=2) for(let x=0;x<visibleCols;x+=2) {
+      if(layer.getTileAt(x,y)?.collides) g.fillRect(747+x/visibleCols*192,20+y/map.height*57,1.6,1.6);
     }
     this.mapDot=this.add.circle(747,20,3,0xf6d898).setScrollFactor(0).setDepth(111);
+    this.worldMapObjects = [frame, g, this.mapDot];
     this.regionText=this.add.text(18,78,'WAKING GROVE',{fontFamily:'monospace',fontSize:'13px',color:'#f0d8ab',letterSpacing:2}).setScrollFactor(0).setDepth(110);
     this.add.text(18,496,'CLIMB  W/S + A/D     LEAP OFF  C     SANCTUARIES RESTORE HEALTH',{fontFamily:'monospace',fontSize:'11px',color:'#b7cabb',backgroundColor:'#07110baa'}).setPadding(5).setScrollFactor(0).setDepth(110);
   }
