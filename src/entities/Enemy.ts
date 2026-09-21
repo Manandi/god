@@ -54,6 +54,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private stepTween?: Phaser.Tweens.Tween;
   private stepCooldownUntil = 0;
   private obstacleLockUntil = 0;
+  private usesExternalArenaFloor = false;
   private readonly hazardBounds: Phaser.Geom.Rectangle[] = [];
   private lastProgressX: number;
   private lastProgressAt: number;
@@ -108,6 +109,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   setPatrolBounds(minX: number, maxX: number): void {
     this.patrolMinX = minX;
     this.patrolMaxX = maxX;
+  }
+
+  setExternalArenaFloor(enabled: boolean): void {
+    this.usesExternalArenaFloor = enabled;
   }
 
   setEncounterActive(active: boolean): void {
@@ -266,7 +271,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.anims.timeScale = 2.2;
       this.setScale(1.09 + stride * 0.025, 0.91 - stride * 0.018).setAngle(this.direction * (2 + stride));
       const atArenaEdge = this.x <= this.patrolMinX || this.x >= this.patrolMaxX;
-      if (now >= this.stateUntil || atArenaEdge || body.blocked.left || body.blocked.right || !layerHasFloor(this.groundLayer, body, this.direction)) this.enterRecover(650);
+      const lostFloor = !this.usesExternalArenaFloor && !layerHasFloor(this.groundLayer, body, this.direction);
+      if (now >= this.stateUntil || atArenaEdge || body.blocked.left || body.blocked.right || lostFloor) this.enterRecover(650);
       return true;
     }
     if (this.bossState === 'jump') {
@@ -306,8 +312,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     this.anims.timeScale = 1;
     this.setScale(1).setAngle(0);
-    const wallAhead = this.groundLayer.getTileAtWorldXY(this.direction > 0 ? body.right + 6 : body.left - 6, body.center.y)?.collides;
-    if (body.blocked.down && (wallAhead || !layerHasFloor(this.groundLayer, body, this.direction))) this.turnFromObstacle();
+    const wallAhead = !this.usesExternalArenaFloor
+      && this.groundLayer.getTileAtWorldXY(this.direction > 0 ? body.right + 6 : body.left - 6, body.center.y)?.collides;
+    const lostFloor = !this.usesExternalArenaFloor && !layerHasFloor(this.groundLayer, body, this.direction);
+    if (body.blocked.down && (wallAhead || lostFloor)) this.turnFromObstacle();
     return true;
   }
 
