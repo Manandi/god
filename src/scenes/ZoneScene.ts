@@ -828,6 +828,7 @@ export class ZoneScene extends Phaser.Scene {
         body.updateFromGameObject();
         this.guardian?.setPosition(GUARDIAN_ARENA_RIGHT - 210, GUARDIAN_ARENA_FLOOR_Y);
         this.guardian?.setPatrolBounds(GUARDIAN_ARENA_LEFT + 70, GUARDIAN_ARENA_RIGHT - 70);
+        this.guardian?.setExternalArenaFloor(true);
         const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
         guardianBody?.updateFromGameObject();
         GameAudio.startBoss();
@@ -890,7 +891,7 @@ export class ZoneScene extends Phaser.Scene {
     const title = this.add.text(GAME_WIDTH / 2, 25, 'BENEATH THE EASTERN ROOTS', {
       fontFamily: 'Georgia, serif', fontSize: '20px', color: '#dff2a3', letterSpacing: 4
     }).setOrigin(0.5).setScrollFactor(0).setDepth(181);
-    const dialogue = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 64, 'The roots remember a war the surface forgot.', {
+    const dialogue = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 64, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#e6f4e9', align: 'center', wordWrap: { width: 760 }
     }).setOrigin(0.5).setScrollFactor(0).setDepth(181);
     const skip = this.add.text(GAME_WIDTH - 18, GAME_HEIGHT - 17, 'E  SKIP', {
@@ -901,19 +902,39 @@ export class ZoneScene extends Phaser.Scene {
     const later = (delay: number, callback: () => void): void => {
       this.guardianCutsceneTimers.push(this.time.delayedCall(delay, callback));
     };
-    later(650, () => { this.guardianCutsceneCanSkip = true; });
-    later(1700, () => dialogue.setText('At the forest\'s heart sleeps the last Heartseed—\nand below it, the Blight still claws upward.'));
-    later(3600, () => {
+    later(900, () => { this.guardianCutsceneCanSkip = true; });
+    this.typeGuardianDialogue(dialogue, 'The roots remember a war the surface forgot.', 450);
+    this.typeGuardianDialogue(dialogue, 'At the forest\'s heart sleeps the last Heartseed—\nand below it, the Blight still claws upward.', 3400);
+    later(7600, () => {
       this.guardian?.setEncounterActive(true);
       const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
       if (guardianBody) guardianBody.enable = false;
       GameAudio.playSfx('roar');
       this.cameras.main.shake(240, 0.006);
-      dialogue.setText('VERDANT GUARDIAN\n“I held it below while your world forgot my name.”');
     });
-    later(5900, () => dialogue.setText('“Prove you can bear the Heartseed...\nor become another root in its prison.”'));
-    later(7900, () => this.finishGuardianCutscene());
+    this.typeGuardianDialogue(dialogue, 'VERDANT GUARDIAN\n“I held it below while your world forgot my name.”', 7900, 42);
+    this.typeGuardianDialogue(dialogue, '“Prove you can bear the Heartseed...\nor become another root in its prison.”', 12000, 42);
+    later(16400, () => this.finishGuardianCutscene());
     playerBody.setVelocity(0, 0);
+  }
+
+  private typeGuardianDialogue(dialogue: Phaser.GameObjects.Text, text: string, delay: number, characterDelay = 38): void {
+    const start = this.time.delayedCall(delay, () => {
+      if (!this.guardianCutsceneActive || !dialogue.active) return;
+      dialogue.setText('');
+      let visibleCharacters = 0;
+      const typing = this.time.addEvent({
+        delay: characterDelay,
+        repeat: Math.max(0, text.length - 1),
+        callback: () => {
+          if (!this.guardianCutsceneActive || !dialogue.active) return;
+          visibleCharacters += 1;
+          dialogue.setText(text.slice(0, visibleCharacters));
+        }
+      });
+      this.guardianCutsceneTimers.push(typing);
+    });
+    this.guardianCutsceneTimers.push(start);
   }
 
   private finishGuardianCutscene(): void {
