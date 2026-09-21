@@ -6,13 +6,15 @@ import {
   DEFAULT_INPUTS,
   DEFAULT_STAT_XP,
   INPUT_BOUNDS,
+  localeUnitSystem,
   PlayerProgress,
   recalculateLevel,
   type ActivityEntry,
   type CharacterAppearance,
   type CharacterStats,
   type LifeInputs,
-  type StatKey
+  type StatKey,
+  type UnitSystem
 } from './PlayerProgress';
 
 const STORAGE_KEY = 'hollow-roots-save-v1';
@@ -37,6 +39,9 @@ interface SaveSnapshot {
   };
   decayApplied: number;
   iqTakenAt: string;
+  unitSystem: UnitSystem;
+  lastCheckInWeek: string;
+  profileCreatedAt: string;
 }
 
 let autosaveInstalled = false;
@@ -97,6 +102,9 @@ export const GameSave = {
       for (const id of saved.progress?.collectedItems ?? []) if (typeof id === 'string') CollectedItems.add(id);
       PlayerProgress.decayApplied = finite(saved.decayApplied, 0, 0, 10000000);
       PlayerProgress.iqTakenAt = typeof saved.iqTakenAt === 'string' ? saved.iqTakenAt : '';
+      PlayerProgress.unitSystem = saved.unitSystem === 'imperial' || saved.unitSystem === 'metric' ? saved.unitSystem : localeUnitSystem();
+      PlayerProgress.lastCheckInWeek = typeof saved.lastCheckInWeek === 'string' ? saved.lastCheckInWeek : '';
+      PlayerProgress.profileCreatedAt = typeof saved.profileCreatedAt === 'string' ? saved.profileCreatedAt : '';
       // Charge any lapse that happened while the game was closed.
       applyInactivityDecay();
       return true;
@@ -125,7 +133,10 @@ export const GameSave = {
         collectedItems: [...CollectedItems]
       },
       decayApplied: PlayerProgress.decayApplied,
-      iqTakenAt: PlayerProgress.iqTakenAt
+      iqTakenAt: PlayerProgress.iqTakenAt,
+      unitSystem: PlayerProgress.unitSystem,
+      lastCheckInWeek: PlayerProgress.lastCheckInWeek,
+      profileCreatedAt: PlayerProgress.profileCreatedAt
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Gameplay continues without storage. */ }
   },
@@ -148,6 +159,8 @@ export const GameSave = {
     PlayerProgress.guardianDefeated = false;
     PlayerProgress.decayApplied = 0;
     PlayerProgress.iqTakenAt = '';
+    PlayerProgress.lastCheckInWeek = '';
+    PlayerProgress.profileCreatedAt = '';
     CollectedItems.clear();
   },
 

@@ -44,6 +44,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private hurtUntil = 0;
   private turnUntil = 0;
   private bossState: BossState = 'patrol';
+  private deflectUntil = 0;
   private queuedAttack: BossAttack = 'charge';
   private lastAttack: BossAttack = 'jump';
   private stateUntil = 1000;
@@ -432,8 +433,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.healthBar.fillStyle(this.isBoss ? 0xf1a562 : 0xbace8c).fillRect(this.x - width / 2, y, width * this.health / this.maxHealth, 5);
   }
 
+  /** Mid-charge the guardian is armoured: the shell is leading, so there is
+   * nothing soft to hit. Attacks bounce until it commits to a recovery. */
+  get isArmoured(): boolean {
+    return this.isBoss && this.bossState === 'charge';
+  }
+
   takeHit(fromX: number, damage = 1): void {
     if (this.defeated || this.scene.time.now < this.hurtUntil) return;
+    if (this.isArmoured) {
+      this.flashDeflect();
+      return;
+    }
     // A strike during a stair tween should interrupt the movement immediately,
     // restore the physics body at the visible sprite, and then apply knockback.
     this.cancelStepTraversal();
@@ -444,6 +455,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.isBoss || this.bossState === 'patrol' || this.bossState === 'recover') body.setVelocity(fromX < this.x ? 105 : -105, -80);
     this.setTint(0xffffff);
     this.scene.time.delayedCall(HIT_STUN_MS, () => { if (!this.defeated && this.bossState === 'patrol') this.clearTint(); });
+  }
+
+  /** A brief pale flare so a deflected hit reads as "armoured", not "missed". */
+  private flashDeflect(): void {
+    if (this.scene.time.now < this.deflectUntil) return;
+    this.deflectUntil = this.scene.time.now + 180;
+    const spark = this.scene.add
+      .circle(this.x + this.direction * 26, this.y - this.height * 0.45, 13, 0xdff0ff, 0.75)
+      .setDepth(22);
+    this.scene.tweens.add({ targets: spark, alpha: 0, scale: 1.9, duration: 190, onComplete: () => spark.destroy() });
+    this.scene.cameras.main.shake(50, 0.0016);
   }
 
   defeat(): void {

@@ -453,6 +453,13 @@ export class ZoneScene extends Phaser.Scene {
     const crossedShell = previousBottom <= stompY + 10 && body.bottom >= stompY - 3;
     const isStomp = body.velocity.y > 70 && horizontalContact && crossedShell;
 
+    // A charging guardian leads with its shell, so there is no safe landing on
+    // it and no opening to strike — contact hurts however you make it.
+    if (enemy.isArmoured) {
+      this.hurtPlayer(enemy.x);
+      return;
+    }
+
     if (isStomp) {
       // Separate the player from the shell before the next overlap pass and
       // grant a very short stomp-only grace window. Without both, Arcade can

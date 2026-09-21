@@ -70,6 +70,26 @@ export const INPUT_BOUNDS = {
   iqScore: [55, 200]
 } as const satisfies Record<keyof LifeInputs, readonly [number, number]>;
 
+export type UnitSystem = 'metric' | 'imperial';
+
+/** Canonical storage stays metric whatever the player picks, so switching
+ * systems changes what is typed and read but never changes a stat. */
+export const IMPERIAL_UNITS: Partial<Record<keyof LifeInputs, { unit: string; perMetric: number; step: number }>> = {
+  verticalJumpCm: { unit: 'inches', perMetric: 1 / 2.54, step: 0.5 },
+  benchPressKg: { unit: 'lbs', perMetric: 2.2046226218, step: 5 }
+};
+
+export const KM_PER_MILE = 1.609344;
+
+/** Seeds the initial choice from the browser's locale; the player owns it after that. */
+export function localeUnitSystem(): UnitSystem {
+  try {
+    return /^en-(US|LR|MM)\b/i.test(navigator.language ?? '') ? 'imperial' : 'metric';
+  } catch {
+    return 'metric';
+  }
+}
+
 export const DEFAULT_INPUTS: LifeInputs = {
   pushups: 15,
   pullups: 5,
@@ -172,6 +192,11 @@ export const PlayerProgress: {
   decayApplied: number;
   /** Date of the last reasoning quiz, gating the monthly retake. */
   iqTakenAt: string;
+  unitSystem: UnitSystem;
+  /** Week key of the last reckoning with Mycel. */
+  lastCheckInWeek: string;
+  /** Day the baseline was set; decay is never charged for days before it. */
+  profileCreatedAt: string;
 } = {
   level: 1,
   totalXp: 0,
@@ -186,19 +211,72 @@ export const PlayerProgress: {
   currentSpawn: 'start',
   guardianDefeated: false,
   decayApplied: 0,
-  iqTakenAt: ''
+  iqTakenAt: '',
+  unitSystem: localeUnitSystem(),
+  lastCheckInWeek: '',
+  profileCreatedAt: ''
 };
+
+export interface WeeklyReport {
+  trainingDays: number;
+  distanceKm: number;
+  sleepHours: number;
+  studyHours: number;
+}
+
+/** Mycel holds a reckoning once per calendar week, but only for players who
+ * already have a baseline — there is nothing to review on day one. */
+export function checkInDue(): boolean {
+  return PlayerProgress.profileCompleted && PlayerProgress.lastCheckInWeek !== currentWeekKey();
+}
+
+/** Turns a week's self-report into permanent stat XP and folds the new sleep
+ * figure back into the baseline. Returns the point movement per stat so Mycel
+ * can tell the player what actually changed. */
+export function applyWeeklyCheckIn(report: WeeklyReport): Partial<Record<StatKey, number>> {
+  const before = { ...PlayerProgress.stats };
+  const days = Math.max(0, Math.min(7, report.trainingDays));
+  const distance = Math.max(0, Math.min(500, report.distanceKm));
+  const study = Math.max(0, Math.min(80, report.studyHours));
+
+  PlayerProgress.statXp.strength += Math.round(days * 45);
+  PlayerProgress.statXp.defense += Math.round(days * 30);
+  PlayerProgress.statXp.speed += Math.round(distance * 6);
+  PlayerProgress.statXp.stamina += Math.round(distance * 14);
+  PlayerProgress.statXp.intelligence += Math.round(study * 35);
+  PlayerProgress.inputs.sleepHours = Math.max(0, Math.min(14, report.sleepHours));
+
+  PlayerProgress.totalXp += Math.round(days * 60 + distance * 12 + study * 25);
+  PlayerProgress.lastCheckInWeek = currentWeekKey();
+  // A completed reckoning counts as showing up, so it clears any pending decay.
+  PlayerProgress.decayApplied = 0;
+  PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
+  recalculateLevel();
+
+  const deltas: Partial<Record<StatKey, number>> = {};
+  for (const key of Object.keys(PlayerProgress.stats) as StatKey[]) {
+    const change = PlayerProgress.stats[key] - before[key];
+    if (change !== 0) deltas[key] = change;
+  }
+  return deltas;
+}
 
 export const DECAY_GRACE_DAYS = 3;
 export const DECAY_XP_PER_IDLE_DAY = 25;
 
-/** Days of silence ending today, counting back until a logged day is found. */
+/** Days of silence ending today, counting back to the last logged day — or to
+ * the day the character was created, whichever is later. Without that floor a
+ * player who has not logged anything yet would be charged for every day back
+ * to the search limit the first time they reopened the game. */
 function idleDayCount(): number {
   const logged = new Set(PlayerProgress.activities.map(entry => entry.date));
+  const created = PlayerProgress.profileCreatedAt;
   const cursor = new Date();
   let idle = 0;
   while (idle < 400) {
-    if (logged.has(cursor.toISOString().slice(0, 10))) break;
+    const key = cursor.toISOString().slice(0, 10);
+    if (logged.has(key)) break;
+    if (created && key <= created) break;
     idle += 1;
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
@@ -210,6 +288,8 @@ function idleDayCount(): number {
  * negative a long enough lapse drops stats below their tested baseline.
  * Returns the XP removed by this call so the UI can report the loss. */
 export function applyInactivityDecay(): number {
+  // Nothing to lose before a baseline exists.
+  if (!PlayerProgress.profileCompleted) return 0;
   const owed = Math.max(0, idleDayCount() - DECAY_GRACE_DAYS) * DECAY_XP_PER_IDLE_DAY;
   const unpaid = owed - PlayerProgress.decayApplied;
   PlayerProgress.decayApplied = owed;
@@ -357,10 +437,16 @@ export function weeklyGoals(): WeeklyGoal[] {
   // Targets climb with every week played, so the quest keeps pace instead of
   // staying trivial once the habit is established. Rewards climb with them.
   const grow = (base: number, perWeek: number, cap: number): number => Math.min(cap, Math.round(base + tier * perWeek));
+  // Distance is stored in km; when the player is on imperial both sides of the
+  // goal convert together, so the progress ratio is unchanged.
+  const imperial = PlayerProgress.unitSystem === 'imperial';
+  const distanceKm = grow(5, 1, 30);
+  const distanceTarget = imperial ? Math.round((distanceKm / KM_PER_MILE) * 10) / 10 : distanceKm;
+  const distanceUnit = imperial ? 'mi' : 'km';
   return [
     make('train', `Train ${grow(3, 0.25, 6)} days`, workoutDays, grow(3, 0.25, 6), 'days', 250 + tier * 25),
     make('steps', `5K steps on ${grow(3, 0.25, 7)} days`, stepDays, grow(3, 0.25, 7), 'days', 150 + tier * 20),
-    make('distance', `Move ${grow(5, 1, 30)} km`, runKm, grow(5, 1, 30), 'km', 200 + tier * 25),
+    make('distance', `Move ${distanceTarget} ${distanceUnit}`, imperial ? runKm / KM_PER_MILE : runKm, distanceTarget, distanceUnit, 200 + tier * 25),
     make('study', `Learn ${grow(120, 15, 420)} min`, studyMinutes, grow(120, 15, 420), 'min', 180 + tier * 20)
   ];
 }

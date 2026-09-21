@@ -1,4 +1,4 @@
-type Track = 'ambient' | 'boss';
+type Track = 'ambient' | 'boss' | 'intro';
 type Sfx = 'stomp' | 'hit' | 'portal' | 'roar' | 'charge';
 
 /** Original procedural audio: every note and effect is synthesized at runtime,
@@ -36,6 +36,7 @@ export class GameAudio {
 
   static startAmbient(): void { this.startTrack('ambient'); }
   static startBoss(): void { this.startTrack('boss'); }
+  static startIntro(): void { this.startTrack('intro'); }
 
   private static startTrack(track: Track): void {
     this.unlock();
@@ -50,9 +51,11 @@ export class GameAudio {
       const now = this.context.currentTime;
       this.music.gain.cancelScheduledValues(this.context.currentTime);
       this.music.gain.setValueAtTime(0.0001, now);
-      this.music.gain.linearRampToValueAtTime(track === 'boss' ? 0.78 : 0.58, now + 0.06);
+      const level = track === 'boss' ? 0.78 : track === 'intro' ? 0.5 : 0.58;
+      this.music.gain.linearRampToValueAtTime(level, now + (track === 'intro' ? 1.6 : 0.06));
       this.playPhrase(track);
-      this.timer = window.setInterval(() => this.playPhrase(track), track === 'boss' ? 2857 : 4000);
+      const period = track === 'boss' ? 2857 : track === 'intro' ? 8000 : 4000;
+      this.timer = window.setInterval(() => this.playPhrase(track), period);
     };
     if (this.context.state === 'running') begin();
     else void this.context.resume().then(begin);
@@ -76,6 +79,24 @@ export class GameAudio {
         if (i % 4 === 2) this.noise(start + i * 0.5, 0.11, 0.055, output, 1250);
         this.noise(start + i * 0.5 + 0.25, 0.025, 0.018, output, 4200);
       }
+    } else if (track === 'intro') {
+      // Something old and patient waking up underground. A detuned fifth
+      // drones underneath while a slow D-minor figure and a distant bell pick
+      // their way over it, so the opening feels watched rather than scored.
+      for (const [frequency, volume] of [[36.71, 0.2], [37.05, 0.17], [55, 0.12]] as Array<[number, number]>) {
+        this.tone(frequency, start, 8.4, 'sine', volume, output, 420);
+      }
+      const figure: Array<[number, number]> = [[146.83, 0], [174.61, 1.9], [130.81, 3.9], [110, 5.9]];
+      for (const [frequency, offset] of figure) {
+        this.tone(frequency, start + offset, 2.1, 'triangle', 0.085, output, 900);
+        this.tone(frequency * 2, start + offset + 0.09, 1.5, 'sine', 0.03, output, 1700);
+      }
+      // A single far-off bell, late in the bar, left to ring out.
+      this.tone(587.33, start + 5.1, 2.8, 'sine', 0.045, output, 2600);
+      this.tone(880, start + 5.16, 2.2, 'sine', 0.018, output, 3200);
+      // Wind through the roots.
+      for (let i = 0; i < 4; i += 1) this.noise(start + i * 2.1, 1.5, 0.03, output, 520);
+      this.sweep(58, 31, start + 3.6, 1.9, 'sine', 0.12, output);
     } else {
       // Original 168 BPM battle cue: rapid monster-battle energy without
       // borrowing a melody or recording from an existing game.

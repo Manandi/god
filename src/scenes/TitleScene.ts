@@ -7,10 +7,15 @@ import { QUIZ_LENGTH, QUIZ_SECONDS, quizForToday, quizScore, type QuizQuestion }
 import {
   activityStreak,
   addActivity,
+  applyWeeklyCheckIn,
   calculateStats,
+  checkInDue,
   currentLevelXp,
+  currentWeekKey,
   DEFAULT_INPUTS,
+  IMPERIAL_UNITS,
   INPUT_BOUNDS,
+  KM_PER_MILE,
   PlayerProgress,
   scoreMetric,
   totalStats,
@@ -20,11 +25,12 @@ import {
   type CharacterAppearance,
   type CharacterStats,
   type CloakId,
+  type StatKey,
   type HairId,
   type LifeInputs
 } from '../progress/PlayerProgress';
 
-type TitleView = 'intro' | 'menu' | 'create' | 'questions' | 'quiz' | 'summary' | 'customize' | 'checkin' | 'character' | 'leaderboard';
+type TitleView = 'dialogue' | 'weekly' | 'menu' | 'create' | 'questions' | 'quiz' | 'summary' | 'customize' | 'checkin' | 'character' | 'leaderboard';
 
 const STAT_LABELS: Array<[keyof CharacterStats, string, string]> = [
   ['strength', 'STR', 'Strength'],
@@ -76,6 +82,13 @@ const INTRO_LINES = [
   'Show me what you are, and I will show you what you could become.'
 ];
 
+const WEEKLY_LINES = [
+  'You are back. Good — a week has turned while you were away.',
+  'The roots keep their own ledger, but they cannot see what you did up there. Only you can tell me that.',
+  'So account for it. What you trained, how far you moved, how you slept, what you put in your head.',
+  'Answer straight. Inflate it and you only cheat the numbers you carry.'
+];
+
 const SKIN_COLORS = ['#8d5c3c', '#b97950', '#d9a675', '#efc394', '#7a4930'];
 const CLOAK_COLORS: Record<CloakId, string> = { moss: '#47795a', sunroot: '#c28b42', moonfern: '#4c86a8', guardian: '#7f4f78' };
 const HAIR_COLORS: Record<HairId, string> = { raven: '#07110b', earth: '#553522', silver: '#b9c6bd' };
@@ -87,7 +100,13 @@ export class TitleScene extends Phaser.Scene {
   private questionIndex = 0;
   private draft: LifeInputs = { ...PlayerProgress.inputs };
   private introLine = 0;
+  private dialogueLines: string[] = INTRO_LINES;
+  private dialogueFinishLabel = 'BEGIN →';
+  private dialogueOnDone: () => void = () => {};
+  private quizCorrect = 0;
+  private quizSecondsUsed = 0;
   private confirmingReset = false;
+  private checkInDeltas?: Partial<Record<StatKey, number>>;
   private introTyper?: Phaser.Time.TimerEvent;
   private introTyping = false;
   private quizIndex = 0;
@@ -108,13 +127,22 @@ export class TitleScene extends Phaser.Scene {
     this.root = document.createElement('div');
     this.root.className = 'title-root';
     this.add.dom(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.root);
-    this.view = PlayerProgress.profileCompleted ? 'menu' : 'intro';
-    this.render();
+    if (PlayerProgress.profileCompleted) {
+      if (checkInDue()) {
+        this.startDialogue(WEEKLY_LINES, 'REPORT →', () => { this.view = 'weekly'; this.render(); });
+      } else {
+        this.view = 'menu';
+        this.render();
+      }
+    } else {
+      this.startDialogue(INTRO_LINES, 'BEGIN →', () => this.beginCreation());
+    }
   }
 
   private render(): void {
     if (this.view !== 'quiz') this.stopQuizTicker();
-    if (this.view === 'intro') this.renderIntro();
+    if (this.view === 'dialogue') this.renderDialogue();
+    else if (this.view === 'weekly') this.renderWeekly();
     else if (this.view === 'quiz') this.renderQuiz();
     else if (this.view === 'create') this.renderCreate();
     else if (this.view === 'questions') this.renderQuestion();
@@ -153,10 +181,11 @@ export class TitleScene extends Phaser.Scene {
     this.bindViewButtons();
   }
 
-  /** Mycel sets up the premise before the game asks anything of the player:
-   * power here is real-world power, and it leaves the same way it arrives. */
-  private renderIntro(): void {
-    const isLast = this.introLine === INTRO_LINES.length - 1;
+  /** Mycel's scenes, opening and closing, share one renderer: a portrait, a
+   * typed line, and a click that either finishes the typing or moves on. */
+  private renderDialogue(): void {
+    const lines = this.dialogueLines;
+    const isLast = this.introLine === lines.length - 1;
     this.root.innerHTML = `
       <section class="intro-stage" aria-label="Introduction">
         <canvas data-narrator width="220" height="220"></canvas>
@@ -165,30 +194,135 @@ export class TitleScene extends Phaser.Scene {
           <p class="intro-line" data-intro-text></p>
           <div class="intro-nav">
             <button class="quiet" data-action="skip-intro">SKIP</button>
-            <button class="primary" data-action="advance">${isLast ? 'BEGIN →' : 'NEXT ▸'}</button>
+            <button class="primary" data-action="advance">${isLast ? this.dialogueFinishLabel : 'NEXT ▸'}</button>
           </div>
         </div>
       </section>`;
     this.drawNarrator();
-    this.typeIntroLine(INTRO_LINES[this.introLine]);
+    this.typeIntroLine(lines[this.introLine]);
 
+    const finish = (): void => {
+      this.introTyper?.remove(false);
+      this.introTyping = false;
+      this.dialogueOnDone();
+    };
     const advance = (): void => {
       const target = this.root.querySelector<HTMLElement>('[data-intro-text]');
       if (this.introTyping) {
         this.introTyper?.remove(false);
         this.introTyping = false;
-        if (target) target.textContent = INTRO_LINES[this.introLine];
+        if (target) target.textContent = lines[this.introLine];
         return;
       }
-      if (isLast) { this.beginCreation(); return; }
+      if (isLast) { finish(); return; }
       this.introLine += 1;
       this.render();
     };
-    this.root.querySelector('[data-action="advance"]')?.addEventListener('click', advance);
+    // Browsers only allow audio after a gesture, so the drone starts on the
+    // first click rather than silently failing on scene load.
+    GameAudio.startIntro();
+    this.root.querySelector('[data-action="advance"]')?.addEventListener('click', () => { GameAudio.startIntro(); advance(); });
     this.root.querySelector<HTMLElement>('.intro-box')?.addEventListener('click', event => {
       if (!(event.target as HTMLElement).closest('button')) advance();
     });
-    this.root.querySelector('[data-action="skip-intro"]')?.addEventListener('click', () => this.beginCreation());
+    this.root.querySelector('[data-action="skip-intro"]')?.addEventListener('click', finish);
+  }
+
+  private startDialogue(lines: string[], finishLabel: string, onDone: () => void): void {
+    this.dialogueLines = lines;
+    this.dialogueFinishLabel = finishLabel;
+    this.dialogueOnDone = onDone;
+    this.introLine = 0;
+    this.view = 'dialogue';
+    this.render();
+  }
+
+  /** Once a week Mycel asks what the player actually did, and the answers move
+   * the stats. Skipping is allowed — it just banks nothing for the week. */
+  private renderWeekly(): void {
+    const imperial = PlayerProgress.unitSystem === 'imperial';
+    const deltas = this.checkInDeltas;
+    if (deltas) {
+      const moved = STAT_LABELS.filter(([key]) => deltas[key] !== undefined);
+      this.root.innerHTML = `
+        <section class="intro-stage" aria-label="Weekly reckoning result">
+          <canvas data-narrator width="220" height="220"></canvas>
+          <div class="intro-box">
+            <p class="intro-name">${NARRATOR_NAME}</p>
+            <p class="intro-line">${moved.length
+              ? `The roots felt that.<br><span class="delta-row">${moved.map(([key, short]) => `<b>${short} ${deltas[key]! > 0 ? '+' : ''}${deltas[key]}</b>`).join('')}</span>`
+              : 'Nothing moved. A week is a long time to stand still — the roots noticed that too.'}</p>
+            <div class="intro-nav"><span></span><button class="primary" data-action="weekly-done">CONTINUE →</button></div>
+          </div>
+        </section>`;
+      this.drawNarrator();
+      this.root.querySelector('[data-action="weekly-done"]')?.addEventListener('click', () => {
+        this.checkInDeltas = undefined;
+        this.view = 'menu';
+        this.render();
+      });
+      return;
+    }
+
+    this.root.innerHTML = `
+      <section class="title-card full-card question-card" aria-label="Weekly reckoning">
+        <div class="panel-heading">
+          <div><p class="eyebrow">THE WEEKLY RECKONING</p><h2>What did you do with the week?</h2></div>
+        </div>
+        <p class="panel-copy">Answer honestly. Mycel has no way of checking, and neither do the roots — but the numbers you carry are only worth what the answers were.</p>
+        <div class="weekly-form">
+          <label><span>Days trained<small>Any real session</small></span><input data-week="trainingDays" type="number" min="0" max="7" step="1" value="0"><b>of 7</b></label>
+          <label><span>Distance covered<small>Running or walking</small></span><input data-week="distance" type="number" min="0" max="${imperial ? 300 : 500}" step="0.5" value="0"><b>${imperial ? 'mi' : 'km'}</b></label>
+          <label><span>Average sleep<small>Per night this week</small></span><input data-week="sleepHours" type="number" min="0" max="14" step="0.5" value="${PlayerProgress.inputs.sleepHours}"><b>hrs</b></label>
+          <label><span>Time learning<small>Deliberate study or practice</small></span><input data-week="studyHours" type="number" min="0" max="80" step="0.5" value="0"><b>hrs</b></label>
+        </div>
+        <div class="question-nav">
+          <button class="quiet" data-action="weekly-skip">SKIP THIS WEEK</button>
+          <span></span>
+          <button class="primary" data-action="weekly-submit">REPORT →</button>
+        </div>
+      </section>`;
+
+    const read = (name: string): number => {
+      const raw = Number(this.root.querySelector<HTMLInputElement>(`[data-week="${name}"]`)?.value ?? 0);
+      return Number.isFinite(raw) ? raw : 0;
+    };
+    this.root.querySelector('[data-action="weekly-submit"]')?.addEventListener('click', () => {
+      const distance = read('distance');
+      this.checkInDeltas = applyWeeklyCheckIn({
+        trainingDays: read('trainingDays'),
+        distanceKm: imperial ? distance * KM_PER_MILE : distance,
+        sleepHours: read('sleepHours'),
+        studyHours: read('studyHours')
+      });
+      GameSave.save();
+      this.render();
+    });
+    this.root.querySelector('[data-action="weekly-skip"]')?.addEventListener('click', () => {
+      PlayerProgress.lastCheckInWeek = currentWeekKey();
+      GameSave.save();
+      this.view = 'menu';
+      this.render();
+    });
+  }
+
+  /** Mycel's send-off, which reacts to how the assessment actually went. */
+  private outroLines(): string[] {
+    const total = totalStats();
+    const read = total >= 90
+      ? 'You are stronger than most who come down here. That will matter less than you think, but it is a start.'
+      : total >= 60
+      ? 'Unremarkable. That is not an insult — most of the world is unremarkable, and most of the world never comes this far down.'
+      : 'You are weak. I say it plainly because the roots will say it louder, and sooner.';
+    return [
+      'There. I have your measure.',
+      read,
+      'These numbers are not a verdict. They are only where you happen to stand this morning.',
+      'Train out there and you will feel it in here — in what you can lift, how far you can run, how clearly you read the dark.',
+      'But do not fall away from the journey. Go quiet for long enough and the roots take back everything you brought, until you are less than you were when you arrived.',
+      'Mind the drop. The canopy is a very long way up once you are beneath it.',
+      'Good luck, explorer. Come back stronger than you left.'
+    ];
   }
 
   private typeIntroLine(text: string): void {
@@ -285,7 +419,10 @@ export class TitleScene extends Phaser.Scene {
   private finishQuiz(questions: QuizQuestion[]): void {
     this.stopQuizTicker();
     const correct = questions.reduce((total, question, index) => total + (this.quizAnswers[index] === question.answer ? 1 : 0), 0);
-    this.draft.iqScore = quizScore(correct, questions.length);
+    const secondsLeft = Math.max(0, (this.quizDeadline - Date.now()) / 1000);
+    this.draft.iqScore = quizScore(correct, questions.length, secondsLeft, QUIZ_SECONDS);
+    this.quizCorrect = correct;
+    this.quizSecondsUsed = Math.round(QUIZ_SECONDS - secondsLeft);
     PlayerProgress.iqTakenAt = new Date().toISOString().slice(0, 10);
     this.finishAssessment();
   }
@@ -377,12 +514,17 @@ export class TitleScene extends Phaser.Scene {
     const value = this.draft[question.key];
     const preview = calculateStats(this.draft, PlayerProgress.statXp);
     const statName = STAT_LABELS.find(([key]) => key === question.stat)?.[2] ?? '';
+    const imperial = PlayerProgress.unitSystem === 'imperial' ? IMPERIAL_UNITS[question.key] : undefined;
+    const shownValue = imperial ? Math.round(value * imperial.perMetric * 10) / 10 : value;
     const field = question.asDuration
       ? `<span class="duration-input"><input data-minutes type="number" min="0" max="${Math.floor(max / 60)}" step="1" value="${Math.floor(value / 60)}" aria-label="Minutes"><b>min</b><input data-seconds type="number" min="0" max="59" step="1" value="${Math.round(value % 60)}" aria-label="Seconds"><b>sec</b></span>`
-      : `<span class="single-input"><input data-answer type="number" min="${min}" max="${max}" step="${question.step}" value="${value}" aria-label="${question.prompt}"><b>${question.unit}</b></span>`;
+      : `<span class="single-input"><input data-answer type="number" min="${imperial ? Math.floor(min * imperial.perMetric) : min}" max="${imperial ? Math.ceil(max * imperial.perMetric) : max}" step="${imperial ? imperial.step : question.step}" value="${shownValue}" aria-label="${question.prompt}"><b>${imperial ? imperial.unit : question.unit}</b></span>`;
     this.root.innerHTML = `
       <section class="title-card full-card question-card" aria-label="Baseline assessment">
-        <div class="panel-heading"><div><p class="eyebrow">QUESTION ${this.questionIndex + 1} OF ${QUESTIONS.length}</p><h2>${question.prompt}</h2></div>${PlayerProgress.profileCompleted ? this.backButton() : ''}</div>
+        <div class="panel-heading">
+          <div><p class="eyebrow">QUESTION ${this.questionIndex + 1} OF ${QUESTIONS.length}</p><h2>${question.prompt}</h2></div>
+          <div class="panel-tools"><button data-action="units">${PlayerProgress.unitSystem === 'imperial' ? 'US · LB / IN' : 'METRIC · KG / CM'}</button>${PlayerProgress.profileCompleted ? this.backButton() : ''}</div>
+        </div>
         <i class="question-progress"><b style="width:${(this.questionIndex + 1) / QUESTIONS.length * 100}%"></b></i>
         <p class="panel-copy">${question.help}</p>
         <div class="question-answer">
@@ -404,7 +546,8 @@ export class TitleScene extends Phaser.Scene {
         return (Number.isFinite(minutes) ? minutes : 0) * 60 + (Number.isFinite(seconds) ? seconds : 0);
       }
       const raw = Number(this.root.querySelector<HTMLInputElement>('[data-answer]')?.value ?? 0);
-      return Number.isFinite(raw) ? raw : 0;
+      if (!Number.isFinite(raw)) return 0;
+      return imperial ? raw / imperial.perMetric : raw;
     };
     const commit = (): void => {
       this.draft[question.key] = Phaser.Math.Clamp(readAnswer(), min, max);
@@ -433,6 +576,13 @@ export class TitleScene extends Phaser.Scene {
     };
     this.root.querySelector('[data-action="next"]')?.addEventListener('click', () => step(1));
     this.root.querySelector('[data-action="prev"]')?.addEventListener('click', () => step(-1));
+    this.root.querySelector('[data-action="units"]')?.addEventListener('click', () => {
+      // Commit first: the typed number means something different afterwards.
+      commit();
+      PlayerProgress.unitSystem = PlayerProgress.unitSystem === 'imperial' ? 'metric' : 'imperial';
+      GameSave.save();
+      this.render();
+    });
     this.root.querySelector('[data-action="skip"]')?.addEventListener('click', () => {
       this.draft[question.key] = DEFAULT_INPUTS[question.key];
       const next = this.questionIndex + 1;
@@ -447,6 +597,8 @@ export class TitleScene extends Phaser.Scene {
     PlayerProgress.inputs = { ...this.draft };
     PlayerProgress.stats = calculateStats(PlayerProgress.inputs, PlayerProgress.statXp);
     PlayerProgress.profileCompleted = true;
+    PlayerProgress.lastCheckInWeek = currentWeekKey();
+    PlayerProgress.profileCreatedAt = new Date().toISOString().slice(0, 10);
     GameSave.save();
     this.view = 'summary';
     this.render();
@@ -462,7 +614,11 @@ export class TitleScene extends Phaser.Scene {
     const detail = (key: keyof CharacterStats): string => {
       if (key === 'discipline') return 'Starts at 10 · rises and falls with your consistency';
       const parts = sources[key].map(question => this.answerSummary(question));
-      if (key === 'intelligence') parts.push(`quiz ${PlayerProgress.inputs.iqScore} → ${scoreMetric('iqScore', PlayerProgress.inputs.iqScore)}`);
+      if (key === 'intelligence') {
+        const clock = `${Math.floor(this.quizSecondsUsed / 60)}:${String(this.quizSecondsUsed % 60).padStart(2, '0')}`;
+        const iq = PlayerProgress.inputs.iqScore;
+        parts.push(`quiz ${this.quizCorrect}/${QUIZ_LENGTH} in ${clock} → ${iq} → ${scoreMetric('iqScore', iq)}`);
+      }
       return parts.join(' · ');
     };
     this.root.innerHTML = `
@@ -484,15 +640,20 @@ export class TitleScene extends Phaser.Scene {
       this.view = 'questions';
       this.render();
     });
-    this.root.querySelector('[data-action="enter"]')?.addEventListener('click', () => { this.view = 'menu'; this.render(); });
+    this.root.querySelector('[data-action="enter"]')?.addEventListener('click', () => {
+      this.startDialogue(this.outroLines(), 'ENTER THE ROOTS →', () => { this.view = 'menu'; this.render(); });
+    });
   }
 
   /** "15 reps → 10" — the answer next to the points it earned, so the summary
    * shows why a stat landed where it did rather than just asserting a number. */
   private answerSummary(question: Question): string {
     const value = PlayerProgress.inputs[question.key];
+    const imperial = PlayerProgress.unitSystem === 'imperial' ? IMPERIAL_UNITS[question.key] : undefined;
     const shown = question.asDuration
       ? `${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`
+      : imperial
+      ? `${Math.round(value * imperial.perMetric * 10) / 10} ${imperial.unit}`
       : `${value}${question.unit ? ` ${question.unit}` : ''}`;
     return `${shown} → ${scoreMetric(question.key, value)}`;
   }
@@ -536,7 +697,7 @@ export class TitleScene extends Phaser.Scene {
         <p class="weekly-label">ACTIVITY LOG</p><div class="effort-grid">
           <button data-log="workout"><strong>WORKOUT</strong><small>+100 XP · STR / DEF</small></button>
           <button data-log="steps"><strong>5,000+ STEPS</strong><small>+50 XP · STA<br>once per day</small></button>
-          <label><strong>RUN / WALK</strong><small>Distance builds SPD / STA</small><span><input data-amount="run" type="number" min="0.1" max="100" step="0.1" value="2"> km <button data-log="run">LOG</button></span></label>
+          <label><strong>RUN / WALK</strong><small>Distance builds SPD / STA</small><span><input data-amount="run" type="number" min="0.1" max="100" step="0.1" value="2"> ${PlayerProgress.unitSystem === 'imperial' ? 'mi' : 'km'} <button data-log="run">LOG</button></span></label>
           <label><strong>LEARN / STUDY</strong><small>Learning builds IQ</small><span><input data-amount="study" type="number" min="5" max="480" step="5" value="30"> min <button data-log="study">LOG</button></span></label>
           <button data-log="goal"><strong>DAILY GOAL</strong><small>+60 XP<br>builds automatic Discipline</small></button>
         </div>
@@ -546,7 +707,10 @@ export class TitleScene extends Phaser.Scene {
       button.addEventListener('click', () => {
         const kind = button.dataset.log as ActivityKind;
         const input = this.root.querySelector<HTMLInputElement>(`[data-amount="${kind}"]`);
-        const result = addActivity(kind, input ? Number(input.value) : 1);
+        let amount = input ? Number(input.value) : 1;
+        // Distance is logged in km whatever the player typed it in.
+        if (kind === 'run' && PlayerProgress.unitSystem === 'imperial') amount *= KM_PER_MILE;
+        const result = addActivity(kind, amount);
         this.feedback = result.ok ? `${result.message} +${result.xp} XP` : result.message;
         if (result.ok) GameSave.save();
         this.renderCheckIn();
@@ -635,11 +799,9 @@ export class TitleScene extends Phaser.Scene {
     }
     GameSave.reset();
     this.confirmingReset = false;
-    this.introLine = 0;
     this.questionIndex = 0;
     this.draft = { ...PlayerProgress.inputs };
-    this.view = 'intro';
-    this.render();
+    this.startDialogue(INTRO_LINES, 'BEGIN →', () => this.beginCreation());
   }
 
   private openAssessment(): void {
