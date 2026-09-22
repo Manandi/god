@@ -8,6 +8,7 @@ import { PlayerProgress } from '../progress/PlayerProgress';
 import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
+import { DevMode } from '../dev/DevMode';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
@@ -101,6 +102,8 @@ export class ZoneScene extends Phaser.Scene {
   private menuKey!: Phaser.Input.Keyboard.Key;
   private portalPrompt?: Phaser.GameObjects.Text;
   private bossInLair = false;
+  private enterGuardianLair?: (skipCutscene?: boolean) => void;
+  private devInvincible = false;
   private guardianCutsceneActive = false;
   private guardianCutsceneCanSkip = false;
   private guardianCutsceneObjects: Phaser.GameObjects.GameObject[] = [];
@@ -277,6 +280,8 @@ export class ZoneScene extends Phaser.Scene {
     this.createBossPortal();
 
     this.createHud();
+    DevMode.init();
+    this.mountDevPanel();
     if(this.zoneKey === 'biosphere') this.createWorldMap(map,groundLayer);
     this.cameras.main.fadeIn(500,6,17,14);
     GameAudio.startAmbient();
@@ -490,6 +495,7 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private hurtPlayer(sourceX: number): void {
+    if (this.devInvincible) return;
     if (this.dying || this.time.now < this.playerInvulnerableUntil || this.player.isDashInvulnerable) return;
     this.playerInvulnerableUntil = this.time.now + PLAYER_INVULNERABLE_MS;
     this.health = Math.max(0, this.health - 1);
@@ -817,7 +823,7 @@ export class ZoneScene extends Phaser.Scene {
 
     const zone = this.add.zone(portalX, portalFloorY - 46, 76, 108);
     this.physics.add.existing(zone, true);
-    const enterLair = (): void => {
+    const enterLair = (skipCutscene = false): void => {
       if (this.bossInLair || this.transitionLocked) return;
       this.bossInLair = true;
       this.transitionLocked = true;
@@ -831,17 +837,19 @@ export class ZoneScene extends Phaser.Scene {
         (gateZone.body as Phaser.Physics.Arcade.StaticBody).enable = false;
         for (const object of this.worldMapObjects) object.setVisible(false);
         this.regionText?.setText('HEARTSEED PRISON');
-        this.player.setPosition(GUARDIAN_ARENA_LEFT + 150, GUARDIAN_ARENA_FLOOR_Y);
-        body.updateFromGameObject();
-        this.guardian?.setPosition(GUARDIAN_ARENA_RIGHT - 210, GUARDIAN_ARENA_FLOOR_Y);
+        // reset() clears prev as well as position; a teleport that only syncs
+        // position leaves Arcade separating against the old location.
+        body.reset(GUARDIAN_ARENA_LEFT + 150, GUARDIAN_ARENA_FLOOR_Y);
         this.guardian?.setPatrolBounds(GUARDIAN_ARENA_LEFT + 70, GUARDIAN_ARENA_RIGHT - 70);
         this.guardian?.setExternalArenaFloor(true);
         const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
-        guardianBody?.updateFromGameObject();
+        guardianBody?.reset(GUARDIAN_ARENA_RIGHT - 210, GUARDIAN_ARENA_FLOOR_Y);
         GameAudio.startBoss();
         this.beginGuardianCutscene(body);
+        if (skipCutscene) this.finishGuardianCutscene();
       });
     };
+    this.enterGuardianLair = enterLair;
     this.physics.add.overlap(this.player, zone, () => {
       if (this.bossInLair || this.transitionLocked) return;
       this.portalPrompt?.setVisible(true);
@@ -883,6 +891,41 @@ export class ZoneScene extends Phaser.Scene {
       this.physics.add.collider(this.guardian, floor);
       this.physics.add.collider(this.guardian, leftWall, () => this.guardian?.turnAwayFrom(left));
       this.physics.add.collider(this.guardian, rightWall, () => this.guardian?.turnAwayFrom(right));
+    }
+  }
+
+  /** The in-game half of the dev tools. Without this the panel disappears the
+   * moment you start playing, which is exactly when you need to reach the boss. */
+  private mountDevPanel(): void {
+    if (!DevMode.enabled) return;
+    // A console handle on the live scene, for poking at state while testing.
+    (window as typeof window & { __zoneScene?: ZoneScene }).__zoneScene = this;
+    const panel = document.createElement('aside');
+    panel.className = 'dev-panel dev-panel-game';
+    panel.innerHTML = `
+      <p>DEV · IN GAME</p>
+      <div class="dev-row"><button data-dev="boss">To boss</button><button data-dev="boss-skip">Boss, no scene</button></div>
+      <div class="dev-row"><button data-dev="invincible">Invincible: off</button><button data-dev="refill">Refill</button></div>
+      <div class="dev-row"><button data-dev="title">Back to title</button></div>`;
+    this.add.dom(GAME_WIDTH - 126, 62, panel).setScrollFactor(0).setDepth(200);
+
+    const actions: Record<string, () => void> = {
+      boss: () => this.enterGuardianLair?.(false),
+      'boss-skip': () => this.enterGuardianLair?.(true),
+      invincible: () => {
+        this.devInvincible = !this.devInvincible;
+        const button = panel.querySelector<HTMLButtonElement>('[data-dev="invincible"]');
+        if (button) button.textContent = `Invincible: ${this.devInvincible ? 'on' : 'off'}`;
+      },
+      refill: () => { this.health = this.maxHealth; this.updateHealthHud(); },
+      title: () => { GameSave.save(); this.scene.start('TitleScene'); }
+    };
+    for (const button of panel.querySelectorAll<HTMLButtonElement>('[data-dev]')) {
+      button.addEventListener('click', () => {
+        actions[button.dataset.dev!]?.();
+        // Hand focus back so movement keys keep working after a click.
+        (this.game.canvas as HTMLCanvasElement).focus();
+      });
     }
   }
 
@@ -954,7 +997,12 @@ export class ZoneScene extends Phaser.Scene {
     this.guardianCutsceneCanSkip = false;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
-    body.updateFromGameObject();
+    // reset() rather than updateFromGameObject(): the latter syncs position but
+    // leaves prev holding wherever the body was before the teleport into the
+    // arena. Arcade separates using prev, so it read the player as arriving
+    // from a thousand pixels away, resolved the floor overlap horizontally
+    // instead of vertically, and flung them into the far world bound.
+    body.reset(this.player.x, this.player.y);
     const needsRoar = this.guardian?.visible !== true;
     this.guardian?.setEncounterActive(true);
     // The cutscene freezes the guardian's body so it holds its pose; without
@@ -965,8 +1013,15 @@ export class ZoneScene extends Phaser.Scene {
       guardianBody.updateFromGameObject();
     }
     if (needsRoar) GameAudio.playSfx('roar');
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-    this.cameras.main.shake(150, 0.004);
+    // Skipping becomes available at 900ms but the establishing pan runs for
+    // 1300ms. A live pan keeps writing scrollX/scrollY every frame, so without
+    // cancelling it here it fights the resumed follow and the view drifts off
+    // the player. Reset it, then snap to the player instead of lerping back.
+    const camera = this.cameras.main;
+    camera.panEffect.reset();
+    camera.startFollow(this.player, true, 0.1, 0.1);
+    camera.centerOn(this.player.x, this.player.y);
+    camera.shake(150, 0.004);
     this.transitionLocked = false;
     this.showMessage('THE VERDANT GUARDIAN · WARDEN OF THE HEARTSEED', 2100);
   }
@@ -983,9 +1038,8 @@ export class ZoneScene extends Phaser.Scene {
     this.bossWaves?.clear(true, true);
     this.cameras.main.fadeOut(420, 3, 10, 9);
     this.time.delayedCall(460, () => {
-      this.player.setPosition(4832, 928);
       body.enable = true;
-      body.updateFromGameObject();
+      body.reset(4832, 928);
       for (const object of this.worldMapObjects) object.setVisible(true);
       this.regionText?.setText('GUARDIAN COURT');
       this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
