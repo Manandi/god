@@ -9,6 +9,7 @@ import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
 import { DevMode } from '../dev/DevMode';
+import { DevPanel } from '../dev/DevPanel';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
@@ -104,6 +105,7 @@ export class ZoneScene extends Phaser.Scene {
   private bossInLair = false;
   private enterGuardianLair?: (skipCutscene?: boolean) => void;
   private devInvincible = false;
+  private devWarps: Array<{ label: string; x: number; y: number }> = [];
   private guardianCutsceneActive = false;
   private guardianCutsceneCanSkip = false;
   private guardianCutsceneObjects: Phaser.GameObjects.GameObject[] = [];
@@ -281,6 +283,7 @@ export class ZoneScene extends Phaser.Scene {
 
     this.createHud();
     DevMode.init();
+    this.devWarps = this.collectDevWarps(map);
     this.mountDevPanel();
     if(this.zoneKey === 'biosphere') this.createWorldMap(map,groundLayer);
     this.cameras.main.fadeIn(500,6,17,14);
@@ -900,33 +903,59 @@ export class ZoneScene extends Phaser.Scene {
     if (!DevMode.enabled) return;
     // A console handle on the live scene, for poking at state while testing.
     (window as typeof window & { __zoneScene?: ZoneScene }).__zoneScene = this;
-    const panel = document.createElement('aside');
-    panel.className = 'dev-panel dev-panel-game';
-    panel.innerHTML = `
-      <p>DEV · IN GAME</p>
-      <div class="dev-row"><button data-dev="boss">To boss</button><button data-dev="boss-skip">Boss, no scene</button></div>
-      <div class="dev-row"><button data-dev="invincible">Invincible: off</button><button data-dev="refill">Refill</button></div>
-      <div class="dev-row"><button data-dev="title">Back to title</button></div>`;
-    this.add.dom(GAME_WIDTH - 126, 62, panel).setScrollFactor(0).setDepth(200);
-
-    const actions: Record<string, () => void> = {
-      boss: () => this.enterGuardianLair?.(false),
-      'boss-skip': () => this.enterGuardianLair?.(true),
-      invincible: () => {
-        this.devInvincible = !this.devInvincible;
-        const button = panel.querySelector<HTMLButtonElement>('[data-dev="invincible"]');
-        if (button) button.textContent = `Invincible: ${this.devInvincible ? 'on' : 'off'}`;
+    DevPanel.render([
+      {
+        title: 'WARP',
+        buttons: this.devWarps.map(target => ({
+          label: target.label,
+          run: () => this.devWarp(target.x, target.y)
+        }))
       },
-      refill: () => { this.health = this.maxHealth; this.updateHealthHud(); },
-      title: () => { GameSave.save(); this.scene.start('TitleScene'); }
+      {
+        title: 'GUARDIAN',
+        buttons: [
+          { label: 'With scene', run: () => this.enterGuardianLair?.(false) },
+          { label: 'Skip scene', run: () => this.enterGuardianLair?.(true) }
+        ]
+      },
+      {
+        title: 'PLAYER',
+        buttons: [
+          {
+            label: `Invincible: ${this.devInvincible ? 'on' : 'off'}`,
+            run: () => { this.devInvincible = !this.devInvincible; },
+            state: () => `Invincible: ${this.devInvincible ? 'on' : 'off'}`
+          },
+          { label: 'Refill', run: () => { this.health = this.maxHealth; this.updateHealthHud(); } },
+          { label: 'Title', run: () => { GameSave.save(); this.scene.start('TitleScene'); } }
+        ]
+      }
+    ]);
+  }
+
+  /** Warp points read off the map's own spawn and region markers, so they stay
+   * correct when the level is regenerated rather than drifting out of date. */
+  private collectDevWarps(map: Phaser.Tilemaps.Tilemap): Array<{ label: string; x: number; y: number }> {
+    if (!DevMode.enabled) return [];
+    const targets: Array<{ label: string; x: number; y: number }> = [];
+    const add = (label: string, x?: number, y?: number): void => {
+      if (!label || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (targets.some(target => target.label === label)) return;
+      targets.push({ label, x: x!, y: y! });
     };
-    for (const button of panel.querySelectorAll<HTMLButtonElement>('[data-dev]')) {
-      button.addEventListener('click', () => {
-        actions[button.dataset.dev!]?.();
-        // Hand focus back so movement keys keep working after a click.
-        (this.game.canvas as HTMLCanvasElement).focus();
-      });
-    }
+    for (const object of map.getObjectLayer('spawns')?.objects ?? []) add(object.name, object.x, object.y);
+    for (const object of map.getObjectLayer('regions')?.objects ?? []) add(object.name, object.x, object.y);
+    if (this.zoneKey === 'biosphere') add('Portal', OVERWORLD_PORTAL_X, 900);
+    return targets;
+  }
+
+  private devWarp(x: number, y: number): void {
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    // reset() rather than setPosition: it syncs prev, without which Arcade
+    // separates against the old location and flings the player away.
+    body.reset(x, y);
+    this.cameras.main.centerOn(x, y);
+    DevPanel.setNote(`Warped to ${Math.round(x)}, ${Math.round(y)}`);
   }
 
   private beginGuardianCutscene(playerBody: Phaser.Physics.Arcade.Body): void {
