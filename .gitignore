@@ -2,3 +2,7 @@ node_modules
 dist
 .DS_Store
 *.log
+
+# Local Supabase credentials; .env.example documents the keys.
+.env
+.env.local

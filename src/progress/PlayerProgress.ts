@@ -212,6 +212,8 @@ export const PlayerProgress: {
   profileCreatedAt: string;
   /** Achievement id to the date it was first earned. */
   achievements: Record<string, string>;
+  /** Name shown to friends on the online leaderboard. */
+  displayName: string;
 } = {
   level: 1,
   totalXp: 0,
@@ -230,7 +232,8 @@ export const PlayerProgress: {
   unitSystem: localeUnitSystem(),
   lastCheckInWeek: '',
   profileCreatedAt: '',
-  achievements: {}
+  achievements: {},
+  displayName: ''
 };
 
 export interface WeeklyReport {

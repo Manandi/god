@@ -43,6 +43,7 @@ interface SaveSnapshot {
   lastCheckInWeek: string;
   profileCreatedAt: string;
   achievements: Record<string, string>;
+  displayName: string;
 }
 
 let autosaveInstalled = false;
@@ -109,6 +110,7 @@ export const GameSave = {
       PlayerProgress.achievements = Object.fromEntries(
         Object.entries(saved.achievements ?? {}).filter(([id, date]) => typeof id === 'string' && typeof date === 'string')
       );
+      PlayerProgress.displayName = typeof saved.displayName === 'string' ? saved.displayName.slice(0, 24) : '';
       // Charge any lapse that happened while the game was closed.
       applyInactivityDecay();
       return true;
@@ -141,7 +143,8 @@ export const GameSave = {
       unitSystem: PlayerProgress.unitSystem,
       lastCheckInWeek: PlayerProgress.lastCheckInWeek,
       profileCreatedAt: PlayerProgress.profileCreatedAt,
-      achievements: { ...PlayerProgress.achievements }
+      achievements: { ...PlayerProgress.achievements },
+      displayName: PlayerProgress.displayName
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Gameplay continues without storage. */ }
   },

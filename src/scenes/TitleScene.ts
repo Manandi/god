@@ -5,6 +5,7 @@ import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
 import { DevMode, type DevPreset } from '../dev/DevMode';
 import { DevPanel } from '../dev/DevPanel';
+import { Leaderboard } from '../online/Leaderboard';
 import { QUIZ_LENGTH, QUIZ_SECONDS, quizForToday, quizScore, type QuizQuestion } from '../progress/ReasoningQuiz';
 import {
   activityStreak,
@@ -93,6 +94,9 @@ const WEEKLY_LINES = [
   'Answer straight. Inflate it and you only cheat the numbers you carry.'
 ];
 
+const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, character => ESCAPES[character]);
+
 const SKIN_COLORS = ['#8d5c3c', '#b97950', '#d9a675', '#efc394', '#7a4930'];
 const CLOAK_COLORS: Record<CloakId, string> = { moss: '#47795a', sunroot: '#c28b42', moonfern: '#4c86a8', guardian: '#7f4f78' };
 const HAIR_COLORS: Record<HairId, string> = { raven: '#07110b', earth: '#553522', silver: '#b9c6bd' };
@@ -111,6 +115,8 @@ export class TitleScene extends Phaser.Scene {
   private quizSecondsUsed = 0;
   private confirmingReset = false;
   private checkInDeltas?: Partial<Record<StatKey, number>>;
+  /** Bumped on every leaderboard render so a slow response cannot paint over a newer view. */
+  private leaderboardToken = 0;
   private introTyper?: Phaser.Time.TimerEvent;
   private introTyping = false;
   private quizIndex = 0;
@@ -820,20 +826,123 @@ export class TitleScene extends Phaser.Scene {
     this.root.querySelector('[data-action="customize"]')?.addEventListener('click', () => { this.view = 'customize'; this.render(); });
   }
 
+  /** Friends leaderboard. Three states: not connected to a backend yet, no name
+   * chosen yet, and the live board. Other players' names are untrusted input,
+   * so everything from the server goes through escapeHtml before rendering. */
   private renderLeaderboard(): void {
-    const stats = PlayerProgress.stats;
+    const token = ++this.leaderboardToken;
+    const heading = `<div class="panel-heading"><div><p class="eyebrow">YOU AND YOUR FRIENDS</p><h2>LEADERBOARD</h2></div>${this.backButton()}</div>`;
+
+    if (!Leaderboard.isConfigured()) {
+      this.root.innerHTML = `
+        <section class="title-card full-card character-card" aria-label="Leaderboard">
+          ${heading}
+          <div class="board-notice">
+            <strong>Not connected yet</strong>
+            <p>The friends leaderboard runs on a free Supabase project, which this build has not been pointed at. Once it is, your standing, your friend code and your friends' rankings all appear here.</p>
+          </div>
+          <div class="checkin-summary"><span><b>${totalStats()}</b> total stats</span><span><b>LV ${PlayerProgress.level}</b> explorer level</span><span><b>${Object.keys(PlayerProgress.achievements).length}</b> achievements</span><span><b>${activityStreak()}</b> day streak</span></div>
+          <div class="live-stats leaderboard-stats">${this.statRunes(PlayerProgress.stats)}</div>
+        </section>`;
+      this.bindBack();
+      return;
+    }
+
+    if (!PlayerProgress.displayName) {
+      this.root.innerHTML = `
+        <section class="title-card full-card character-card" aria-label="Join the leaderboard">
+          ${heading}
+          <p class="panel-copy">Choose the name your friends will see next to your stats. You can change it later.</p>
+          <form class="board-join" data-join>
+            <input data-name maxlength="24" placeholder="Explorer name" autocomplete="off" aria-label="Display name">
+            <button class="primary" type="submit">JOIN THE BOARD</button>
+          </form>
+          <p class="board-status" data-status></p>
+        </section>`;
+      this.bindBack();
+      const input = this.root.querySelector<HTMLInputElement>('[data-name]');
+      input?.focus();
+      this.root.querySelector<HTMLFormElement>('[data-join]')?.addEventListener('submit', event => {
+        event.preventDefault();
+        const name = input?.value.trim() ?? '';
+        if (!name) { this.setBoardStatus('Enter a name first.'); return; }
+        PlayerProgress.displayName = name.slice(0, 24);
+        GameSave.save();
+        this.renderLeaderboard();
+      });
+      return;
+    }
+
     this.root.innerHTML = `
-      <section class="title-card full-card character-card" aria-label="Online explorer leaderboard">
-        <div class="panel-heading"><div><p class="eyebrow">ONLINE EXPLORERS</p><h2>LEADERBOARD</h2></div>${this.backButton()}</div>
-        <div class="checkin-summary"><span><b>${totalStats()}</b> total stats</span><span><b>LV ${PlayerProgress.level}</b> explorer level</span><span><b>${activityStreak()}</b> day streak</span></div>
-        <div class="leaderboard-table" role="table" aria-label="Explorer rankings">
-          <div class="leaderboard-head" role="row"><span>RANK</span><span>EXPLORER</span><span>LEVEL</span><span>TOTAL</span></div>
-          <div class="leaderboard-self" role="row"><b>—</b><span><strong>YOU</strong><small>Saved on this device</small></span><b>LV ${PlayerProgress.level}</b><b>${totalStats()}</b></div>
+      <section class="title-card full-card character-card" aria-label="Friends leaderboard">
+        ${heading}
+        <div class="board-bar">
+          <div class="board-code"><small>YOUR FRIEND CODE</small><b data-code>······</b></div>
+          <form class="board-add" data-add>
+            <input data-friend maxlength="6" placeholder="FRIEND CODE" autocomplete="off" aria-label="Friend code">
+            <button type="submit">ADD FRIEND</button>
+          </form>
         </div>
-        <div class="live-stats leaderboard-stats">${this.statRunes(stats)}</div>
-        <p class="panel-copy character-note">No other explorers have synced yet. Online rankings will list shared Strength, IQ, Stamina, Speed, Defense, and overall totals here.</p>
+        <div class="board-table" role="table" aria-label="Friends rankings" data-table>
+          <div class="board-row board-head" role="row"><span>#</span><span>EXPLORER</span><span>LV</span><span>TOTAL</span><span>TROPHIES</span><span>STREAK</span></div>
+        </div>
+        <p class="board-status" data-status>Loading your friends…</p>
       </section>`;
     this.bindBack();
+
+    const load = async (): Promise<void> => {
+      try {
+        const mine = await Leaderboard.publish({
+          name: PlayerProgress.displayName,
+          level: PlayerProgress.level,
+          stats: PlayerProgress.stats,
+          achievements: Object.keys(PlayerProgress.achievements).length,
+          streak: activityStreak()
+        });
+        const { me, rows } = await Leaderboard.board();
+        if (token !== this.leaderboardToken) return;
+        const code = this.root.querySelector<HTMLElement>('[data-code]');
+        if (code) code.textContent = mine.friend_code;
+        const table = this.root.querySelector<HTMLElement>('[data-table]');
+        if (table) {
+          table.insertAdjacentHTML('beforeend', rows.map((row, index) => `
+            <div class="board-row ${row.id === me ? 'board-me' : ''}" role="row">
+              <span>${index + 1}</span>
+              <span><strong>${escapeHtml(row.name)}</strong>${row.id === me ? '<small>you</small>' : ''}</span>
+              <span>${row.level}</span>
+              <span>${row.total_stats}</span>
+              <span>${row.achievements}</span>
+              <span>${row.streak}d</span>
+            </div>`).join(''));
+        }
+        this.setBoardStatus(rows.length > 1
+          ? `${rows.length - 1} friend${rows.length === 2 ? '' : 's'} on your board.`
+          : 'Just you so far. Send your code to a friend and have them add it.');
+      } catch (error) {
+        if (token !== this.leaderboardToken) return;
+        this.setBoardStatus(error instanceof Error ? error.message : 'Could not load the leaderboard.');
+      }
+    };
+    void load();
+
+    this.root.querySelector<HTMLFormElement>('[data-add]')?.addEventListener('submit', event => {
+      event.preventDefault();
+      const field = this.root.querySelector<HTMLInputElement>('[data-friend]');
+      const code = field?.value.trim() ?? '';
+      if (!/^[0-9a-f]{6}$/i.test(code)) { this.setBoardStatus('Friend codes are six letters and numbers.'); return; }
+      this.setBoardStatus('Adding…');
+      Leaderboard.addFriend(code)
+        .then(() => { if (token === this.leaderboardToken) this.renderLeaderboard(); })
+        .catch(error => {
+          if (token !== this.leaderboardToken) return;
+          this.setBoardStatus(error instanceof Error ? error.message : 'Could not add that friend.');
+        });
+    });
+  }
+
+  private setBoardStatus(message: string): void {
+    const status = this.root.querySelector<HTMLElement>('[data-status]');
+    if (status) status.textContent = message;
   }
 
   private renderCustomize(): void {
