@@ -42,6 +42,7 @@ interface SaveSnapshot {
   unitSystem: UnitSystem;
   lastCheckInWeek: string;
   profileCreatedAt: string;
+  achievements: Record<string, string>;
 }
 
 let autosaveInstalled = false;
@@ -105,6 +106,9 @@ export const GameSave = {
       PlayerProgress.unitSystem = saved.unitSystem === 'imperial' || saved.unitSystem === 'metric' ? saved.unitSystem : localeUnitSystem();
       PlayerProgress.lastCheckInWeek = typeof saved.lastCheckInWeek === 'string' ? saved.lastCheckInWeek : '';
       PlayerProgress.profileCreatedAt = typeof saved.profileCreatedAt === 'string' ? saved.profileCreatedAt : '';
+      PlayerProgress.achievements = Object.fromEntries(
+        Object.entries(saved.achievements ?? {}).filter(([id, date]) => typeof id === 'string' && typeof date === 'string')
+      );
       // Charge any lapse that happened while the game was closed.
       applyInactivityDecay();
       return true;
@@ -136,7 +140,8 @@ export const GameSave = {
       iqTakenAt: PlayerProgress.iqTakenAt,
       unitSystem: PlayerProgress.unitSystem,
       lastCheckInWeek: PlayerProgress.lastCheckInWeek,
-      profileCreatedAt: PlayerProgress.profileCreatedAt
+      profileCreatedAt: PlayerProgress.profileCreatedAt,
+      achievements: { ...PlayerProgress.achievements }
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Gameplay continues without storage. */ }
   },
@@ -161,6 +166,7 @@ export const GameSave = {
     PlayerProgress.iqTakenAt = '';
     PlayerProgress.lastCheckInWeek = '';
     PlayerProgress.profileCreatedAt = '';
+    PlayerProgress.achievements = {};
     CollectedItems.clear();
   },
 

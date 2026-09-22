@@ -10,6 +10,7 @@ import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
 import { DevMode } from '../dev/DevMode';
 import { DevPanel } from '../dev/DevPanel';
+import { ACHIEVEMENTS, unlockAchievement, type Achievement } from '../progress/Achievements';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
 
 interface ZoneSceneData {
@@ -106,6 +107,9 @@ export class ZoneScene extends Phaser.Scene {
   private enterGuardianLair?: (skipCutscene?: boolean) => void;
   private devInvincible = false;
   private devWarps: Array<{ label: string; x: number; y: number }> = [];
+  private bossCameraAnchor?: Phaser.GameObjects.Zone;
+  private bossFightStartedAt = 0;
+  private bossHitsTaken = 0;
   private guardianCutsceneActive = false;
   private guardianCutsceneCanSkip = false;
   private guardianCutsceneObjects: Phaser.GameObjects.GameObject[] = [];
@@ -181,6 +185,9 @@ export class ZoneScene extends Phaser.Scene {
     this.health = this.maxHealth;
     this.dying = false;
     this.guardian = undefined;
+    this.bossCameraAnchor = undefined;
+    this.bossFightStartedAt = 0;
+    this.bossHitsTaken = 0;
     this.bossInLair = false;
     this.guardianCutsceneActive = false;
     this.guardianCutsceneCanSkip = false;
@@ -295,6 +302,10 @@ export class ZoneScene extends Phaser.Scene {
     if (this.guardianCutsceneActive) {
       if (this.guardianCutsceneCanSkip && Phaser.Input.Keyboard.JustDown(this.interactKey)) this.finishGuardianCutscene();
       return;
+    }
+    if (this.bossCameraAnchor && this.guardian && !this.guardian.isDefeated) {
+      const frame = this.bossFramingPoint();
+      this.bossCameraAnchor.setPosition(frame.x, frame.y);
     }
     if (Phaser.Input.Keyboard.JustDown(this.menuKey)) {
       PlayerProgress.currentZone = this.zoneKey;
@@ -424,9 +435,10 @@ export class ZoneScene extends Phaser.Scene {
             onBossCue: () => GameAudio.playSfx('charge'),
             onDefeated: () => {
               PlayerProgress.guardianDefeated = true;
+              const holdMs = this.celebrateGuardianKill();
               GameSave.save();
               GameAudio.startAmbient();
-              this.completeGuardianEncounter();
+              this.time.delayedCall(holdMs, () => this.completeGuardianEncounter());
             }
           });
           this.guardian.setEncounterActive(false);
@@ -498,9 +510,12 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private hurtPlayer(sourceX: number): void {
-    if (this.devInvincible) return;
     if (this.dying || this.time.now < this.playerInvulnerableUntil || this.player.isDashInvulnerable) return;
     this.playerInvulnerableUntil = this.time.now + PLAYER_INVULNERABLE_MS;
+    // Counted before dev invincibility swallows the damage, so testing with it
+    // on can never mint an "untouched" kill that was not really untouched.
+    if (this.bossFightStartedAt > 0) this.bossHitsTaken += 1;
+    if (this.devInvincible) return;
     this.health = Math.max(0, this.health - 1);
     this.updateHealthHud();
     const pushDir = this.player.x < sourceX ? -1 : 1;
@@ -846,7 +861,7 @@ export class ZoneScene extends Phaser.Scene {
         this.guardian?.setPatrolBounds(GUARDIAN_ARENA_LEFT + 70, GUARDIAN_ARENA_RIGHT - 70);
         this.guardian?.setExternalArenaFloor(true);
         const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
-        guardianBody?.reset(GUARDIAN_ARENA_RIGHT - 210, GUARDIAN_ARENA_FLOOR_Y);
+        guardianBody?.reset(GUARDIAN_ARENA_RIGHT - 280, GUARDIAN_ARENA_FLOOR_Y);
         GameAudio.startBoss();
         this.beginGuardianCutscene(body);
         if (skipCutscene) this.finishGuardianCutscene();
@@ -915,7 +930,15 @@ export class ZoneScene extends Phaser.Scene {
         title: 'GUARDIAN',
         buttons: [
           { label: 'With scene', run: () => this.enterGuardianLair?.(false) },
-          { label: 'Skip scene', run: () => this.enterGuardianLair?.(true) }
+          { label: 'Skip scene', run: () => this.enterGuardianLair?.(true) },
+          {
+            label: 'Kill',
+            run: () => {
+              if (!this.guardian || this.guardian.isDefeated) return;
+              if (!this.bossInLair) { DevPanel.setNote('Enter the arena first.'); return; }
+              this.guardian.defeat();
+            }
+          }
         ]
       },
       {
@@ -1033,14 +1056,9 @@ export class ZoneScene extends Phaser.Scene {
     // instead of vertically, and flung them into the far world bound.
     body.reset(this.player.x, this.player.y);
     const needsRoar = this.guardian?.visible !== true;
+    // setEncounterActive re-enables and resets the body itself; syncing it
+    // again here only reintroduces the stale-prev problem it just avoided.
     this.guardian?.setEncounterActive(true);
-    // The cutscene freezes the guardian's body so it holds its pose; without
-    // this the boss stays inert once the cutscene plays out in full.
-    const guardianBody = this.guardian?.body as Phaser.Physics.Arcade.Body | undefined;
-    if (guardianBody) {
-      guardianBody.enable = true;
-      guardianBody.updateFromGameObject();
-    }
     if (needsRoar) GameAudio.playSfx('roar');
     // Skipping becomes available at 900ms but the establishing pan runs for
     // 1300ms. A live pan keeps writing scrollX/scrollY every frame, so without
@@ -1048,11 +1066,117 @@ export class ZoneScene extends Phaser.Scene {
     // the player. Reset it, then snap to the player instead of lerping back.
     const camera = this.cameras.main;
     camera.panEffect.reset();
-    camera.startFollow(this.player, true, 0.1, 0.1);
-    camera.centerOn(this.player.x, this.player.y);
+    // The player enters at the arena's left edge and the guardian waits near the
+    // right, further apart than one screen. Following the player alone left the
+    // boss out of frame, so the camera tracks a point between the two instead.
+    this.bossFightStartedAt = this.time.now;
+    this.bossHitsTaken = 0;
+    const frame = this.bossFramingPoint();
+    this.bossCameraAnchor ??= this.add.zone(frame.x, frame.y, 1, 1);
+    this.bossCameraAnchor.setPosition(frame.x, frame.y);
+    camera.startFollow(this.bossCameraAnchor, true, 0.08, 0.08);
+    camera.centerOn(frame.x, frame.y);
     camera.shake(150, 0.004);
     this.transitionLocked = false;
     this.showMessage('THE VERDANT GUARDIAN · WARDEN OF THE HEARTSEED', 2100);
+  }
+
+  /** Records the kill, unlocks whatever it earned, and shows the banner.
+   * Returns how long to hold the arena before sending the player back out. */
+  private celebrateGuardianKill(): number {
+    const seconds = this.bossFightStartedAt > 0 ? Math.round((this.time.now - this.bossFightStartedAt) / 1000) : 0;
+    const hits = this.bossHitsTaken;
+    this.bossFightStartedAt = 0;
+    // Nothing lingering from the fight should land during the victory beat.
+    this.bossProjectiles?.clear(true, true);
+    this.bossWaves?.clear(true, true);
+    this.playerInvulnerableUntil = this.time.now + 6000;
+
+    const earned: Achievement[] = [];
+    if (unlockAchievement(ACHIEVEMENTS.guardianFelled)) earned.push(ACHIEVEMENTS.guardianFelled);
+    if (hits === 0 && unlockAchievement(ACHIEVEMENTS.guardianUntouched)) earned.push(ACHIEVEMENTS.guardianUntouched);
+    if (seconds > 0 && seconds < 90 && unlockAchievement(ACHIEVEMENTS.guardianSwift)) earned.push(ACHIEVEMENTS.guardianSwift);
+
+    GameAudio.playSfx('victory');
+    this.showVictoryBanner({
+      eyebrow: earned.length ? 'ACHIEVEMENT UNLOCKED' : 'VICTORY',
+      title: earned[0]?.title ?? 'Warden Felled',
+      epitaph: 'The Verdant Guardian has fallen. Rest, old warden.',
+      record: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · ${hits === 0 ? 'no hits taken' : `${hits} hit${hits === 1 ? '' : 's'} taken`}`,
+      bonuses: earned.slice(1).map(achievement => achievement.title),
+      reward: 'Guardian cloak unlocked'
+    });
+    return 4600;
+  }
+
+  private showVictoryBanner(content: {
+    eyebrow: string; title: string; epitaph: string; record: string; bonuses: string[]; reward: string;
+  }): void {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2 - 20;
+    const banner = this.add.container(cx, cy).setScrollFactor(0).setDepth(320).setAlpha(0);
+
+    const width = 640;
+    const height = content.bonuses.length ? 214 : 188;
+    const plate = this.add.graphics();
+    plate.fillStyle(0x03100b, 0.94).fillRoundedRect(-width / 2, -height / 2, width, height, 6);
+    plate.lineStyle(2, 0xd8c47a, 0.9).strokeRoundedRect(-width / 2, -height / 2, width, height, 6);
+    plate.lineStyle(1, 0xd8c47a, 0.35).strokeRoundedRect(-width / 2 + 7, -height / 2 + 7, width - 14, height - 14, 4);
+
+    // A headstone, the "RIP" the moment deserves.
+    const stoneX = -width / 2 + 78;
+    const stone = this.add.graphics();
+    stone.fillStyle(0x6f7a72, 1).fillRoundedRect(stoneX - 38, -46, 76, 104, { tl: 38, tr: 38, bl: 3, br: 3 });
+    stone.fillStyle(0x59635c, 1).fillRect(stoneX - 38, 42, 76, 16);
+    stone.fillStyle(0x2f4a2f, 1).fillRect(stoneX - 50, 56, 100, 8);
+    stone.lineStyle(2, 0x8d998f, 0.8).strokeRoundedRect(stoneX - 38, -46, 76, 104, { tl: 38, tr: 38, bl: 3, br: 3 });
+    const rip = this.add.text(stoneX, -4, 'R.I.P', {
+      fontFamily: 'Georgia, serif', fontSize: '20px', color: '#e7ecdd', fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const textX = stoneX + 72;
+    const eyebrow = this.add.text(textX, -height / 2 + 26, content.eyebrow, {
+      fontFamily: 'monospace', fontSize: '12px', color: '#e6cf7d', letterSpacing: 4
+    });
+    const title = this.add.text(textX, -height / 2 + 46, content.title, {
+      fontFamily: 'Georgia, serif', fontSize: '34px', color: '#f4f1d8', fontStyle: 'bold'
+    });
+    const epitaph = this.add.text(textX, -height / 2 + 92, content.epitaph, {
+      fontFamily: 'Georgia, serif', fontSize: '15px', color: '#b9c9b4', fontStyle: 'italic'
+    });
+    const record = this.add.text(textX, -height / 2 + 120, content.record, {
+      fontFamily: 'monospace', fontSize: '13px', color: '#d7e3cf'
+    });
+    const reward = this.add.text(textX, -height / 2 + 144, `✦ ${content.reward}`, {
+      fontFamily: 'monospace', fontSize: '12px', color: '#9fd48b'
+    });
+    const parts: Phaser.GameObjects.GameObject[] = [plate, stone, rip, eyebrow, title, epitaph, record, reward];
+
+    if (content.bonuses.length) {
+      const bonus = this.add.text(textX, -height / 2 + 170, `ALSO EARNED · ${content.bonuses.join(' · ')}`, {
+        fontFamily: 'monospace', fontSize: '11px', color: '#e6cf7d', letterSpacing: 1
+      });
+      parts.push(bonus);
+    }
+    banner.add(parts);
+
+    this.tweens.add({ targets: banner, alpha: 1, y: cy - 6, duration: 420, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: banner, alpha: 0, y: cy - 20, delay: 3900, duration: 520, ease: 'Cubic.easeIn', onComplete: () => banner.destroy() });
+  }
+
+  /** Mostly toward the player, partly toward the guardian: the player always
+   * stays comfortably in frame and the boss stays visible across the arena. */
+  private bossFramingPoint(): { x: number; y: number } {
+    const guardian = this.guardian;
+    if (!guardian) return { x: this.player.x, y: this.player.y };
+    const mid = (this.player.x + guardian.x) / 2;
+    // Never let the player drift closer than 60px to the screen edge, even when
+    // the guardian retreats far enough that both cannot fit.
+    const reach = GAME_WIDTH / 2 - 60;
+    return {
+      x: Phaser.Math.Clamp(mid, this.player.x - reach, this.player.x + reach),
+      y: this.player.y + (guardian.y - this.player.y) * 0.3
+    };
   }
 
   private completeGuardianEncounter(): void {
@@ -1071,6 +1195,8 @@ export class ZoneScene extends Phaser.Scene {
       body.reset(4832, 928);
       for (const object of this.worldMapObjects) object.setVisible(true);
       this.regionText?.setText('GUARDIAN COURT');
+      this.bossCameraAnchor?.destroy();
+      this.bossCameraAnchor = undefined;
       this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
       this.cameras.main.fadeIn(420, 6, 17, 14);
       this.transitionLocked = false;

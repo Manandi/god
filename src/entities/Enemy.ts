@@ -83,14 +83,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setOrigin(0.5, 1).setCollideWorldBounds(true).setDepth(5);
     if (options.animKey) this.play(options.animKey);
 
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    // The guardian art is 128×96 and its former 80×54 body left much of the
-    // shell and legs unhittable. The arena is flat, so a larger body is both
-    // stable and much closer to the visible silhouette.
-    const bodyWidth = Math.min(this.isBoss ? 106 : 44, this.width);
-    const bodyHeight = Math.min(this.isBoss ? 70 : 28, this.height);
-    body.setSize(bodyWidth, bodyHeight);
-    body.setOffset((this.width - bodyWidth) / 2, this.height - bodyHeight - 2);
+    this.applyBodyShape();
 
     this.levelBadge = new LevelBadge(scene, options.level, options.isBoss ? BOSS_BADGE_COLOR : REGULAR_BADGE_COLOR);
     if (this.elite && this.isBoss) {
@@ -116,6 +109,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.usesExternalArenaFloor = enabled;
   }
 
+  /** The guardian art is 128×96 and its former 80×54 body left much of the
+   * shell and legs unhittable. Re-applied on activation because the boss
+   * swaps textures and scales mid-fight, which loses the offset. */
+  private applyBodyShape(): void {
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    const bodyWidth = Math.min(this.isBoss ? 106 : 44, this.width);
+    const bodyHeight = Math.min(this.isBoss ? 70 : 28, this.height);
+    body.setSize(bodyWidth, bodyHeight);
+    body.setOffset((this.width - bodyWidth) / 2, this.height - bodyHeight - 2);
+  }
+
   setEncounterActive(active: boolean): void {
     this.setActive(active).setVisible(active);
     this.levelBadge.setVisible(active);
@@ -126,7 +130,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (active) {
       body.moves = true;
       body.setAllowGravity(true);
-      body.updateFromGameObject();
+      this.applyBodyShape();
+      // reset() rather than updateFromGameObject(). Waking a body that has sat
+      // disabled through a cutscene otherwise produces one oversized step that
+      // carries the guardian clean through the arena floor, and since prev
+      // lands inside the floor too, Arcade reads it as already overlapping and
+      // never separates — the boss falls out of the arena and vanishes.
+      body.reset(this.x, this.y);
     }
   }
 

@@ -210,6 +210,8 @@ export const PlayerProgress: {
   lastCheckInWeek: string;
   /** Day the baseline was set; decay is never charged for days before it. */
   profileCreatedAt: string;
+  /** Achievement id to the date it was first earned. */
+  achievements: Record<string, string>;
 } = {
   level: 1,
   totalXp: 0,
@@ -227,7 +229,8 @@ export const PlayerProgress: {
   iqTakenAt: '',
   unitSystem: localeUnitSystem(),
   lastCheckInWeek: '',
-  profileCreatedAt: ''
+  profileCreatedAt: '',
+  achievements: {}
 };
 
 export interface WeeklyReport {

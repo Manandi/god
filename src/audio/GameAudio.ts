@@ -1,5 +1,5 @@
 type Track = 'ambient' | 'boss' | 'intro';
-type Sfx = 'stomp' | 'hit' | 'portal' | 'roar' | 'charge';
+type Sfx = 'stomp' | 'hit' | 'portal' | 'roar' | 'charge' | 'victory';
 
 /** Original procedural audio: every note and effect is synthesized at runtime,
  * so the game ships without borrowed recordings or third-party music rights. */
@@ -166,6 +166,13 @@ export class GameAudio {
       } else if (kind === 'portal') {
         [196, 293.66, 440, 659.25].forEach((frequency, index) => this.tone(frequency, now + index * 0.08, 0.6, 'sine', 0.22, output, 2800));
         this.sweep(70, 420, now, 0.7, 'triangle', 0.2, output);
+      } else if (kind === 'victory') {
+        // A rising major arpeggio resolving onto a held chord.
+        [261.63, 329.63, 392, 523.25].forEach((frequency, index) => {
+          this.tone(frequency, now + index * 0.11, 0.5, 'triangle', 0.2, output, 2400);
+        });
+        [523.25, 659.25, 783.99].forEach(frequency => this.tone(frequency, now + 0.46, 1.6, 'sine', 0.13, output, 3000));
+        this.tone(130.81, now + 0.46, 1.7, 'sine', 0.18, output, 600);
       } else if (kind === 'roar') {
         this.sweep(128, 38, now, 0.92, 'sawtooth', 0.55, output);
         this.sweep(86, 31, now + 0.05, 0.88, 'square', 0.25, output);
