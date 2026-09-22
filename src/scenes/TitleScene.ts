@@ -3,6 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { CollectedItems } from '../progress/CollectedItems';
 import { GameSave } from '../progress/GameSave';
 import { GameAudio } from '../audio/GameAudio';
+import { DevMode, type DevPreset } from '../dev/DevMode';
 import { QUIZ_LENGTH, QUIZ_SECONDS, quizForToday, quizScore, type QuizQuestion } from '../progress/ReasoningQuiz';
 import {
   activityStreak,
@@ -109,6 +110,7 @@ export class TitleScene extends Phaser.Scene {
   private quizSecondsUsed = 0;
   private confirmingReset = false;
   private checkInDeltas?: Partial<Record<StatKey, number>>;
+  private devNote = '';
   private introTyper?: Phaser.Time.TimerEvent;
   private introTyping = false;
   private quizIndex = 0;
@@ -123,6 +125,13 @@ export class TitleScene extends Phaser.Scene {
   create(): void {
     GameSave.load();
     GameSave.installAutosave();
+    DevMode.init();
+    this.input.keyboard?.on('keydown-D', (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.shiftKey) return;
+      this.devNote = DevMode.toggle() ? 'Dev mode on.' : '';
+      this.root.querySelector('.dev-panel')?.remove();
+      this.render();
+    });
     const background = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT, 'title-forest').setOrigin(0.5, 1);
     background.setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x03110d, 0.63).setOrigin(0);
@@ -141,6 +150,59 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
+  /** A corner panel that skips whatever the tester does not need this run.
+   * It is re-mounted after every render because each view rewrites the root. */
+  private mountDevPanel(): void {
+    if (!DevMode.enabled || this.root.querySelector('.dev-panel')) return;
+    const panel = document.createElement('aside');
+    panel.className = 'dev-panel';
+    panel.innerHTML = `
+      <p>DEV · CTRL+SHIFT+D</p>
+      <div class="dev-row"><button data-dev="beginner">Beginner</button><button data-dev="average">Average</button><button data-dev="athlete">Athlete</button></div>
+      <div class="dev-row"><button data-dev="go-menu">Menu</button><button data-dev="go-game">Game</button></div>
+      <div class="dev-row"><button data-dev="go-intro">Intro</button><button data-dev="go-quiz">Quiz</button><button data-dev="go-weekly">Reckoning</button></div>
+      <div class="dev-row"><input data-dev-days type="number" min="0" max="400" step="1" value="14"><button data-dev="idle">Idle days</button></div>
+      <p data-dev-note>${this.devNote}</p>
+      <div class="dev-row"><button data-dev="wipe">Wipe save</button></div>`;
+    this.root.appendChild(panel);
+
+    const seedThen = (preset: DevPreset, after: () => void): void => {
+      DevMode.seedProfile(preset);
+      this.draft = { ...PlayerProgress.inputs };
+      this.devNote = `Seeded ${preset}.`;
+      after();
+    };
+    const actions: Record<string, () => void> = {
+      beginner: () => seedThen('beginner', () => { this.view = 'menu'; this.render(); }),
+      average: () => seedThen('average', () => { this.view = 'menu'; this.render(); }),
+      athlete: () => seedThen('athlete', () => { this.view = 'menu'; this.render(); }),
+      'go-menu': () => { this.view = 'menu'; this.render(); },
+      'go-game': () => {
+        if (!PlayerProgress.profileCompleted) DevMode.seedProfile('average');
+        this.startGame();
+      },
+      'go-intro': () => this.startDialogue(INTRO_LINES, 'BEGIN →', () => this.beginCreation()),
+      'go-quiz': () => { this.draft = { ...PlayerProgress.inputs }; this.startQuiz(); },
+      'go-weekly': () => { this.checkInDeltas = undefined; this.view = 'weekly'; this.render(); },
+      idle: () => {
+        const days = Number(panel.querySelector<HTMLInputElement>('[data-dev-days]')?.value ?? 0);
+        if (!PlayerProgress.profileCompleted) DevMode.seedProfile('average');
+        const lost = DevMode.simulateIdleDays(days);
+        this.devNote = lost > 0 ? `${days}d idle · −${lost} stat XP` : `${days}d idle · within grace`;
+        this.view = 'menu';
+        this.render();
+      },
+      wipe: () => {
+        DevMode.wipe();
+        this.devNote = 'Save wiped.';
+        this.startDialogue(INTRO_LINES, 'BEGIN →', () => this.beginCreation());
+      }
+    };
+    for (const button of panel.querySelectorAll<HTMLButtonElement>('[data-dev]')) {
+      button.addEventListener('click', () => actions[button.dataset.dev!]?.());
+    }
+  }
+
   private render(): void {
     if (this.view !== 'quiz') this.stopQuizTicker();
     if (this.view === 'dialogue') this.renderDialogue();
@@ -154,6 +216,7 @@ export class TitleScene extends Phaser.Scene {
     else if (this.view === 'character') this.renderCharacter();
     else if (this.view === 'leaderboard') this.renderLeaderboard();
     else this.renderMenu();
+    this.mountDevPanel();
   }
 
   private renderMenu(): void {

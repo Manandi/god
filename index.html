@@ -156,6 +156,14 @@
       .weekly-form label > b { color: #8da393; font-size: 10px; letter-spacing: .08em; min-width: 30px; }
       .delta-row { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
       .delta-row b { padding: 5px 10px; color: #102117; background: linear-gradient(90deg,#a9d48d,#d8df8f); font-size: 13px; letter-spacing: .06em; }
+      .dev-panel { position: absolute; top: 0; right: 0; z-index: 60; width: 232px; display: grid; gap: 5px; padding: 8px 9px; opacity: .32; background: rgba(6,14,20,.96); border: 1px solid #3c5f7a; transition: opacity 120ms ease; }
+      .dev-panel:hover, .dev-panel:focus-within { opacity: 1; }
+      .dev-panel p { margin: 0; color: #7fb2d4; font-size: 9px; letter-spacing: .14em; }
+      .dev-panel p[data-dev-note] { color: #d8e08a; letter-spacing: .02em; min-height: 11px; }
+      .dev-row { display: flex; gap: 4px; }
+      .title-root .dev-panel button { flex: 1; padding: 6px 4px; color: #cfe4f2; background: rgba(22,48,66,.95); border: 1px solid #3e6a88; font-size: 9px; letter-spacing: .04em; }
+      .title-root .dev-panel button:hover:not(:disabled) { border-color: #9fd4f2; background: rgba(38,78,104,.98); transform: none; }
+      .dev-panel input { width: 58px; padding: 5px 3px; color: #e8f4ff; background: #06131c; border: 1px solid #3e6a88; font: 800 11px ui-monospace, monospace; text-align: center; }
       .title-root button.danger:hover:not(:disabled), .title-root button.danger:focus-visible { border-color: #f0ac97; background: rgba(146,55,40,.96); }
       @media (max-width: 760px), (max-height: 500px) { .title-root { transform: scale(.78); transform-origin: center; } }
     </style>
