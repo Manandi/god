@@ -48,6 +48,8 @@ interface Question {
   help: string;
   unit: string;
   step: number;
+  /** Percentage of its stat this metric carries, shown so the split is visible. */
+  share: number;
   /** Asked as minutes + seconds rather than one raw seconds field. */
   asDuration?: boolean;
   optional?: boolean;
@@ -56,15 +58,15 @@ interface Question {
 /** Intelligence's second input comes from the reasoning quiz that runs after
  * these, and Discipline has no question at all — it reads off consistency. */
 const QUESTIONS: Question[] = [
-  { key: 'pushups', stat: 'strength', prompt: 'How many push-ups can you do?', help: 'Strict form, one unbroken set, going to failure.', unit: 'reps', step: 1 },
-  { key: 'pullups', stat: 'strength', prompt: 'How many pull-ups can you do?', help: 'Dead hang to chin over the bar. Zero is a normal answer.', unit: 'reps', step: 1 },
-  { key: 'dashSeconds', stat: 'speed', prompt: 'How fast is your 40-yard dash?', help: 'Roughly 37 metres from a standing start. An untrained adult is around 5.5 seconds; NFL combine times run near 4.4.', unit: 'seconds', step: 0.1 },
-  { key: 'verticalJumpCm', stat: 'speed', prompt: 'How high can you jump?', help: 'Standing vertical leap. Chalk your fingers, reach up against a wall, then jump and measure the gap.', unit: 'cm', step: 1 },
-  { key: 'mileSeconds', stat: 'stamina', prompt: 'What is your one-mile time?', help: 'Best effort over a mile, roughly four laps of a running track.', unit: '', step: 1, asDuration: true },
-  { key: 'restingHeartRate', stat: 'stamina', prompt: 'What is your resting heart rate?', help: 'Beats per minute, measured sitting still. Lower means better conditioning.', unit: 'bpm', step: 1 },
-  { key: 'plankSeconds', stat: 'defense', prompt: 'How long can you hold a plank?', help: 'Forearm plank, flat back, held until form breaks.', unit: 'seconds', step: 1 },
-  { key: 'benchPressKg', stat: 'defense', prompt: 'What is your best bench press?', help: 'Heaviest single rep with good form, bar included. Enter 0 if you have never tested it.', unit: 'kg', step: 2.5 },
-  { key: 'sleepHours', stat: 'intelligence', prompt: 'How many hours do you sleep?', help: 'On an average night. Sleep is what consolidates everything you learn.', unit: 'hours', step: 0.5 }
+  { key: 'pushups', stat: 'strength', prompt: 'How many push-ups can you do?', help: 'Strict form, one unbroken set, going to failure.', unit: 'reps', step: 1, share: 60 },
+  { key: 'pullups', stat: 'strength', prompt: 'How many pull-ups can you do?', help: 'Dead hang to chin over the bar. Zero is a normal answer.', unit: 'reps', step: 1, share: 40 },
+  { key: 'dashSeconds', stat: 'speed', prompt: 'How fast is your 40-yard dash?', help: 'Roughly 37 metres from a standing start. An untrained adult is around 5.5 seconds; NFL combine times run near 4.4.', unit: 'seconds', step: 0.1, share: 70 },
+  { key: 'verticalJumpCm', stat: 'speed', prompt: 'How high can you jump?', help: 'Standing vertical leap. Chalk your fingers, reach up against a wall, then jump and measure the gap.', unit: 'cm', step: 1, share: 30 },
+  { key: 'mileSeconds', stat: 'stamina', prompt: 'What is your one-mile time?', help: 'Best effort over a mile, roughly four laps of a running track.', unit: '', step: 1, asDuration: true, share: 70 },
+  { key: 'restingHeartRate', stat: 'stamina', prompt: 'What is your resting heart rate?', help: 'Beats per minute, measured sitting still. Lower means better conditioning.', unit: 'bpm', step: 1, share: 30 },
+  { key: 'plankSeconds', stat: 'defense', prompt: 'How long can you hold a plank?', help: 'Forearm plank, flat back, held until form breaks.', unit: 'seconds', step: 1, share: 60 },
+  { key: 'benchPressKg', stat: 'defense', prompt: 'What is your best bench press?', help: 'Heaviest single rep with good form, bar included. Enter 0 if you have never tested it.', unit: 'kg', step: 2.5, share: 40 },
+  { key: 'sleepHours', stat: 'intelligence', prompt: 'How many hours do you sleep?', help: 'On an average night. Sleep is what consolidates everything you learn.', unit: 'hours', step: 0.5, share: 30 }
 ];
 
 const NARRATOR_NAME = 'MYCEL';
@@ -529,7 +531,7 @@ export class TitleScene extends Phaser.Scene {
         <p class="panel-copy">${question.help}</p>
         <div class="question-answer">
           ${field}
-          <p class="question-feeds">FEEDS <b>${statName.toUpperCase()}</b> · NOW <em data-stat-preview>${preview[question.stat]}</em></p>
+          <p class="question-feeds">${question.share}% OF <b>${statName.toUpperCase()}</b> · NOW <em data-stat-preview>${preview[question.stat]}</em></p>
         </div>
         <div class="live-stats" data-live-stats>${this.statRunes(preview)}</div>
         <div class="question-nav">
@@ -617,7 +619,8 @@ export class TitleScene extends Phaser.Scene {
       if (key === 'intelligence') {
         const clock = `${Math.floor(this.quizSecondsUsed / 60)}:${String(this.quizSecondsUsed % 60).padStart(2, '0')}`;
         const iq = PlayerProgress.inputs.iqScore;
-        parts.push(`quiz ${this.quizCorrect}/${QUIZ_LENGTH} in ${clock} → ${iq} → ${scoreMetric('iqScore', iq)}`);
+        // The quiz is the heavier half, so it leads the line.
+        parts.unshift(`quiz ${this.quizCorrect}/${QUIZ_LENGTH} in ${clock} → ${iq} → ${scoreMetric('iqScore', iq)} (70%)`);
       }
       return parts.join(' · ');
     };

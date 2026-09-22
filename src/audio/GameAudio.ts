@@ -54,7 +54,8 @@ export class GameAudio {
       const level = track === 'boss' ? 0.78 : track === 'intro' ? 0.5 : 0.58;
       this.music.gain.linearRampToValueAtTime(level, now + (track === 'intro' ? 1.6 : 0.06));
       this.playPhrase(track);
-      const period = track === 'boss' ? 2857 : track === 'intro' ? 8000 : 4000;
+      // The intro loop is four bars at 72 BPM.
+      const period = track === 'boss' ? 2857 : track === 'intro' ? Math.round((60 / 72) * 16 * 1000) : 4000;
       this.timer = window.setInterval(() => this.playPhrase(track), period);
     };
     if (this.context.state === 'running') begin();
@@ -80,23 +81,50 @@ export class GameAudio {
         this.noise(start + i * 0.5 + 0.25, 0.025, 0.018, output, 4200);
       }
     } else if (track === 'intro') {
-      // Something old and patient waking up underground. A detuned fifth
-      // drones underneath while a slow D-minor figure and a distant bell pick
-      // their way over it, so the opening feels watched rather than scored.
-      for (const [frequency, volume] of [[36.71, 0.2], [37.05, 0.17], [55, 0.12]] as Array<[number, number]>) {
-        this.tone(frequency, start, 8.4, 'sine', volume, output, 420);
+      // Lo-fi at 72 BPM: a ii-V-I-vi turnaround on a detuned Rhodes-ish pad,
+      // swung hats, a soft kick and rim, and a bed of vinyl crackle. Written
+      // rather than sampled, so it carries no licence with it.
+      const beat = 60 / 72;
+      const bar = beat * 4;
+      const chords: Array<{ bass: number; voices: number[] }> = [
+        { bass: 73.42, voices: [146.83, 174.61, 220, 261.63, 329.63] }, // Dm9
+        { bass: 49.00, voices: [123.47, 174.61, 196, 246.94, 329.63] }, // G13
+        { bass: 65.41, voices: [130.81, 164.81, 196, 246.94, 293.66] }, // Cmaj9
+        { bass: 55.00, voices: [110, 130.81, 164.81, 196, 246.94] }     // Am7
+      ];
+
+      chords.forEach((chord, index) => {
+        const at = start + index * bar;
+        // Bass sits slightly behind the beat, the way a sampled loop drags.
+        this.tone(chord.bass, at + 0.02, bar * 0.92, 'sine', 0.17, output, 320);
+        this.tone(chord.bass * 2, at + 0.03, bar * 0.5, 'triangle', 0.05, output, 520);
+        chord.voices.forEach((frequency, voice) => {
+          const stagger = voice * 0.022;
+          const level = voice === 0 ? 0.062 : 0.042;
+          // Two voices a few cents apart give the pad its tape-warped shimmer.
+          this.tone(frequency, at + 0.18 + stagger, bar * 0.62, 'triangle', level, output, 1150);
+          this.tone(frequency * 1.004, at + 0.19 + stagger, bar * 0.6, 'triangle', level * 0.7, output, 980);
+        });
+      });
+
+      for (let b = 0; b < chords.length; b += 1) {
+        const barStart = start + b * bar;
+        this.sweep(105, 44, barStart, 0.24, 'sine', 0.36, output);
+        this.sweep(98, 42, barStart + beat * 2.5, 0.22, 'sine', 0.3, output);
+        this.noise(barStart + beat, 0.12, 0.10, output, 2100);
+        this.noise(barStart + beat * 3, 0.13, 0.11, output, 1900);
+        for (let eighth = 0; eighth < 8; eighth += 1) {
+          // Swung offbeats: the second eighth of each beat lands late.
+          const swing = eighth % 2 === 0 ? 0 : 0.12;
+          this.noise(barStart + (eighth / 2 + swing) * beat, 0.03, eighth % 2 === 0 ? 0.035 : 0.022, output, 7200);
+        }
       }
-      const figure: Array<[number, number]> = [[146.83, 0], [174.61, 1.9], [130.81, 3.9], [110, 5.9]];
-      for (const [frequency, offset] of figure) {
-        this.tone(frequency, start + offset, 2.1, 'triangle', 0.085, output, 900);
-        this.tone(frequency * 2, start + offset + 0.09, 1.5, 'sine', 0.03, output, 1700);
+
+      // Vinyl surface noise, irregular on purpose.
+      for (let i = 0; i < 46; i += 1) {
+        this.noise(start + Math.random() * bar * chords.length, 0.012, 0.012 + Math.random() * 0.012, output, 5200);
       }
-      // A single far-off bell, late in the bar, left to ring out.
-      this.tone(587.33, start + 5.1, 2.8, 'sine', 0.045, output, 2600);
-      this.tone(880, start + 5.16, 2.2, 'sine', 0.018, output, 3200);
-      // Wind through the roots.
-      for (let i = 0; i < 4; i += 1) this.noise(start + i * 2.1, 1.5, 0.03, output, 520);
-      this.sweep(58, 31, start + 3.6, 1.9, 'sine', 0.12, output);
+      this.noise(start, bar * chords.length, 0.008, output, 900);
     } else {
       // Original 168 BPM battle cue: rapid monster-battle energy without
       // borrowing a melody or recording from an existing game.

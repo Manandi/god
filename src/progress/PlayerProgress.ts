@@ -148,18 +148,31 @@ export function scoreMetric(key: keyof LifeInputs, value: number): number {
   return POINTS[2];
 }
 
-const pair = (a: number, b: number): number => Math.round((a + b) / 2);
+/** How much of each stat its defining metric carries. The second metric is a
+ * modifier, not an equal partner: a skipped bench press or a pull-up count of
+ * zero should shade an attribute, not halve it. */
+export const STAT_WEIGHTS: Record<StatKey, number> = {
+  strength: 0.6,
+  speed: 0.7,
+  stamina: 0.7,
+  defense: 0.6,
+  intelligence: 0.7,
+  discipline: 1
+};
 
-/** Two real-world measurements feed each stat, so no single answer decides a
- * whole attribute. Ongoing logged activity adds permanent stat XP on top. */
+const blend = (primary: number, secondary: number, weight: number): number =>
+  Math.round(primary * weight + secondary * (1 - weight));
+
+/** Two real-world measurements feed each stat, the first weighted heavier.
+ * Ongoing logged activity adds permanent stat XP on top. */
 export function calculateBaseStats(input: LifeInputs, activities: ActivityEntry[] = []): CharacterStats {
   const score = (key: keyof LifeInputs): number => scoreMetric(key, input[key]);
   return {
-    strength: pair(score('pushups'), score('pullups')),
-    speed: pair(score('dashSeconds'), score('verticalJumpCm')),
-    stamina: pair(score('mileSeconds'), score('restingHeartRate')),
-    defense: pair(score('plankSeconds'), score('benchPressKg')),
-    intelligence: pair(score('sleepHours'), score('iqScore')),
+    strength: blend(score('pushups'), score('pullups'), STAT_WEIGHTS.strength),
+    speed: blend(score('dashSeconds'), score('verticalJumpCm'), STAT_WEIGHTS.speed),
+    stamina: blend(score('mileSeconds'), score('restingHeartRate'), STAT_WEIGHTS.stamina),
+    defense: blend(score('plankSeconds'), score('benchPressKg'), STAT_WEIGHTS.defense),
+    intelligence: blend(score('iqScore'), score('sleepHours'), STAT_WEIGHTS.intelligence),
     discipline: disciplineFromHistory(activities)
   };
 }
