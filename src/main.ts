@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from './config';
 import { TitleScene } from './scenes/TitleScene';
 import { ZoneScene } from './scenes/ZoneScene';
+import { WorldScene } from './scenes/WorldScene';
+import { BaseScene } from './scenes/BaseScene';
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -21,5 +23,5 @@ new Phaser.Game({
       debug: false
     }
   },
-  scene: [TitleScene, ZoneScene]
+  scene: [TitleScene, WorldScene, ZoneScene, BaseScene]
 });

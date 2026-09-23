@@ -1,7 +1,8 @@
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const map=JSON.parse(readFileSync(new URL('../public/maps/biosphere.json',import.meta.url)));
-const ground=map.layers.find(l=>l.name==='ground').data;
+const groundLayer=map.layers.find(l=>l.name==='ground');
+const ground=groundLayer.data??groundLayer.dataRle.flatMap(([value,count])=>Array(count).fill(value));
 const solid=(x,y)=>x>=0&&x<map.width&&y>=0&&y<map.height&&ground[y*map.width+x]>0;
 const hazardLayer=map.layers.find(l=>l.name==='hazards');
 for(const hazard of hazardLayer.objects) assert(hazard.width<=4*16,hazard.name+' exceeds reliable jump width');

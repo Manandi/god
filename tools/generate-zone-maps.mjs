@@ -194,6 +194,16 @@ function markerOnSurface(grid, width, height, kind, name, col, extra = []) {
   return marker(kind, name, col, row - 1, extra);
 }
 
+function encodeRle(values) {
+  const pairs = [];
+  for (const value of values) {
+    const last = pairs[pairs.length - 1];
+    if (last && last[0] === value) last[1] += 1;
+    else pairs.push([value, 1]);
+  }
+  return pairs;
+}
+
 function buildTiledMap({ width, height, layers, zoneKey }) {
   let layerId = 1;
   const tiledLayers = layers.map((layer) => {
@@ -208,7 +218,7 @@ function buildTiledMap({ width, height, layers, zoneKey }) {
         y: 0,
         opacity: 1,
         visible: true,
-        data: layer.grid.flat()
+        dataRle: encodeRle(layer.grid.flat())
       };
     }
     return {

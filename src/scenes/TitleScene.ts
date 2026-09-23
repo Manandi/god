@@ -126,7 +126,13 @@ export class TitleScene extends Phaser.Scene {
 
   constructor() { super('TitleScene'); }
 
-  preload(): void { this.load.image('title-forest', 'backgrounds/biosphere-panorama-hero.jpg'); }
+  preload(): void {
+    this.load.image('title-forest', 'backgrounds/biosphere-panorama-hero.jpg');
+    // These are the two routes available directly from the title UI. Loading
+    // them here prevents an empty canvas while Continue/Base changes scenes.
+    this.load.image('world-globe-v1', 'art/world-globe-v1.webp');
+    this.load.image('base-island-v1', 'art/base-island-v1.webp');
+  }
 
   create(): void {
     GameSave.load();
@@ -843,8 +849,19 @@ export class TitleScene extends Phaser.Scene {
           </div>
           <div class="checkin-summary"><span><b>${totalStats()}</b> total stats</span><span><b>LV ${PlayerProgress.level}</b> explorer level</span><span><b>${Object.keys(PlayerProgress.achievements).length}</b> achievements</span><span><b>${activityStreak()}</b> day streak</span></div>
           <div class="live-stats leaderboard-stats">${this.statRunes(PlayerProgress.stats)}</div>
+          <button class="primary" data-action="visit-own-base">VISIT YOUR BASE</button>
         </section>`;
       this.bindBack();
+      this.root.querySelector('[data-action="visit-own-base"]')?.addEventListener('click', () => {
+        this.scene.start('BaseScene', {
+          owner: {
+            name: PlayerProgress.displayName || 'Explorer',
+            level: PlayerProgress.level,
+            total_stats: totalStats(),
+            stats: PlayerProgress.stats
+          }
+        });
+      });
       return;
     }
 
@@ -884,7 +901,7 @@ export class TitleScene extends Phaser.Scene {
           </form>
         </div>
         <div class="board-table" role="table" aria-label="Friends rankings" data-table>
-          <div class="board-row board-head" role="row"><span>#</span><span>EXPLORER</span><span>LV</span><span>TOTAL</span><span>TROPHIES</span><span>STREAK</span></div>
+          <div class="board-row board-head" role="row"><span>#</span><span>EXPLORER</span><span>LV</span><span>TOTAL</span><span>TROPHIES</span><span>STREAK</span><span>BASE</span></div>
         </div>
         <p class="board-status" data-status>Loading your friends…</p>
       </section>`;
@@ -913,7 +930,15 @@ export class TitleScene extends Phaser.Scene {
               <span>${row.total_stats}</span>
               <span>${row.achievements}</span>
               <span>${row.streak}d</span>
+              <span><button class="board-visit" data-visit="${index}">VISIT</button></span>
             </div>`).join(''));
+          for (const button of table.querySelectorAll<HTMLButtonElement>('[data-visit]')) {
+            button.addEventListener('click', () => {
+              const row = rows[Number(button.dataset.visit)];
+              if (!row) return;
+              this.scene.start('BaseScene', { owner: row });
+            });
+          }
         }
         this.setBoardStatus(rows.length > 1
           ? `${rows.length - 1} friend${rows.length === 2 ? '' : 's'} on your board.`
@@ -1012,7 +1037,7 @@ export class TitleScene extends Phaser.Scene {
     GameSave.save();
     GameAudio.unlock();
     GameAudio.startAmbient();
-    this.scene.start('ZoneScene', { zoneKey: PlayerProgress.currentZone, spawnName: PlayerProgress.currentSpawn });
+    this.scene.start('WorldScene');
   }
 
   private drawPreview(): void {

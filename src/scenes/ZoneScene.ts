@@ -12,6 +12,7 @@ import { DevMode } from '../dev/DevMode';
 import { DevPanel } from '../dev/DevPanel';
 import { ACHIEVEMENTS, unlockAchievement, type Achievement } from '../progress/Achievements';
 import { drawBiosphereTerrain } from '../zones/BiosphereTerrain';
+import { expandRleTilemap } from '../maps/RleTilemap';
 
 interface ZoneSceneData {
   zoneKey?: string;
@@ -127,7 +128,7 @@ export class ZoneScene extends Phaser.Scene {
 
   preload(): void {
     const config = ZONES[this.zoneKey];
-    this.load.tilemapTiledJSON(this.zoneKey, config.mapPath);
+    this.load.json(`packed-map-${this.zoneKey}`, config.mapPath);
     if (config.tilesetPath.endsWith('.svg')) {
       this.load.svg(`tileset-${this.zoneKey}`, config.tilesetPath);
     } else {
@@ -226,6 +227,10 @@ export class ZoneScene extends Phaser.Scene {
       });
     }
 
+    const packedMap = this.cache.json.get(`packed-map-${this.zoneKey}`);
+    if (!packedMap) throw new Error(`Failed to load map data for zone "${this.zoneKey}"`);
+    this.cache.tilemap.remove(this.zoneKey);
+    this.cache.tilemap.add(this.zoneKey, { format: Phaser.Tilemaps.Formats.TILED_JSON, data: expandRleTilemap(packedMap) });
     const map = this.make.tilemap({ key: this.zoneKey });
     const tileset = map.addTilesetImage('terrain', `tileset-${this.zoneKey}`);
     if (!tileset) {
