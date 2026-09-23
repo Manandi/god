@@ -1,0 +1,51 @@
+# Builds the game and publishes it to GitHub Pages, so friends can play (and
+# join the leaderboard) at https://manandi.github.io/god/.
+#
+# One-time: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [claude/practical-babbage-tbonr1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Supabase's publishable key is built to ship in the browser bundle;
+      # row-level security in supabase/schema.sql is what limits it.
+      VITE_SUPABASE_URL: https://gitqmiwwakaejznucxqn.supabase.co
+      VITE_SUPABASE_ANON_KEY: sb_publishable_uRC4vHHdHUnrdsqV2cSajA_HWrPTmZK
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vite build --base=./ --sourcemap false
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
