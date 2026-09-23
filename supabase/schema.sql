@@ -87,5 +87,5 @@ begin
 end;
 $$;
 
-revoke all on function public.add_friend(text) from public;
+revoke all on function public.add_friend(text) from public, anon;
 grant execute on function public.add_friend(text) to authenticated;
