@@ -29,12 +29,13 @@ const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
-const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:!params.has('fp'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
+const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const hands=createFirstPersonHands(camera);scene.add(camera);
+let riggedHands=null;
 const FX=new THREE.Group();scene.add(FX);
 const motes=[];for(let i=0;i<24;i++){
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(.075,6,5),new THREE.MeshBasicMaterial({color:0xc4efb0,transparent:true,opacity:.6}));
@@ -138,7 +139,8 @@ function switchTarget(dir){
 }
 /** Soft targeting for strikes: the lock, or the creature best in front within reach. */
 function pickTarget(yaw){
-  if(lockTarget?.alive)return lockTarget;
+  // In first person the reticle is authoritative, even with a target marked.
+  if(lockTarget?.alive&&(player.thirdPerson||Math.abs(angleTo(yaw,yawOf(lockTarget.x-player.x,lockTarget.z-player.z)))<.45))return lockTarget;
   const cone=player.thirdPerson?1.35:.45;
   return creatures.filter(c=>c.alive).map(c=>{
     const d=Math.hypot(c.x-player.x,c.z-player.z)-c.radius,a=Math.abs(angleTo(yaw,yawOf(c.x-player.x,c.z-player.z)));
@@ -358,8 +360,9 @@ function update(rawDt){
     camera.position.x=eye.x;camera.position.z=eye.z;camera.position.y=THREE.MathUtils.damp(camera.position.y||eye.y,eye.y,14,rawDt);
     camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;
   }
-  hands.group.visible=!player.thirdPerson&&(combat.busy||guarded);
-  hands.update(rawDt,combat,guarded,frozen);
+  hands.group.visible=!riggedHands&&!player.thirdPerson&&(combat.busy||guarded);
+  if(!riggedHands)hands.update(rawDt,combat,guarded,frozen);
+  if(riggedHands){riggedHands.group.visible=!player.thirdPerson;riggedHands.update(frozen?0:dt,a);}
 
   lockMarker.visible=!!lockTarget&&player.thirdPerson;
   if(lockTarget){lockMarker.position.set(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+1.75+Math.sin(elapsed*4)*.05,lockTarget.z);lockMarker.rotation.y+=rawDt*2;}
@@ -386,6 +389,7 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
   scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
+  riggedHands=explorer.createViewmodel(camera);
   if(window.__verdant)window.__verdant.avatar=avatar;
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');

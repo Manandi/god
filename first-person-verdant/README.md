@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Meet Mycel, enter your real-world baseline, then select Verdant Reach from the spinning world map. Move with WASD (relative to the camera), look with the mouse, strike with left click or F, evade with Shift or right click, lock on with Q or middle click (flick the mouse hard to switch targets), jump with Space, switch between first and third person with V, interact with E, open the journal with J, open the map with M, and pause with Escape. Emotes are 1 pose, 2 sit, 3 wave, 4 cheer, and 0 to clear. Find three memories along branching trails and return to the Canopy Gate. Progress saves in this browser.
+Meet Mycel, enter your real-world baseline, then select Verdant Reach from the spinning world map. Combat opens in first person with arms drawn from your customized, animated character. Move with WASD (relative to the camera), look with the mouse, strike with left click or F, evade with Shift or right click, mark a target with Q or middle click, jump with Space, press V to inspect your full character in third person and V again to return, interact with E, open the journal with J, open the map with M, and pause with Escape. In third person, move the mouse to orbit and scroll to zoom. Emotes are 1 pose, 2 sit, 3 wave, 4 cheer, and 0 to clear. Find three memories along branching trails and return to the Canopy Gate. Progress saves in this browser.
 
 ## The explorer
 
