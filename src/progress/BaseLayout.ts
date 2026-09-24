@@ -4,6 +4,7 @@ export interface PlacedDecoration {
   room: 'outside' | 'inside';
   x: number;
   y: number;
+  rotation: number;
 }
 
 const STORAGE_KEY = 'hollow-roots-base-layout-v2';
@@ -24,7 +25,9 @@ export function sanitizeBaseLayout(input: unknown): PlacedDecoration[] {
       item: String(item.item),
       room: item.room,
       x: Math.max(0, Math.min(1536, item.x)),
-      y: Math.max(0, Math.min(1024, item.y))
+      y: Math.max(0, Math.min(1024, item.y)),
+      rotation: typeof item.rotation === 'number' && Number.isInteger(item.rotation)
+        ? ((item.rotation % 4) + 4) % 4 : 0
     }];
   });
 }
