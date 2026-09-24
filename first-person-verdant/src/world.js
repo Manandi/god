@@ -23,6 +23,20 @@ export function groundY(x,z) {
 }
 function rng(seed=87122){let s=seed>>>0;return()=>{s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
 const color=(value)=>new THREE.Color(value);
+function barkTexture(){
+  if(typeof document==='undefined')return null;
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=256;
+  const context=canvas.getContext('2d');const random=rng(44091);
+  context.fillStyle='#474634';context.fillRect(0,0,128,256);
+  for(let i=0;i<1450;i++){
+    const x=random()*128,y=random()*256,width=.5+random()*3,height=6+random()*45;
+    context.fillStyle=random()>.55?'rgba(16,27,21,.26)':'rgba(174,181,125,.12)';
+    context.fillRect(x,y,width,height);
+  }
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+  texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(1,2);
+  return texture;
+}
 function mesh(geometry,material,x,y,z,scene,shadow=true){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);m.castShadow=shadow;m.receiveShadow=true;scene.add(m);return m;}
 function cylinder(scene,x,z,rTop,rBottom,height,material,offset=0){return mesh(new THREE.CylinderGeometry(rTop,rBottom,height,9),material,x,groundY(x,z)+offset+height/2,z,scene);}
 function box(scene,x,z,w,h,d,material,offset=0,rot=0){const b=mesh(new THREE.BoxGeometry(w,h,d),material,x,groundY(x,z)+offset+h/2,z,scene);b.rotation.y=rot;return b;}
@@ -69,7 +83,7 @@ export function buildWorld(scene){
   ];
   const curves=routes.map((p,i)=>path(scene,p,i===0?5.8:4.8,soil));
   const nearTrail=(x,z)=>curves.some(c=>{for(let i=0;i<=55;i++){const p=c.getPoint(i/55);if(Math.hypot(p.x-x,p.z-z)<7.1)return true;}return false;});
-  const bark=new THREE.MeshStandardMaterial({color:0x383e2c,roughness:1}),leafMaterials=[0x1f5440,0x2e6650,0x3b7651,0x688654,0x244b3d].map(v=>new THREE.MeshStandardMaterial({color:v,roughness:1,flatShading:true}));
+  const bark=new THREE.MeshStandardMaterial({color:0xa9a797,map:barkTexture(),roughness:1}),leafMaterials=[0x1f5440,0x2e6650,0x3b7651,0x688654,0x244b3d].map(v=>new THREE.MeshStandardMaterial({color:v,roughness:1,flatShading:true}));
   const trunkGeometry=new THREE.CylinderGeometry(.32,.58,1,7),crownGeometry=new THREE.IcosahedronGeometry(1,1);
   const trees=[];for(let i=0;i<540;i++){
     const x=(random()-.5)*355,z=(random()-.5)*355;
@@ -77,20 +91,50 @@ export function buildWorld(scene){
     const ridge=Math.hypot(x*.85,z+58)>158;if(ridge&&random()<.45)continue;
     trees.push({x,z,height:5.7+random()*7.2,size:.85+random()*.75,kind:Math.floor(random()*leafMaterials.length)});
   }
-  const trunkInstances=new THREE.InstancedMesh(trunkGeometry,bark,trees.length),crowns=leafMaterials.map(m=>new THREE.InstancedMesh(crownGeometry,m,trees.length*2));
+  const trunkInstances=new THREE.InstancedMesh(trunkGeometry,bark,trees.length),crowns=leafMaterials.map(m=>new THREE.InstancedMesh(crownGeometry,m,trees.length*3));
+  const limbs=new THREE.InstancedMesh(new THREE.CylinderGeometry(.09,.25,1,6),bark,trees.length*2);let limbCount=0;
   trunkInstances.castShadow=true;trunkInstances.receiveShadow=true;crowns.forEach(c=>{c.castShadow=true;c.receiveShadow=true;});
   const counts=leafMaterials.map(()=>0),dummy=new THREE.Object3D();
   trees.forEach((t,i)=>{
     const h=groundY(t.x,t.z);dummy.position.set(t.x,h+t.height/2,t.z);dummy.scale.set(t.size,t.height,t.size);dummy.rotation.set(0,random()*6.28,(random()-.5)*.13);dummy.updateMatrix();trunkInstances.setMatrixAt(i,dummy.matrix);
-    for(let j=0;j<2;j++){const c=crowns[t.kind],index=counts[t.kind]++;dummy.position.set(t.x+(j?1.2:-.4)*t.size,h+t.height+(j?-.4:1.4),t.z+(j?-.6:.3)*t.size);dummy.rotation.set(random()*.3,random()*6.28,random()*.3);dummy.scale.set((2.5+j*.55)*t.size,(2.1+j*.3)*t.size,(2.45+j*.4)*t.size);dummy.updateMatrix();c.setMatrixAt(index,dummy.matrix);}
+    for(let j=0;j<3;j++){
+      const a=j*2.094+random()*.7,reach=(1.25+j*.23)*t.size;
+      const c=crowns[t.kind],index=counts[t.kind]++;
+      dummy.position.set(t.x+Math.cos(a)*reach,h+t.height+(j===0?1.4:-.1-j*.36),t.z+Math.sin(a)*reach);
+      dummy.rotation.set(random()*.3,random()*6.28,random()*.3);
+      dummy.scale.set((2.15+j*.22)*t.size,(1.55+j*.18)*t.size,(2.1+j*.25)*t.size);dummy.updateMatrix();c.setMatrixAt(index,dummy.matrix);
+      if(j<2){const limb=new THREE.Vector3(t.x+Math.cos(a)*reach*.55,h+t.height*.83,t.z+Math.sin(a)*reach*.55);
+        dummy.position.copy(limb);dummy.rotation.set(Math.sin(a)*.65,0,-Math.cos(a)*.65);
+        dummy.scale.set(t.size,reach*1.35,t.size);dummy.updateMatrix();limbs.setMatrixAt(limbCount++,dummy.matrix);}
+    }
     if(Math.hypot(t.x-START.x,t.z-START.z)<84||Math.hypot(t.x-SITES[1].x,t.z-SITES[1].z)<37)colliders.push({x:t.x,z:t.z,r:.8*t.size});
   });
-  crowns.forEach((c,i)=>{c.count=counts[i];scene.add(c);});scene.add(trunkInstances);
+  crowns.forEach((c,i)=>{c.count=counts[i];scene.add(c);});scene.add(trunkInstances);limbs.count=limbCount;limbs.castShadow=true;scene.add(limbs);
   const rockMat=new THREE.MeshStandardMaterial({color:0x747d69,roughness:1,flatShading:true}),mossMat=new THREE.MeshStandardMaterial({color:0x52784a,roughness:1});
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),rockMat,700);let nR=0;
   for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9))continue;const scale=.3+random()*1.7;dummy.position.set(x,groundY(x,z)+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);if(scale>1.35&&Math.hypot(x,z-39)<80)colliders.push({x,z,r:scale*.85});}rocks.count=nR;rocks.castShadow=true;scene.add(rocks);
   const grass=new THREE.InstancedMesh(new THREE.ConeGeometry(.11,.9,3),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
   for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if(nearTrail(x,z)&&random()<.85)continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z)+.2*scale,z);dummy.rotation.set((random()-.5)*.4,random()*6.28,(random()-.5)*.3);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG++,dummy.matrix);}grass.count=nG;scene.add(grass);
+  // Low clusters along the walks break up the bare cones without blocking movement.
+  const fernMat=new THREE.MeshStandardMaterial({color:0x3a7853,roughness:1,side:THREE.DoubleSide});
+  const fernShape=new THREE.ConeGeometry(.36,1.65,5),ferns=new THREE.InstancedMesh(fernShape,fernMat,1700);let fernCount=0;
+  const flowerStem=new THREE.InstancedMesh(new THREE.CylinderGeometry(.025,.035,.6,5),new THREE.MeshStandardMaterial({color:0x477749}),520);
+  const petals=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.17,0),new THREE.MeshStandardMaterial({color:0xe5c688,roughness:.95}),520);let flowerCount=0;
+  for(let i=0;i<2200;i++){
+    const x=(random()-.5)*300,z=(random()-.5)*300;
+    if(Math.hypot(x,z-39)<4||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<3))continue;
+    const y=groundY(x,z),near=nearTrail(x,z);
+    if(near&&random()<.42&&flowerCount<520){
+      const a=flowerCount++;dummy.position.set(x,y+.33,z);dummy.rotation.set(0,random()*6.28,(random()-.5)*.3);dummy.scale.setScalar(.75+random()*.8);dummy.updateMatrix();flowerStem.setMatrixAt(a,dummy.matrix);
+      dummy.position.y=y+.68;dummy.scale.setScalar(.7+random()*.9);dummy.updateMatrix();petals.setMatrixAt(a,dummy.matrix);
+    }else if(fernCount<1700){for(let j=0;j<2&&fernCount<1700;j++){
+      dummy.position.set(x+(random()-.5)*.7,y+.36,z+(random()-.5)*.7);
+      dummy.rotation.set((random()-.5)*.3,random()*6.28,(random()-.5)*.55);dummy.scale.setScalar(.55+random()*.85);
+      dummy.updateMatrix();ferns.setMatrixAt(fernCount++,dummy.matrix);
+    }}
+  }
+  ferns.count=fernCount;flowerStem.count=flowerCount;petals.count=flowerCount;
+  scene.add(ferns,flowerStem,petals);
   // A readable entrance: the woodland trail begins beside a lantern-lit standing stone.
   const runeMat=new THREE.MeshStandardMaterial({color:0xa8b394,roughness:1}),gold=new THREE.MeshStandardMaterial({color:0xe1b96e,emissive:0xa57c32,emissiveIntensity:1.8});
   for(const [x,z] of [[-7,28],[-19,14],[-35,-9],[-49,-27],[16,-32],[40,-57],[54,-79],[35,-113],[6,-139]]){
@@ -125,5 +169,5 @@ export function buildWorld(scene){
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,nearTrail};
+  return {colliders,echoes,animated,particles,gateGlow,nearTrail,cameraObstacles:[land]};
 }

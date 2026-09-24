@@ -12,10 +12,10 @@ function part(parent,geometry,material,x,y,z,sx=1,sy=1,sz=1){const m=new THREE.M
 export class Creature {
   constructor(scene,x,z,type='shellback'){
     this.home={x,z};this.x=x;this.z=z;this.type=type;this.health=type==='shellback'?3:2;this.maxHealth=this.health;
-    this.alive=true;this.angle=Math.random()*Math.PI*2;this.moveTime=Math.random()*20;this.attackTimer=1.3;this.stun=0;this.hurtFlash=0;this.cooldown=0;this.lastAttack=0;
+    this.alive=true;this.angle=Math.random()*Math.PI*2;this.moveTime=Math.random()*20;this.attackTimer=.35;this.stun=0;this.hurtFlash=0;this.cooldown=0;this.lastAttack=0;
     this.root=new THREE.Group();scene.add(this.root);
     const body=new THREE.Group();this.root.add(body);this.body=body;
-    const size=type==='shellback'?1:.75;this.root.scale.setScalar(size);
+    const size=type==='shellback'?.64:.57;this.root.scale.setScalar(size);
     part(body,sphere(),skinMaterial,0,.95,0,1.28,.58,1.8);
     this.shell=part(body,new THREE.SphereGeometry(1,18,10,0,Math.PI*2,0,Math.PI/2),shellMaterial,0,1.05,-.27,1.43,1.22,1.65);
     for(let i=0;i<9;i++){
@@ -49,23 +49,24 @@ export class Creature {
     if(!this.alive){this.root.visible=false;return false;}
     this.stun=Math.max(0,this.stun-dt);this.hurtFlash=Math.max(0,this.hurtFlash-dt);
     const dist=Math.hypot(player.x-this.x,player.z-this.z);
-    const aware=dist<14, attacking=aware&&dist<2.15;
+    const aware=dist<12, attacking=aware&&dist<(this.type==='shellback'?1.65:1.35);
     this.moveTime+=dt;
     if(aware&&this.stun<=0){this.angle=Math.atan2(player.x-this.x,player.z-this.z);}
     else if(this.moveTime>3.2){this.moveTime=0;this.angle+=Math.sin(this.x*2.19+time)*1.35;}
-    let speed=this.stun>0?0:aware?2.25:.85;
+    let speed=this.stun>0?0:aware?2.85:1.05;
     if(attacking)speed=0;
     if(Math.hypot(this.x-this.home.x,this.z-this.home.z)>9&&!aware){this.angle=Math.atan2(this.home.x-this.x,this.home.z-this.z);speed=1.4;}
     this.x+=Math.sin(this.angle)*speed*dt;this.z+=Math.cos(this.angle)*speed*dt;
-    this.root.position.set(this.x,groundY(this.x,this.z)+.04+Math.sin(time*7)*.025,this.z);
+    this.root.position.set(this.x,groundY(this.x,this.z)+.04+Math.sin(time*7)*.013,this.z);
     this.root.rotation.y=this.angle;
     const step=Math.min(speed/2.5,1);
     this.legs.forEach(({mesh,phase})=>{mesh.rotation.x=Math.sin(time*(aware?11:6)+phase)*.46*step;});
     this.body.rotation.z=Math.sin(time*6)*.018*step;
     this.body.rotation.x=this.stun>0?-.2:0;
     this.shell.material=this.hurtFlash>0?scuteMaterial:shellMaterial;
-    if(attacking){this.attackTimer-=dt;if(this.attackTimer<=0){this.attackTimer=1.45;return true;}}
-    else this.attackTimer=Math.min(1.45,this.attackTimer+dt*.5);
+    this.attackTimer-=dt;
+    this.body.position.z=THREE.MathUtils.damp(this.body.position.z,attacking?.24:0,13,dt);
+    if(attacking&&this.attackTimer<=0){this.attackTimer=1.05;return true;}
     return false;
   }
   hit(){if(!this.alive)return false;this.health--;this.stun=.38;this.hurtFlash=.22;if(this.health<=0){this.alive=false;this.root.visible=false;}return true;}
