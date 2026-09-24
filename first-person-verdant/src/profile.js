@@ -22,7 +22,7 @@ export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
-export const profile={complete:false,introSeen:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -37,7 +37,8 @@ export function loadProfile(){
     const appearance=raw.appearance||{};
     profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
-    profile.appearance.hairStyle=['short','curly','swept','tied'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
+    profile.appearance.hairStyle=['short','curly','swept','tied','braid'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
+    profile.appearance.outfit=['ranger','warden'].includes(appearance.outfit)?appearance.outfit:'ranger';
     profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
     profile.appearance.shirt=['moss','ochre','slate','clay','ivory','violet','navy'].includes(appearance.shirt)?appearance.shirt:({sunroot:'ochre',moonfern:'slate',guardian:'violet'}[appearance.cloak]||'moss');
     profile.appearance.pants=['charcoal','umber','olive','indigo'].includes(appearance.pants)?appearance.pants:'charcoal';

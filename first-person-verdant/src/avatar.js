@@ -7,7 +7,8 @@ export const SKIN_TONES=['#74503b','#a46b49','#c89365','#e5b584','#f0d0a5','#5b3
 export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e54',ivory:'#c3bb9c',violet:'#795d86',navy:'#344c67'};
 export const TROUSERS={charcoal:'#35413c',umber:'#594c3e',olive:'#485344',indigo:'#37425e'};
 export const HAIR_COLORS={raven:'#222b24',earth:'#563b2b',copper:'#9a5638',silver:'#bdc5b9',gold:'#ba9c64'};
-export const HAIR_STYLES=['short','curly','swept','tied'];
+export const HAIR_STYLES=['short','curly','swept','tied','braid'];
+export const OUTFITS=['ranger','warden'];
 export const FACE_STYLES=['soft','sharp','round'];
 const smooth=(v,target,dt)=>THREE.MathUtils.damp(v,target,12,dt);
 const sphere=(r=.2)=>new THREE.SphereGeometry(r,24,18);

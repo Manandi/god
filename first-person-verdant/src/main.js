@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE } from './world.js';
 import { createCreatures } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
+import { loadExplorer } from './avatarGLB.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
@@ -24,9 +25,11 @@ const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCrea
 const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
-const avatar=createAvatar(scene),raycaster=new THREE.Raycaster();
+// The procedural body shows until the authored explorer has loaded, and stays
+// as the fallback if it cannot load.
+let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
-const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:!params.has('fp'),zoom:5.2,emote:'idle',engaged:0};
+const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:!params.has('fp'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
@@ -84,11 +87,11 @@ window.addEventListener('keydown',e=>{
   if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!combat.busy){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
-  if(e.code==='Space'&&!paused&&player.grounded&&!combat.busy){endEmote();player.velocityY=8.3;player.grounded=false;playTone(260,.13,.04);}
+  if(e.code==='Space'&&!paused&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
   if(e.code==='ShiftLeft'||e.code==='ShiftRight')evadePressed();
   if(e.code==='KeyF'||e.code==='KeyK')attackPressed();
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
-  if(e.code==='KeyE'&&!paused&&!journalOpen)interact();
+  if(e.code==='KeyE'&&!paused&&!journalOpen&&!combat.busy){if(nearestInteractable())player.interactT=0;interact();}
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
 window.addEventListener('keyup',e=>keyState.delete(e.code));
@@ -169,10 +172,11 @@ function hurtPlayer(from){
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
   hitstop=Math.max(hitstop,.08);
-  if(player.health<=0){
-    player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;lockTarget=null;
-    toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');
-  }
+  if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+}
+function respawn(){
+  player.defeated=0;player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');
 }
 
 // ------------------------------------------------------------ combat events
@@ -186,7 +190,7 @@ function handleCombatEvents(){
       ev.target.hit(m.damage*strikePower(),player.x,player.z,m.push,m.stagger);
       sound.hit(ev.move);effects.burst(ev.point,dir.negate(),ev.move==='heel');if(ev.move==='heel')effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
       hitstop=Math.max(hitstop,m.hitstop);player.engaged=4;
-      debug.note(`${m.label} → HIT ${ev.part}  (-${(m.damage*strikePower()).toFixed(1)} hp, ${ev.target.lastEvent})`,elapsed);
+      debug.note(`${m.label} → HIT ${ev.part} at t=${combat.t.toFixed(2)}s (active ${m.active.join('–')})  -${(m.damage*strikePower()).toFixed(1)} hp, ${ev.target.lastEvent}`,elapsed);
       if(!ev.target.alive){sound.defeated();if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
     }
     else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
@@ -235,7 +239,7 @@ function update(rawDt){
   const floor0=groundY(player.x,player.z);
   const chest=new THREE.Vector3(player.x,floor0+player.height+1.35,player.z);
   const staminaBefore=player.stamina;
-  const motion=frozen?{dx:0,dz:0}:combat.update(dt,{input,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
+  const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest});
   if(!frozen)handleCombatEvents();
   if(combat.events.some(e=>e.type==='swing'||e.type==='evade'))player.engaged=4;
@@ -247,7 +251,7 @@ function update(rawDt){
   const guarded=!!lockTarget||player.engaged>0||nearFight;
   const runSpeed=5.1+(speedStat-10)*.08,guardSpeed=3.2+(speedStat-10)*.04;
   let desiredX=0,desiredZ=0;
-  if(!combat.busy&&hasInput){const s=guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
+  if(!combat.busy&&hasInput&&!player.defeated){const s=guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
   player.vx=THREE.MathUtils.damp(player.vx,desiredX,hasInput?14:18,dt);
   player.vz=THREE.MathUtils.damp(player.vz,desiredZ,hasInput?14:18,dt);
   if(combat.busy){player.vx=0;player.vz=0;}
@@ -299,7 +303,15 @@ function update(rawDt){
   const floor=groundY(player.x,player.z);
   avatar.root.position.set(player.x,floor+player.height,player.z);
   avatar.root.rotation.y=player.yaw;
-  const a=avatar.animator,action=combat.clip();
+  const a=avatar.animator;
+  // One-shot body clips: combat first, then defeat, landing, take-off and interaction.
+  if(!player.grounded)player.airTime+=dt;else{if(player.airTime>.35)player.landT=0;player.airTime=0;}
+  player.jumpT+=dt;player.landT+=dt;player.interactT+=dt;
+  if(player.defeated){player.defeated=Math.max(0,player.defeated-dt);if(player.defeated===0)respawn();}
+  const action=player.defeated&&a.has('death')?{name:'death',time:2.2-player.defeated,fade:12}:combat.clip()
+    ||(player.jumpT<.3&&a.has('jump')?{name:'jump',time:player.jumpT,fade:25}:null)
+    ||(player.landT<.35&&player.grounded&&a.has('land')&&!moved?{name:'land',time:player.landT,fade:25}:null)
+    ||(player.interactT<.9&&a.has('interact')?{name:'interact',time:player.interactT+.15,fade:14}:null);
   const planar=combat.busy?0:moved;
   if(action)a.play(action.name,action.time,action.fade);else a.stop();
   if(!player.grounded)a.setLocomotion({air:1},dt/1);
@@ -341,7 +353,7 @@ function update(rawDt){
   }else{
     // First person rides the body: lunges, evades and flinches move the view a little.
     const head=avatar.bones.Head.getWorldPosition(new THREE.Vector3());
-    const offset=head.clone().sub(new THREE.Vector3(player.x,floor+player.height+1.735,player.z)).multiplyScalar(.45);
+    const offset=head.clone().sub(new THREE.Vector3(player.x,floor+player.height+(avatar.headRest||1.735),player.z)).multiplyScalar(.45);
     const eye=new THREE.Vector3(player.x,eyeBase,player.z).add(offset);
     camera.position.x=eye.x;camera.position.z=eye.z;camera.position.y=THREE.MathUtils.damp(camera.position.y||eye.y,eye.y,14,rawDt);
     camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;
@@ -354,7 +366,7 @@ function update(rawDt){
 
   player.step-=dt;if(planar>.5&&player.grounded&&player.step<=0){player.step=guarded?.38:.45;playTone(74+Math.random()*20,.06,.013,'triangle');}
   effects.update(rawDt);
-  debug.update({combat,bones:avatar.bones,creatures,player:playerPos,lockTarget});
+  debug.update({combat,bones:avatar.bones,creatures,player:playerPos,lockTarget,animator:avatar.animator,authored:!!avatar.isAuthored});
   world.sun.position.set(player.x-45,groundY(player.x,player.z)+95,player.z-50);
   world.sun.target.position.set(player.x,groundY(player.x,player.z),player.z);
   world.sun.target.updateMatrixWorld();
@@ -371,6 +383,11 @@ function update(rawDt){
 }
 shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);shell.start();
+if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
+  const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
+  scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
+  if(window.__verdant)window.__verdant.avatar=avatar;
+}).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');
 function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.045);if(capture)return;if(!paused)update(dt);if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}else renderer.render(scene,camera);}frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a
@@ -382,5 +399,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,evade:evadePressed,get elapsed(){return elapsed;}};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,evade:evadePressed,get elapsed(){return elapsed;}};
 }

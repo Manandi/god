@@ -34,8 +34,8 @@ export const MOVES = {
 export const FIRST_MOVE = 'palm';
 
 export const EVADE = {
-  duration: .5, invulnerable: [.02, .3], travel: { from: .02, to: .3, distance: 3.3 },
-  attackFrom: .28, evadeFrom: .4, moveFrom: .36, stamina: 22
+  duration: .6, invulnerable: [.04, .34], travel: { from: .03, to: .42, distance: 3.4 },
+  attackFrom: .4, evadeFrom: .5, moveFrom: .46, stamina: 22
 };
 
 export const HURT = { duration: .42, push: .7, evadeFrom: .2, attackFrom: .3, moveFrom: .34, invulnerable: .7 };

@@ -23,7 +23,8 @@ export class CombatDebug {
       live: new THREE.MeshBasicMaterial({ color: 0xff5a4a, wireframe: true }),
       idle: new THREE.MeshBasicMaterial({ color: 0x9aa39e, wireframe: true, transparent: true, opacity: .35 }),
       bite: new THREE.MeshBasicMaterial({ color: 0xffb14a, wireframe: true }),
-      player: new THREE.MeshBasicMaterial({ color: 0x74b8ff, wireframe: true, transparent: true, opacity: .5 })
+      player: new THREE.MeshBasicMaterial({ color: 0x74b8ff, wireframe: true, transparent: true, opacity: .5 }),
+      capsule: new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: .3 })
     };
     this.show(this.enabled);
   }
@@ -35,7 +36,7 @@ export class CombatDebug {
     if (!m) { m = new THREE.Mesh(this.sphere, mat); this.group.add(m); this.pool.push(m); }
     m.material = mat; m.visible = true; m.position.set(x, y, z); m.scale.setScalar(r); this.used++;
   }
-  update({ combat, bones, creatures, player, lockTarget }) {
+  update({ combat, bones, creatures, player, lockTarget, animator, authored }) {
     if (!this.enabled) return;
     this.used = 0;
     for (const c of creatures) {
@@ -43,7 +44,9 @@ export class CombatDebug {
       for (const v of c.hurtVolumes()) this.ball(v.x, v.y, v.z, v.r, this.mats.hurt);
       if (c.state === 'lunge' || c.state === 'windup') { const b = c.biteSphere(); this.ball(b.x, b.y, b.z, b.r, c.state === 'lunge' ? this.mats.bite : this.mats.idle); }
     }
-    // Player body (what a bite must reach) and the striking limb.
+    // Collision capsule (what walls and creatures push against), the body a
+    // bite must reach, and the striking limb.
+    for (const y of [.43, .9, 1.37]) this.ball(player.x, player.y + y, player.z, .43, this.mats.capsule);
     for (const y of [.5, 1.0, 1.5]) this.ball(player.x, player.y + y, player.z, .34, this.mats.player);
     const move = combat.state === 'attack' ? MOVES[combat.move] : null;
     if (move) {
@@ -55,7 +58,8 @@ export class CombatDebug {
     const timeline = move ? `${move.label.padEnd(14)} t=${combat.t.toFixed(2)}  ${combat.phase().toUpperCase()}\n  active ${move.active.join('–')}  chain≥${move.chainFrom}  evade≥${move.evadeFrom}  move≥${move.moveFrom}`
       : combat.state === 'evade' ? `LEAF STEP     t=${combat.t.toFixed(2)}  ${combat.invulnerable ? 'INVULNERABLE' : 'recovering'}\n  i-frames ${EVADE.invulnerable.join('–')}  attack≥${EVADE.attackFrom}` : combat.state.toUpperCase();
     const buf = ['attack', 'evade'].filter(a => combat.buffered(a)).join('+') || '—';
-    this.panel.textContent = `COMBAT READOUT (F3)\nexplorer  ${timeline}\n  buffered: ${buf}   lock: ${lockTarget ? 'on' : 'off'}\n` +
+    const clip = animator?.current ? `${animator.current.name} @ ${animator.current.time.toFixed(2)}s` : 'locomotion';
+    this.panel.textContent = `COMBAT READOUT (F3)\nexplorer  ${timeline}\n  buffered: ${buf}   lock: ${lockTarget ? 'on' : 'off'}\n  body: ${authored ? 'authored explorer' : 'procedural fallback'}   clip: ${clip}\n` +
       (c ? `creature  ${c.state.padEnd(8)} t=${c.t.toFixed(2)}  hp ${c.health}/${c.maxHealth}  dist ${Math.hypot(c.x - player.x, c.z - player.z).toFixed(2)} m\n` : '') +
       `\n${this.log.join('\n')}`;
   }

@@ -59,14 +59,9 @@ export class PlayerCombat {
     let { x, z } = ctx.input;
     if (!x && !z) { x = Math.sin(this.facing); z = Math.cos(this.facing); }      // step back
     const len = Math.hypot(x, z); this.evadeDir = { x: x / len, z: z / len };
-    if (ctx.lockTarget) {
-      // Locked on: stay square to the target and step in the chosen direction.
-      const rel = angleTo(this.facing, yawOf(x, z));
-      this.evadeClip = Math.abs(rel) < Math.PI / 4 ? 'evadeForward' : Math.abs(rel) > 3 * Math.PI / 4 ? 'evadeBack'
-        : rel > 0 ? 'evadeLeft' : 'evadeRight';
-    } else if (ctx.input.x || ctx.input.z) {
-      this.facing = yawOf(x, z); this.evadeClip = 'evadeForward';
-    } else this.evadeClip = 'evadeBack';
+    // The roll travels the way the body faces; with a lock-on the body turns back
+    // to the target as soon as the roll ends.
+    this.facing = yawOf(x, z); this.evadeClip = 'evadeForward';
     this.events.push({ type: 'evade' });
   }
   hurt(fromX, fromZ, x, z) {
