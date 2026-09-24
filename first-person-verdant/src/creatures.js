@@ -69,7 +69,7 @@ export class Creature {
     if(attacking&&this.attackTimer<=0){this.attackTimer=1.05;return true;}
     return false;
   }
-  hit(){if(!this.alive)return false;this.health--;this.stun=.38;this.hurtFlash=.22;if(this.health<=0){this.alive=false;this.root.visible=false;}return true;}
+  hit(damage=1){if(!this.alive)return false;this.health-=damage;this.stun=.38;this.hurtFlash=.22;if(this.health<=0){this.alive=false;this.root.visible=false;}return true;}
 }
 export function createCreatures(scene){
   return [[-17,-1,'shellback'],[-44,-30,'thornling'],[-20,-73,'shellback'],[33,-56,'shellback'],[52,-106,'thornling'],[8,-125,'shellback'],[4,-169,'thornling']]
