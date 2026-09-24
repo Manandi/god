@@ -54,7 +54,7 @@ function updateJournal(){
   }).join('');
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
-function resume(){started=true;paused=false;shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.().catch(()=>{});}
+function resume(){if(!started)player.health=maxHealth();started=true;paused=false;shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.().catch(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
