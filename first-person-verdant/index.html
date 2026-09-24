@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1b18" />
+  <title>The Hollow Roots · Verdant Reach</title>
+</head>
+<body>
+  <canvas id="game" aria-label="First person Verdant Reach game"></canvas>
+  <div id="vignette"></div>
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="location"><span class="eyebrow">THE HOLLOW ROOTS · FIRST PERSON</span><strong id="region">VERDANT REACH</strong><small id="objective">Follow the lantern trail</small></div>
+      <div class="compass"><span id="compass">N</span><div class="compass-rule"></div><small id="distance">THE ROOTWELL · 0 m</small></div>
+      <div class="status"><span>VITALITY</span><div id="hearts"></div><small id="echoCount">MEMORIES 0 / 3</small></div>
+    </div>
+    <div id="crosshair"><span></span><span></span></div>
+    <div id="interaction" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+    <div class="hud-bottom"><div class="stamina"><span>BREATH</span><div class="meter"><i id="staminaFill"></i></div></div><div class="controls-hint">WASD MOVE <b>·</b> MOUSE LOOK <b>·</b> SHIFT RUN <b>·</b> CLICK STRIKE <b>·</b> E INTERACT <b>·</b> J JOURNAL</div></div>
+  </div>
+  <div id="entry" class="veil">
+    <div class="entry-card">
+      <span class="eyebrow">AN EXPLORATION PROTOTYPE</span>
+      <h1>VERDANT<br>REACH</h1>
+      <p>The roots remember what the forest has forgotten. Find three lost memories beyond the old trails, then follow them to the Canopy Gate.</p>
+      <button id="begin">ENTER THE FOREST <span>↗</span></button>
+      <div class="entry-controls">WASD to move · Mouse to look · E to interact · Esc to pause</div>
+    </div>
+  </div>
+  <div id="journal" class="veil hidden"><div class="journal-card"><button id="closeJournal" class="close">✕</button><span class="eyebrow">FIELD JOURNAL</span><h2>THE LOST MEMORIES</h2><div id="journalEntries"></div><p class="journal-footer">Your discoveries save in this browser. Defeating creatures does not grant real-world XP.</p></div></div>
+  <div id="ending" class="veil hidden"><div class="entry-card"><span class="eyebrow">THE CANOPY GATE</span><h1>THE FOREST<br>REMEMBERS</h1><p>Beyond this threshold lies the rest of the Hollow Roots. This first-person biome is only the first trail.</p><button id="continueExploring">CONTINUE EXPLORING <span>↗</span></button></div></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
