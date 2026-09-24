@@ -35,6 +35,12 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npx vite build --base=./ --sourcemap false
+      # The 3D prototype is a separate project; it is published alongside the
+      # 2D game at /god/verdant/ without touching the 2D build.
+      - run: npm ci
+        working-directory: first-person-verdant
+      - run: npx vite build --base=./ --outDir ../dist/verdant --emptyOutDir
+        working-directory: first-person-verdant
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {createHumanoid} from './humanoid.js';
+import {Animator,solveLeg} from './anim/animator.js';
+import {buildClips} from './anim/clips.js';
 
 export const SKIN_TONES=['#74503b','#a46b49','#c89365','#e5b584','#f0d0a5','#5b3b30'];
 export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e54',ivory:'#c3bb9c',violet:'#795d86',navy:'#344c67'};
@@ -46,57 +48,96 @@ export function createAvatar(scene){
     }
   }
   hairStyle('short');let currentEmote='idle';
-  return {root,setAppearance(a){
+  const animator=new Animator(figure,buildClips()),bones=body.bones;
+  let blinkTimer=2,mood='calm';
+  return {root,bones,animator,setAppearance(a){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
     eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
     brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
   },emote(name){currentEmote=name;},get emoteName(){return currentEmote;},
-  animate(time,dt,moving,speed,attackProgress,invuln){
-    const cycle=Math.sin(time*(speed>7?13:9)),sit=currentEmote==='sit',pose=currentEmote==='pose',wave=currentEmote==='wave',cheer=currentEmote==='cheer';
-    figure.position.y=smooth(figure.position.y,sit?-.23:0,dt);
-    body.hips.forEach((hip,i)=>{
-      hip.rotation.x=smooth(hip.rotation.x,sit?-1.08:pose?(i?-.12:.12):moving?cycle*(i?-.48:.48):0,dt);
-      body.knees[i].rotation.x=smooth(body.knees[i].rotation.x,sit?1.42:moving?Math.max(0,-cycle*(i?1:-1))*.26:0,dt);
-    });
-    body.shoulders.forEach((shoulder,i)=>{
-      let target=moving?cycle*(i?-.32:.32):0;
-      if(pose)target=i?.37:-.35;if(wave&&i===1)target=2.3+Math.sin(time*6)*.11;
-      if(cheer)target=2.5;if(sit)target=-.13;
-      if(attackProgress>0&&i===1)target=1.1+Math.sin(attackProgress*Math.PI)*.48;
-      shoulder.rotation.x=smooth(shoulder.rotation.x,target,dt);
-      shoulder.rotation.z=smooth(shoulder.rotation.z,cheer?(i?-1:1)*.28:pose?(i?-.18:.18):0,dt);
-      body.elbows[i].rotation.x=smooth(body.elbows[i].rotation.x,wave&&i===1?-.35:attackProgress>0&&i===1?-.24:0,dt);
-    });
-    body.head.rotation.x=smooth(body.head.rotation.x,sit?.08:Math.sin(time*1.2)*.025,dt);
-    const blink=(Math.sin(time*1.25)+Math.sin(time*.53))>1.79;
-    eyelids.forEach(lid=>lid.scale.y=smooth(lid.scale.y,blink?.86:.19,dt));
-    mouth.scale.y=smooth(mouth.scale.y,cheer?.62:.12,dt);
-    figure.rotation.y=smooth(figure.rotation.y,pose?-.27:0,dt);
-    root.visible=!(invuln>0&&Math.floor(time*15)%3===0);
-  }};
+  /** mood: 'calm' | 'focus' | 'strain' | 'hurt' | 'cheer' drives the face. */
+  setMood(next){mood=next;},
+  /** Pose the body for this frame, then plant the feet on the terrain. */
+  update(dt,groundAt){
+    animator.update(dt);
+    root.updateMatrixWorld(true);
+    if(groundAt){
+      const base=root.position.y,lifts=[];
+      for(const side of ['Left','Right']){
+        const ankle=bones[side+'Foot'].getWorldPosition(new THREE.Vector3());
+        const planted=THREE.MathUtils.clamp(1-(ankle.y-base-.13)/.22,0,1);
+        lifts.push(THREE.MathUtils.clamp(groundAt(ankle.x,ankle.z)-base,-.4,.4)*planted);
+      }
+      // Drop the hips for a downhill foot so the leg can reach it.
+      const drop=Math.min(0,...lifts);
+      if(drop<0){bones.Hips.position.y+=drop;root.updateMatrixWorld(true);}
+      ['Left','Right'].forEach((side,i)=>solveLeg(bones[side+'UpLeg'],bones[side+'Leg'],bones[side+'Foot'],lifts[i]-drop));
+    }
+    blinkTimer-=dt;if(blinkTimer<0)blinkTimer=2.4+Math.random()*2.8;
+    const squint=mood==='hurt'?.9:mood==='strain'?.45:mood==='focus'?.3:0;
+    const blink=blinkTimer<.12?.86:.19;
+    eyelids.forEach(lid=>lid.scale.y=smooth(lid.scale.y,Math.max(blink,.19+squint*.6),dt*2));
+    brows.forEach((b,i)=>{b.position.y=smooth(b.position.y,.314-(mood==='focus'||mood==='strain'?.012:0)+(mood==='hurt'?.01:0),dt*2);});
+    mouth.scale.y=smooth(mouth.scale.y,mood==='strain'?.45:mood==='hurt'?.55:mood==='cheer'?.62:.12,dt*2);
+    mouth.scale.x=smooth(mouth.scale.x,mood==='strain'?1.35:1.2,dt*2);
+  },
+  flicker(time,invuln){root.visible=!(invuln>0&&Math.floor(time*15)%3===0);}
+  };
 }
 
+// First-person arms. They play clips keyed to exactly the same timeline as the
+// body's strikes (see combat/moves.js), so a first-person palm lands on the
+// same frame as a third-person one. Values are camera-space [x,y,z,rx,ry,rz]
+// with the forearm pointing along -Z.
+const FP_GUARD={L:[-.27,-.34,-.52,.95,-.25,-.2],R:[.3,-.4,-.46,1.05,.3,.25],Leg:[.12,-1.6,-.4,-.4,0,0]};
+const fp=(o)=>({...FP_GUARD,...o});
+const FP_CLIPS={
+  fp_palm:[[0,FP_GUARD],[.07,fp({L:[-.3,-.38,-.4,.7,-.3,-.25]})],[.12,fp({L:[-.06,-.24,-.98,.08,-.05,-.1],R:[.34,-.44,-.42,1.1,.35,.3]})],
+    [.19,fp({L:[-.07,-.25,-.95,.1,-.05,-.1]})],[.32,fp({L:[-.2,-.32,-.62,.6,-.2,-.2]})],[.46,FP_GUARD]],
+  fp_swing:[[0,FP_GUARD],[.12,fp({R:[.62,-.3,-.3,.35,-.55,.2],L:[-.3,-.36,-.5,1,-.3,-.25]})],[.2,fp({R:[.08,-.2,-.78,.25,1.25,-.15]})],
+    [.26,fp({R:[-.3,-.24,-.62,.3,1.55,-.2]})],[.42,fp({R:[.2,-.38,-.5,.9,.6,.2]})],[.6,FP_GUARD]],
+  fp_heel:[[0,FP_GUARD],[.16,fp({Leg:[.14,-.95,-.5,.6,0,0],L:[-.42,-.32,-.46,.9,-.4,-.4],R:[.44,-.36,-.42,.9,.4,.4]})],
+    [.27,fp({Leg:[.1,-.56,-1.15,-.15,0,0],L:[-.5,-.3,-.44,.8,-.5,-.6],R:[.52,-.34,-.4,.8,.5,.6]})],[.34,fp({Leg:[.1,-.58,-1.12,-.12,0,0],L:[-.5,-.3,-.44,.8,-.5,-.6],R:[.52,-.34,-.4,.8,.5,.6]})],
+    [.47,fp({Leg:[.14,-.95,-.55,.5,0,0]})],[.62,FP_GUARD],[.82,FP_GUARD]],
+  fp_evade:[[0,FP_GUARD],[.16,fp({L:[-.22,-.3,-.44,1.25,-.2,-.2],R:[.24,-.34,-.4,1.3,.25,.25]})],[.28,fp({L:[-.22,-.3,-.44,1.25,-.2,-.2],R:[.24,-.34,-.4,1.3,.25,.25]})],[.5,FP_GUARD]],
+  fp_hurt:[[0,FP_GUARD],[.07,fp({L:[-.42,-.2,-.44,1.4,-.6,-.6],R:[.46,-.24,-.42,1.3,.6,.6]})],[.42,FP_GUARD]],
+  fp_guard:[[0,FP_GUARD],[.7,fp({L:[-.27,-.35,-.52,.93,-.25,-.2],R:[.3,-.41,-.46,1.03,.3,.25]})],[1.4,FP_GUARD]]
+};
+function fpClip(name,keys){
+  const times=keys.map(k=>k[0]),tracks=[],q=new THREE.Quaternion(),e=new THREE.Euler();
+  for(const part of ['L','R','Leg']){
+    tracks.push(new THREE.VectorKeyframeTrack(`fp${part}.position`,times,keys.flatMap(k=>k[1][part].slice(0,3))));
+    tracks.push(new THREE.QuaternionKeyframeTrack(`fp${part}.quaternion`,times,keys.flatMap(k=>{const v=k[1][part];q.setFromEuler(e.set(v[3],v[4],v[5]));return [q.x,q.y,q.z,q.w];})));
+  }
+  return new THREE.AnimationClip(name,times[times.length-1],tracks);
+}
 export function createFirstPersonHands(camera){
   const group=new THREE.Group();camera.add(group);
   const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:.94});
   const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.89});
-  // The shoulder stays off screen. A forearm follows the fist through the strike.
-  const arm=new THREE.Group();arm.position.set(.58,-.76,-.58);group.add(arm);
-  const upper=part(arm,new THREE.CapsuleGeometry(.09,.39,6,16),shirt,.08,-.2,.18);upper.rotation.z=.34;upper.rotation.x=-.65;
-  const forearm=new THREE.Group();forearm.position.set(0,0,-.1);arm.add(forearm);
-  const sleeve=part(forearm,new THREE.CapsuleGeometry(.09,.3,5,16),shirt,0,.02,-.04);sleeve.rotation.x=.8;
-  const wrist=part(forearm,new THREE.CapsuleGeometry(.07,.16,5,16),skin,-.05,.19,-.22);wrist.rotation.x=.8;
-  part(forearm,sphere(.105),skin,-.055,.29,-.33).scale.set(1.07,.83,1.1);
-  for(let i=0;i<4;i++)part(forearm,sphere(.029),skin,-.12+i*.043,.34,-.406);
-  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);},
-    animate(time,dt,moving,attackProgress){
-      const drive=Math.sin(Math.PI*Math.max(0,attackProgress));
-      arm.position.x=smooth(arm.position.x,.58-drive*.39,dt);
-      arm.position.y=smooth(arm.position.y,-.76+drive*.38,dt);
-      arm.position.z=smooth(arm.position.z,-.58-drive*.94,dt);
-      arm.rotation.x=smooth(arm.rotation.x,-drive*.38,dt);
-      forearm.rotation.z=smooth(forearm.rotation.z,-drive*.19,dt);
+  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:.95});
+  const boot=new THREE.MeshStandardMaterial({color:'#242b25',roughness:1});
+  function arm(name,side){
+    const g=new THREE.Group();g.name=name;group.add(g);
+    // Sleeve runs back toward the shoulder, off screen; forearm and fist lead.
+    const sleeve=part(g,new THREE.CapsuleGeometry(.075,.34,6,14),shirt,side*.02,.02,.3);sleeve.rotation.x=Math.PI/2;
+    const fore=part(g,new THREE.CapsuleGeometry(.058,.2,6,14),skin,0,0,.02);fore.rotation.x=Math.PI/2;
+    const fist=part(g,new THREE.SphereGeometry(.078,18,14),skin,0,.005,-.13);fist.scale.set(1.05,.85,1.05);
+    for(let i=0;i<4;i++)part(g,new THREE.SphereGeometry(.024,10,8),skin,-.05+i*.033,.035,-.185);
+    return g;
+  }
+  arm('fpL',-1);arm('fpR',1);
+  const leg=new THREE.Group();leg.name='fpLeg';group.add(leg);
+  const shin=part(leg,new THREE.CapsuleGeometry(.09,.5,6,14),trousers,0,0,.2);shin.rotation.x=Math.PI/2;
+  const sole=part(leg,new THREE.SphereGeometry(.13,16,12),boot,0,.02,-.16);sole.scale.set(.9,.7,1.3);
+  const animator=new Animator(group,Object.entries(FP_CLIPS).map(([n,k])=>fpClip(n,k)));
+  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);},
+    update(dt,combat,guarded,frozen){
+      const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',hurt:'fp_hurt'};
+      if(clip)animator.play(clip.name.startsWith('evade')?'fp_evade':map[clip.name],clip.time,clip.fade);else animator.stop();
+      animator.setLocomotion({fp_guard:1},frozen?0:dt/1.4);
+      animator.update(dt);
     }};
 }
