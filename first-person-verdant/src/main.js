@@ -20,7 +20,7 @@ const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
 const avatar=createAvatar(scene),raycaster=new THREE.Raycaster();
-const player={x:0,z:39,yaw:0,pitch:0,health:4,stamina:100,invuln:0,attack:0,attackHit:false,step:0,height:0,velocityY:0,grounded:true,dash:0,dashCooldown:0,dashX:0,dashZ:0,moveX:0,moveZ:0,thirdPerson:false,zoom:5.8,emote:'idle'};
+const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,invuln:0,attack:0,attackHit:false,step:0,height:0,velocityY:0,grounded:true,dash:0,dashCooldown:0,dashX:0,dashZ:0,moveX:0,moveZ:0,thirdPerson:false,zoom:5.8,emote:'idle'};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
@@ -66,7 +66,7 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyJ'&&started){toggleJournal(!journalOpen);return;}
   if(e.repeat)return;
   if(e.code==='KeyM'&&started&&!journalOpen){paused=true;$('hud').classList.add('hidden');shell.show('map');if(document.pointerLockElement)document.exitPointerLock();return;}
-  if(e.code==='KeyV'&&started&&!paused){player.thirdPerson=!player.thirdPerson;hands.group.visible=!player.thirdPerson;$('cameraMode').textContent=player.thirdPerson?'THIRD PERSON':'FIRST PERSON';playTone(410,.12,.025);}
+  if(e.code==='KeyV'&&started&&!paused){player.thirdPerson=!player.thirdPerson;if(player.thirdPerson)player.cameraYaw=player.yaw;else player.yaw=player.cameraYaw;$('cameraMode').textContent=player.thirdPerson?'THIRD PERSON · MOUSE TO ORBIT':'FIRST PERSON';playTone(410,.12,.025);}
   if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
@@ -76,8 +76,9 @@ window.addEventListener('keydown',e=>{
     let sideways=Number(keyState.has('KeyD'))-Number(keyState.has('KeyA'));
     const length=Math.hypot(forward,sideways)||1;forward=forward/length;sideways/=length;
     if(!forward&&!sideways)forward=1;
-    player.dashX=-Math.sin(player.yaw)*forward+Math.cos(player.yaw)*sideways;
-    player.dashZ=-Math.cos(player.yaw)*forward-Math.sin(player.yaw)*sideways;
+    const heading=player.thirdPerson?player.cameraYaw:player.yaw;
+    player.dashX=-Math.sin(heading)*forward+Math.cos(heading)*sideways;
+    player.dashZ=-Math.cos(heading)*forward-Math.sin(heading)*sideways;
     player.emote='idle';avatar.emote('idle');player.dash=.23;player.dashCooldown=1.35;player.stamina-=23;player.invuln=Math.max(player.invuln,.28);playTone(340,.23,.07,'triangle');
   }
   if(e.code==='KeyE'&&!paused&&!journalOpen)interact();
@@ -86,7 +87,7 @@ canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefau
 window.addEventListener('keyup',e=>keyState.delete(e.code));
 window.addEventListener('blur',()=>keyState.clear());
 document.addEventListener('mousemove',e=>{
-  if(document.pointerLockElement===canvas&&!paused){player.yaw-=e.movementX*.0021;player.pitch=THREE.MathUtils.clamp(player.pitch-e.movementY*.00185,-1.35,1.35);}
+  if(document.pointerLockElement===canvas&&!paused){player.cameraYaw-=e.movementX*.0021;if(!player.thirdPerson)player.yaw=player.cameraYaw;player.pitch=THREE.MathUtils.clamp(player.pitch-e.movementY*.00185,-1.35,1.35);}
 });
 canvas.addEventListener('mousedown',e=>{if(e.button!==0||paused)return;if(document.pointerLockElement!==canvas){canvas.requestPointerLock?.().catch(()=>{});return;}strike();});
 window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));});
@@ -110,7 +111,7 @@ function interact(){
   }else if(nearby.type==='rest'){player.health=maxHealth();playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY');}
 }
 const impacts=[];
-function strike(){if(player.attack>0)return;player.emote='idle';avatar.emote('idle');player.attack=.42;player.attackHit=false;playTone(160,.085,.035,'triangle');}
+function strike(){if(player.attack>0)return;player.emote='idle';avatar.emote('idle');if(player.thirdPerson)player.yaw=player.cameraYaw;player.attack=.42;player.attackHit=false;playTone(160,.085,.035,'triangle');}
 function blockedStrike(creature,distance){
   const aimY=groundY(player.x,player.z)+player.height+1.2;
   for(let step=.8;step<distance-.6;step+=.38){
@@ -139,7 +140,7 @@ function maxHealth(){return Math.max(3,Math.min(6,3+Math.floor(stats().defense/7
 function hurt(){if(player.invuln>0)return;player.health--;player.invuln=1.25;playTone(78,.45,.11,'sawtooth');
   document.getElementById('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.65) 100%)';
   setTimeout(()=>{document.getElementById('vignette').style.background='';},240);
-  if(player.health<=0){player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=0;player.invuln=2;toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');}
+  if(player.health<=0){player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=0;player.cameraYaw=0;player.invuln=2;toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');}
 }
 function updateHUD(){
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('');
@@ -148,7 +149,7 @@ function updateHUD(){
   const next=SITES.filter(s=>!memories.has(s.id)).sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z))[0]||GATE;
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   const bearing=-Math.atan2(next.x-player.x,-(next.z-player.z));
-  const diff=Math.atan2(Math.sin(bearing-player.yaw),Math.cos(bearing-player.yaw));
+  const diff=Math.atan2(Math.sin(bearing-player.cameraYaw),Math.cos(bearing-player.cameraYaw));
   $('compass').textContent=Math.abs(diff)<.32?'↑':diff>.32&&diff<2.7?'↖':diff<-.32&&diff>-2.7?'↗':'↓';
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${distance} m`;
   $('objective').textContent=memories.size===3?'Reach the Canopy Gate':`Recover the lost memories · ${memories.size}/3`;
@@ -169,8 +170,10 @@ function update(dt){
   player.stamina=THREE.MathUtils.clamp(player.stamina+(player.dash>0?-8:10+staminaStat*.65)*dt,0,100);
   const speed=(5.1+(speedStat-10)*.08),length=Math.hypot(f,side)||1;
   const dashActive=player.dash>0;player.dash=Math.max(0,player.dash-dt);
-  const desiredX=(-Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)/length*speed;
-  const desiredZ=(-Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)/length*speed;
+  const heading=player.thirdPerson?player.cameraYaw:player.yaw;
+  const desiredX=(-Math.sin(heading)*f+Math.cos(heading)*side)/length*speed;
+  const desiredZ=(-Math.cos(heading)*f-Math.sin(heading)*side)/length*speed;
+  if(player.thirdPerson&&input&&player.attack<=0){const facing=Math.atan2(-desiredX,-desiredZ);player.yaw+=Math.atan2(Math.sin(facing-player.yaw),Math.cos(facing-player.yaw))*(1-Math.exp(-12*dt));}
   player.moveX=THREE.MathUtils.damp(player.moveX,desiredX,input?17:20,dt);
   player.moveZ=THREE.MathUtils.damp(player.moveZ,desiredZ,input?17:20,dt);
   const vx=(dashActive?player.dashX*18.5:player.moveX)*dt;
@@ -195,7 +198,7 @@ function update(dt){
   avatar.root.visible=player.thirdPerson&&avatar.root.visible;
   const bob=moving&&player.grounded?Math.sin(elapsed*10)*.009:0;
   if(player.thirdPerson){
-    const heading=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+    const heading=new THREE.Vector3(-Math.sin(player.cameraYaw),0,-Math.cos(player.cameraYaw));
     const target=new THREE.Vector3(player.x,floor+player.height+(player.emote==='sit'?.85:1.35),player.z);
     const retreat=player.zoom*Math.cos(player.pitch*.55);
     const desired=target.clone().addScaledVector(heading,-retreat);
@@ -209,6 +212,7 @@ function update(dt){
     camera.position.set(player.x,THREE.MathUtils.damp(camera.position.y||eye,eye,14,dt)+bob,player.z);
     camera.rotation.y=player.yaw;camera.rotation.x=player.pitch;
   }
+  hands.group.visible=!player.thirdPerson&&player.attack>0;
   hands.animate(elapsed,dt,moving,player.attack>0?1-player.attack/.42:0,dashActive);
   player.step-=dt;if(moving&&player.grounded&&player.step<=0){player.step=.45;playTone(74+Math.random()*20,.06,.013,'triangle');}
   for(const creature of creatures)if(creature.update(dt,elapsed,player))hurt();
