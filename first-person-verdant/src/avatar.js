@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {createHumanoid} from './humanoid.js';
 
 export const SKIN_TONES=['#74503b','#a46b49','#c89365','#e5b584','#f0d0a5','#5b3b30'];
 export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e54',ivory:'#c3bb9c',violet:'#795d86',navy:'#344c67'};
@@ -12,95 +13,66 @@ function part(parent,geometry,material,x=0,y=0,z=0){const m=new THREE.Mesh(geome
 
 export function createAvatar(scene){
   const root=new THREE.Group(),figure=new THREE.Group();root.add(figure);scene.add(root);
-  const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:.93});
-  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:.98});
+  const body=createHumanoid(figure,{skin:SKIN_TONES,shirt:SHIRTS,pants:TROUSERS});
   const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.9});
   const hair=new THREE.MeshStandardMaterial({color:HAIR_COLORS.raven,roughness:.96});
-  const seam=new THREE.MeshStandardMaterial({color:0x899681,roughness:.94});
-  const boot=new THREE.MeshStandardMaterial({color:0x292e2a,roughness:.96});
-  const eyes=new THREE.MeshStandardMaterial({color:0x202920,roughness:.56});
-  const eyeWhite=new THREE.MeshStandardMaterial({color:0xe6e5d4,roughness:.65});
-  const torso=part(figure,new THREE.LatheGeometry([
-    new THREE.Vector2(0,.77),new THREE.Vector2(.22,.77),new THREE.Vector2(.275,.81),new THREE.Vector2(.29,.92),
-    new THREE.Vector2(.275,.82),new THREE.Vector2(.34,1.08),new THREE.Vector2(.32,1.32),
-    new THREE.Vector2(.22,1.45),new THREE.Vector2(.105,1.49),new THREE.Vector2(0,1.49)
-  ],32),shirt,0,0,0);
-  part(figure,new THREE.CylinderGeometry(.267,.266,.04,24),seam,0,.81,0);
-  part(figure,new THREE.TorusGeometry(.155,.024,7,22),seam,0,1.55,-.13).rotation.x=-.25;
-  part(figure,new THREE.CylinderGeometry(.1,.11,.15,10),skin,0,1.59,0);
-  const head=part(figure,sphere(.255),skin,0,1.82,-.03);
-  part(figure,sphere(.14),skin,0,1.715,-.095).scale.set(1.25,.59,1.12);
-  const nose=part(figure,sphere(.046),skin,0,1.82,-.277);nose.scale.set(.7,1.1,1);
-  const eyeParts=[],brows=[];
+  const eyeWhite=new THREE.MeshStandardMaterial({color:0xf4f0e7,roughness:.8});
+  const iris=new THREE.MeshStandardMaterial({color:0x283b32,roughness:.65});
+  const lip=new THREE.MeshStandardMaterial({color:0x805948,roughness:1});
+  const face=new THREE.Group();body.head.add(face);
+  const eyeParts=[],brows=[],eyelids=[];
   for(const side of [-1,1]){
-    part(figure,sphere(.046),skin,side*.257,1.8,-.035).scale.set(.48,1.05,.62);
-    part(figure,sphere(.036),eyeWhite,side*.1,1.875,-.247).scale.set(.87,.76,.35);
-    eyeParts.push(part(figure,sphere(.019),eyes,side*.1,1.875,-.259));
-    const brow=part(figure,sphere(.05),hair,side*.105,1.955,-.23);brow.scale.set(1.15,.16,.24);brows.push(brow);
+    const white=part(face,sphere(.023),eyeWhite,side*.072,.26,-.18);white.scale.set(.98,.84,.44);
+    const pupil=part(face,sphere(.013),iris,side*.072,.26,-.19);pupil.scale.set(.82,.93,.36);eyeParts.push(pupil);
+    const lid=part(face,sphere(.028),skin,side*.072,.284,-.177);lid.scale.set(1.04,.19,.5);eyelids.push(lid);
+    const brow=part(face,sphere(.038),hair,side*.074,.314,-.168);brow.scale.set(1.15,.13,.32);brows.push(brow);
   }
-  part(figure,sphere(.036),seam,0,1.733,-.253).scale.set(1.3,.13,.27);
-  const hairGroup=new THREE.Group();hairGroup.position.set(0,1.82,-.03);figure.add(hairGroup);
-  const legs=[],arms=[];
-  for(const side of [-1,1]){
-    const hip=new THREE.Group();hip.position.set(side*.16,.79,0);figure.add(hip);
-    part(hip,sphere(.156),trousers,0,-.095,0).scale.set(1,.92,.98);
-    part(hip,new THREE.CylinderGeometry(.145,.117,.43,20),trousers,0,-.255,0);
-    const shin=new THREE.Group();shin.position.y=-.46;hip.add(shin);
-    part(shin,sphere(.12),trousers,0,0,0);
-    part(shin,new THREE.CylinderGeometry(.114,.088,.34,20),trousers,0,-.16,0);
-    part(shin,sphere(.14),boot,0,-.38,-.083).scale.set(.92,.61,1.45);
-    legs.push({hip,shin,side});
-    const shoulder=new THREE.Group();shoulder.position.set(side*.36,1.46,0);figure.add(shoulder);
-    part(shoulder,sphere(.16),shirt,0,-.08,0).scale.set(1,.84,.94);
-    part(shoulder,new THREE.CylinderGeometry(.127,.102,.39,18),shirt,side*.03,-.19,0).rotation.z=side*.1;
-    const elbow=new THREE.Group();elbow.position.set(side*.055,-.41,0);shoulder.add(elbow);
-    part(elbow,sphere(.1),skin,0,0,0);
-    part(elbow,new THREE.CylinderGeometry(.097,.079,.27,16),skin,0,-.12,0);
-    part(elbow,sphere(.105),skin,0,-.29,-.025).scale.set(1,.8,1.2);
-    arms.push({shoulder,elbow,side});
-  }
+  const mouth=part(face,sphere(.03),lip,0,.144,-.193);mouth.scale.set(1.2,.12,.26);
+  const hairGroup=new THREE.Group();hairGroup.position.set(0,.23,-.025);face.add(hairGroup);
   function hairStyle(style){
     hairGroup.clear();
-    if(style==='curly')for(let i=0;i<21;i++){
-      const a=i*2.399,r=.08+(i%3)*.065;
-      part(hairGroup,sphere(.087),hair,Math.cos(a)*r,.15+i%5*.018,Math.sin(a)*r-.01);
+    const cap=part(hairGroup,new THREE.SphereGeometry(.184,32,16,0,Math.PI*2,0,Math.PI*(style==='swept'?.42:.38)),hair,0,.01,0);
+    cap.scale.set(1.01,1.11,1.04);
+    if(style==='curly')for(let i=0;i<24;i++){
+      const a=i*2.399,r=.06+i%4*.031;
+      const lock=part(hairGroup,sphere(.036),hair,Math.cos(a)*r,.145+i%3*.012,Math.sin(a)*r-.025);
+      lock.scale.set(.9,.72,.9);
     }
     else if(style==='tied'){
-      part(hairGroup,new THREE.SphereGeometry(.257,16,10,0,Math.PI*2,0,Math.PI*.53),hair,0,.03,0);
-      part(hairGroup,sphere(.13),hair,0,.07,.25);
-      part(hairGroup,new THREE.CylinderGeometry(.09,.055,.25,10),hair,0,-.15,.27);
-    }else{
-      part(hairGroup,new THREE.SphereGeometry(.258,16,10,0,Math.PI*2,0,Math.PI*(style==='swept'?.56:.46)),hair,0,.03,0);
-      const fringe=part(hairGroup,sphere(style==='swept'?.13:.105),hair,style==='swept'?-.1:0,.13,-.17);
-      fringe.scale.set(style==='swept'?1.3:1.7,.45,1.2);
+      const bun=part(hairGroup,sphere(.063),hair,0,.09,.17);bun.scale.set(1,.82,.83);
+    }else if(style==='swept'){
+      const fringe=part(hairGroup,sphere(.085),hair,-.063,.09,-.12);
+      fringe.scale.set(1.17,.34,.62);fringe.rotation.z=-.3;
     }
   }
   hairStyle('short');let currentEmote='idle';
   return {root,setAppearance(a){
-    shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
+    body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
-    head.scale.set(a.face==='round'?1.12:a.face==='sharp'?.88:.96,a.face==='round'?.99:1.06,.9);
-    eyeParts.forEach(p=>p.scale.setScalar(a.face==='soft'?1.18:1));
+    eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
     brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
   },emote(name){currentEmote=name;},get emoteName(){return currentEmote;},
   animate(time,dt,moving,speed,attackProgress,invuln){
     const cycle=Math.sin(time*(speed>7?13:9)),sit=currentEmote==='sit',pose=currentEmote==='pose',wave=currentEmote==='wave',cheer=currentEmote==='cheer';
-    figure.position.y=smooth(figure.position.y,sit?-.27:0,dt);
-    torso.rotation.x=smooth(torso.rotation.x,sit?.16:pose?-.08:0,dt);
-    legs.forEach(({hip,shin,side},i)=>{
-      hip.rotation.x=smooth(hip.rotation.x,sit?-1.12:pose?side*.13:moving?cycle*(i?-.46:.46):0,dt);
-      shin.rotation.x=smooth(shin.rotation.x,sit?1.55:moving?Math.max(0,-cycle*(i?1:-1))*.15:0,dt);
+    figure.position.y=smooth(figure.position.y,sit?-.23:0,dt);
+    body.hips.forEach((hip,i)=>{
+      hip.rotation.x=smooth(hip.rotation.x,sit?-1.08:pose?(i?-.12:.12):moving?cycle*(i?-.48:.48):0,dt);
+      body.knees[i].rotation.x=smooth(body.knees[i].rotation.x,sit?1.42:moving?Math.max(0,-cycle*(i?1:-1))*.26:0,dt);
     });
-    arms.forEach(({shoulder,elbow,side},i)=>{
-      let target=moving?cycle*(i?.35:-.35):0;
-      if(pose)target=i?-.5:.35;if(wave&&i===1)target=-2.3+Math.sin(time*6)*.16;
-      if(cheer)target=-2.65;if(sit)target=.15;
-      if(attackProgress>0&&i===1)target=-1.1-Math.sin(attackProgress*Math.PI)*.7;
+    body.shoulders.forEach((shoulder,i)=>{
+      let target=moving?cycle*(i?-.32:.32):0;
+      if(pose)target=i?.37:-.35;if(wave&&i===1)target=2.3+Math.sin(time*6)*.11;
+      if(cheer)target=2.5;if(sit)target=-.13;
+      if(attackProgress>0&&i===1)target=1.1+Math.sin(attackProgress*Math.PI)*.48;
       shoulder.rotation.x=smooth(shoulder.rotation.x,target,dt);
-      shoulder.rotation.z=smooth(shoulder.rotation.z,cheer?side*.25:pose?side*.27:side*.12,dt);
-      elbow.rotation.x=smooth(elbow.rotation.x,wave&&i===1?-.65:attackProgress>0&&i===1?-.42:0,dt);
+      shoulder.rotation.z=smooth(shoulder.rotation.z,cheer?(i?-1:1)*.28:pose?(i?-.18:.18):0,dt);
+      body.elbows[i].rotation.x=smooth(body.elbows[i].rotation.x,wave&&i===1?-.35:attackProgress>0&&i===1?-.24:0,dt);
     });
+    body.head.rotation.x=smooth(body.head.rotation.x,sit?.08:Math.sin(time*1.2)*.025,dt);
+    const blink=(Math.sin(time*1.25)+Math.sin(time*.53))>1.79;
+    eyelids.forEach(lid=>lid.scale.y=smooth(lid.scale.y,blink?.86:.19,dt));
+    mouth.scale.y=smooth(mouth.scale.y,cheer?.62:.12,dt);
     figure.rotation.y=smooth(figure.rotation.y,pose?-.27:0,dt);
     root.visible=!(invuln>0&&Math.floor(time*15)%3===0);
   }};
