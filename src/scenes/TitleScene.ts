@@ -130,8 +130,10 @@ export class TitleScene extends Phaser.Scene {
     this.load.image('title-forest', 'backgrounds/biosphere-panorama-hero.jpg');
     // These are the two routes available directly from the title UI. Loading
     // them here prevents an empty canvas while Continue/Base changes scenes.
-    this.load.image('world-globe-v1', 'art/world-globe-v1.webp');
-    this.load.image('base-island-v1', 'art/base-island-v1.webp');
+    this.load.image('world-surface-v2', 'art/world-surface-v2.webp');
+    this.load.image('base-island-overhead-v2', 'art/base-island-overhead-v2.webp');
+    this.load.image('base-home-interior-v2', 'art/base-home-interior-v2.webp');
+    this.load.spritesheet('base-decor-atlas-v2', 'art/base-decor-atlas-v2.webp', { frameWidth: 512, frameHeight: 512 });
   }
 
   create(): void {
@@ -854,6 +856,7 @@ export class TitleScene extends Phaser.Scene {
       this.bindBack();
       this.root.querySelector('[data-action="visit-own-base"]')?.addEventListener('click', () => {
         this.scene.start('BaseScene', {
+          editable: true,
           owner: {
             name: PlayerProgress.displayName || 'Explorer',
             level: PlayerProgress.level,
@@ -936,7 +939,7 @@ export class TitleScene extends Phaser.Scene {
             button.addEventListener('click', () => {
               const row = rows[Number(button.dataset.visit)];
               if (!row) return;
-              this.scene.start('BaseScene', { owner: row });
+              this.scene.start('BaseScene', { owner: row, editable: row.id === me });
             });
           }
         }

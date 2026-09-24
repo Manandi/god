@@ -1,4 +1,5 @@
 import { CollectedItems } from './CollectedItems';
+import { clearBaseLayout } from './BaseLayout';
 import {
   applyInactivityDecay,
   calculateStats,
@@ -153,6 +154,7 @@ export const GameSave = {
    * next load starts at Mycel's intro with no history behind it. */
   reset(): void {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* Nothing stored to clear. */ }
+    clearBaseLayout();
     PlayerProgress.level = 1;
     PlayerProgress.totalXp = 0;
     PlayerProgress.profileCompleted = false;

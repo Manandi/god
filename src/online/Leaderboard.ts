@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CharacterStats } from '../progress/PlayerProgress';
+import { loadBaseLayout, sanitizeBaseLayout, type PlacedDecoration } from '../progress/BaseLayout';
 
 export interface Explorer {
   id: string;
@@ -7,7 +8,7 @@ export interface Explorer {
   friend_code: string;
   level: number;
   total_stats: number;
-  stats: Partial<CharacterStats>;
+  stats: Partial<CharacterStats> & { __base?: PlacedDecoration[] };
   achievements: number;
   streak: number;
   updated_at: string;
@@ -72,7 +73,7 @@ export const Leaderboard = {
         name: snapshot.name.trim().slice(0, 24),
         level: snapshot.level,
         total_stats: total,
-        stats: snapshot.stats,
+        stats: { ...snapshot.stats, __base: loadBaseLayout() },
         achievements: snapshot.achievements,
         streak: snapshot.streak,
         updated_at: new Date().toISOString()
@@ -81,6 +82,20 @@ export const Leaderboard = {
       .single();
     if (error || !data) throw readable(error, 'Could not save your standing.');
     return data as Explorer;
+  },
+
+  /** Friends see your layout through the existing RLS-protected JSON column. */
+  async syncBase(layout: PlacedDecoration[]): Promise<void> {
+    if (!this.isConfigured()) return;
+    try {
+      const id = await this.ensureSession();
+      const db = await supabase();
+      const { data, error } = await db.from('explorers').select('stats').eq('id', id).single();
+      if (error || !data) return;
+      await db.from('explorers').update({
+        stats: { ...(data.stats as object), __base: sanitizeBaseLayout(layout) }
+      }).eq('id', id);
+    } catch { /* Local autosave remains available offline. */ }
   },
 
   async addFriend(code: string): Promise<void> {
