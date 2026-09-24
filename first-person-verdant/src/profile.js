@@ -22,7 +22,7 @@ export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
-export const profile={complete:false,introSeen:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{cloak:'moss',hair:'raven'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -34,8 +34,13 @@ export function loadProfile(){
     profile.xp=Number.isFinite(raw.xp)?Math.max(0,Math.min(1e7,raw.xp)):0;
     profile.activities=Array.isArray(raw.activities)?raw.activities.filter(a=>a&&['workout','steps','run','study'].includes(a.kind)&&/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&Number.isFinite(a.amount)).slice(-240):[];
     profile.claimed=Array.isArray(raw.claimed)?raw.claimed.filter(v=>typeof v==='string').slice(-100):[];
-    profile.appearance.cloak=['moss','sunroot','moonfern','guardian'].includes(raw.appearance?.cloak)?raw.appearance.cloak:'moss';
-    profile.appearance.hair=['raven','earth','silver'].includes(raw.appearance?.hair)?raw.appearance.hair:'raven';
+    const appearance=raw.appearance||{};
+    profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
+    profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
+    profile.appearance.hairStyle=['short','curly','swept','tied'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
+    profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
+    profile.appearance.shirt=['moss','ochre','slate','clay','ivory','violet','navy'].includes(appearance.shirt)?appearance.shirt:({sunroot:'ochre',moonfern:'slate',guardian:'violet'}[appearance.cloak]||'moss');
+    profile.appearance.pants=['charcoal','umber','olive','indigo'].includes(appearance.pants)?appearance.pants:'charcoal';
     profile.lastWeek=typeof raw.lastWeek==='string'?raw.lastWeek:'';
     profile.name=typeof raw.name==='string'?raw.name.slice(0,24):'';
   }catch{/* New profile. */}

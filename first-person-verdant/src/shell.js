@@ -1,5 +1,6 @@
 import {BIOMES,METRICS,profile,saveProfile,loadProfile,stats,level,weeklyGoals,weekKey,logActivity} from './profile.js';
 import {QUESTIONS,canTakeReasoning} from './reasoning.js';
+import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES} from './avatar.js';
 
 const INTRO=[
   'Ah. Another one stirs beneath the roots.',
@@ -13,11 +14,11 @@ const INTRO=[
 ];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
-const colors={moss:'#52785d',sunroot:'#b98745',moonfern:'#4d86a6',guardian:'#78517c'};
+const EMOTIONS=['curious','welcoming','warm','stern','proud','thoughtful','serious','hopeful'];
 
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance}){
   loadProfile();let view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',quizIndex=0,quizCorrect=0,quizStarted=0;
-  const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}};
+  const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}entry.querySelector('.mycel-portrait')?.classList.remove('mycel-speaking');};
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
   function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');
     if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();
@@ -25,8 +26,9 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   }
   function start(){show(profile.complete?'menu':profile.introSeen?'baseline':'intro');}
   function renderIntro(){
-    entry.innerHTML=`<div class="story-stage"><div class="mycel-portrait"><span class="mycel-cap"></span><span class="mycel-eyes">✧ ✧</span><span class="mycel-roots"></span></div><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS</span><h2>MYCEL</h2><p id="spoken"></p><div class="story-actions">${button('skip','SKIP INTRO')}${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Tap NEXT to reveal a line, then tap again to continue.</small></div></div>`;
+    entry.innerHTML=`<div class="story-stage"><div class="mycel-portrait mycel-${EMOTIONS[line]}"><span class="mycel-cap"></span><span class="mycel-face"><i class="mycel-brow left"></i><i class="mycel-brow right"></i><i class="mycel-eye left"></i><i class="mycel-eye right"></i><i class="mycel-mouth"></i></span><span class="mycel-roots"></span><span class="mycel-emotion">${EMOTIONS[line].toUpperCase()}</span></div><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS</span><h2>MYCEL</h2><p id="spoken"></p><div class="story-actions">${button('skip','SKIP INTRO')}${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Tap NEXT to reveal a line, then tap again to continue.</small></div></div>`;
     const target=entry.querySelector('#spoken'),phrase=INTRO[line];let cursor=0;
+    entry.querySelector('.mycel-portrait').classList.add('mycel-speaking');
     typing=setInterval(()=>{target.textContent=phrase.slice(0,++cursor);if(cursor>=phrase.length)stopTyping();},28);
     entry.querySelector('[data-action="next"]').onclick=()=>{
       if(typing){stopTyping();target.textContent=phrase;return;}
@@ -71,10 +73,11 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     form.onsubmit=e=>{e.preventDefault();notice=logActivity(form.elements.kind.value,Number(amount.value));renderWeekly();};
   }
   function renderCustomize(){
-    entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">THE EXPLORER</span><h2>APPEARANCE</h2></div>${button('back','BACK')}</div><p>Change your cloak and hair. Higher-level colours unlock through real-world XP. Your explorer appears in third person.</p><h3>CLOAK</h3><div class="choice-grid">${Object.entries(colors).map(([name,color],i)=>`<button class="choice ${profile.appearance.cloak===name?'selected':''}" data-cloak="${name}" ${level()<[1,3,5,8][i]?'disabled':''}><i style="background:${color}"></i>${name.toUpperCase()}<small>${level()<[1,3,5,8][i]?`LV ${[1,3,5,8][i]} TO UNLOCK`:'AVAILABLE'}</small></button>`).join('')}</div><h3>HAIR</h3><div class="choice-grid">${['raven','earth','silver'].map((h,i)=>`<button class="choice ${profile.appearance.hair===h?'selected':''}" data-hair="${h}" ${level()<[1,2,6][i]?'disabled':''}><i style="background:${['#17221b','#6d452e','#becbc3'][i]}"></i>${h.toUpperCase()}<small>${level()<[1,2,6][i]?`LV ${[1,2,6][i]} TO UNLOCK`:'AVAILABLE'}</small></button>`).join('')}</div></section>`;
+    const a=profile.appearance;
+    const choices=(key,items)=>`<div class="appearance-options">${items.map(([name,color])=>`<button type="button" class="appearance-choice ${String(a[key])===String(name)?'selected':''}" data-feature="${key}" data-value="${name}">${color?`<i style="background:${color}"></i>`:''}${String(name).toUpperCase()}</button>`).join('')}</div>`;
+    entry.innerHTML=`<section class="shell-card wide-card customize-panel"><div class="panel-heading"><div><span class="eyebrow">THE EXPLORER</span><h2>MAKE IT YOURS</h2></div>${button('back','BACK')}</div><p>Clothes, not a cape. Every starting option is available now. Changes autosave and appear on your character and first-person hands.</p><div class="customize-layout"><div class="customize-fields"><h3>SKIN TONE</h3>${choices('skinIndex',SKIN_TONES.map((c,i)=>[i,c]))}<h3>FACE</h3>${choices('face',FACE_STYLES.map(n=>[n,null]))}<h3>HAIR STYLE</h3>${choices('hairStyle',HAIR_STYLES.map(n=>[n,null]))}<h3>HAIR COLOR</h3>${choices('hairColor',Object.entries(HAIR_COLORS))}<h3>SHIRT</h3>${choices('shirt',Object.entries(SHIRTS))}<h3>TROUSERS</h3>${choices('pants',Object.entries(TROUSERS))}</div><div class="customize-preview"><div class="preview-head" style="--skin:${SKIN_TONES[a.skinIndex]};--hair:${HAIR_COLORS[a.hairColor]}"><i class="preview-hair ${a.hairStyle}"></i><i class="preview-eyes ${a.face}"></i><i class="preview-mouth"></i></div><div class="preview-body" style="background:${SHIRTS[a.shirt]}"><i class="preview-arm left" style="background:${SHIRTS[a.shirt]}"></i><i class="preview-arm right" style="background:${SHIRTS[a.shirt]}"></i></div><div class="preview-legs" style="--pants:${TROUSERS[a.pants]}"><i></i><i></i></div><small>THIRD-PERSON APPEARANCE</small></div></div></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');
-    entry.querySelectorAll('[data-cloak]').forEach(b=>b.onclick=()=>{profile.appearance.cloak=b.dataset.cloak;saveProfile();onAppearance();renderCustomize();});
-    entry.querySelectorAll('[data-hair]').forEach(b=>b.onclick=()=>{profile.appearance.hair=b.dataset.hair;saveProfile();onAppearance();renderCustomize();});
+    entry.querySelectorAll('[data-feature]').forEach(b=>b.onclick=()=>{const key=b.dataset.feature;profile.appearance[key]=key==='skinIndex'?Number(b.dataset.value):b.dataset.value;saveProfile();onAppearance();renderCustomize();});
   }
   function renderLeaderboard(){entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">THE HOLLOW ROOTS</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div><p>The 3D prototype does not have an online leaderboard connection yet. Other players' scores and islands cannot be shown accurately until a shared service is configured.</p><div class="stat-grid"><div><small>YOUR LEVEL</small><strong>${level()}</strong><span>EXPLORER</span></div><div><small>YOUR XP</small><strong>${profile.xp}</strong><span>REAL EFFORT</span></div></div></section>`;entry.querySelector('[data-action="back"]').onclick=()=>show('menu');}
   function renderMap(){
