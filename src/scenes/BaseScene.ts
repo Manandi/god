@@ -3,6 +3,7 @@ import { GAME_WIDTH } from '../config';
 import { Leaderboard } from '../online/Leaderboard';
 import { loadBaseLayout, sanitizeBaseLayout, saveBaseLayout, type PlacedDecoration } from '../progress/BaseLayout';
 import type { CharacterStats } from '../progress/PlayerProgress';
+import { generatePlayerTexture } from '../entities/PlayerAppearance';
 
 interface Owner {
   name: string;
@@ -29,7 +30,7 @@ export class BaseScene extends Phaser.Scene {
   private room: Room = 'outside';
   private background!: Phaser.GameObjects.Image;
   private avatar!: Phaser.GameObjects.Sprite;
-  private shadow!: Phaser.GameObjects.Arc;
+  private shadow!: Phaser.GameObjects.Ellipse;
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private prompt!: Phaser.GameObjects.Text;
   private roomLabel!: Phaser.GameObjects.Text;
@@ -57,7 +58,6 @@ export class BaseScene extends Phaser.Scene {
     if (!this.textures.exists('base-island-overhead-v2')) this.load.image('base-island-overhead-v2', 'art/base-island-overhead-v2.webp');
     if (!this.textures.exists('base-home-interior-v2')) this.load.image('base-home-interior-v2', 'art/base-home-interior-v2.webp');
     if (!this.textures.exists('base-decor-atlas-v2')) this.load.spritesheet('base-decor-atlas-v2', 'art/base-decor-atlas-v2.webp', { frameWidth: 512, frameHeight: 512 });
-    if (!this.textures.exists('base-explorer-v2')) this.load.spritesheet('base-explorer-v2', 'art/base-explorer-v2.webp', { frameWidth: 768, frameHeight: 512 });
   }
 
   create(): void {
@@ -78,8 +78,9 @@ export class BaseScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '14px', color: '#f0f7d7', backgroundColor: '#09160edc'
     }).setPadding(10, 7, 10, 7).setOrigin(0.5).setScrollFactor(0).setDepth(101);
 
-    this.shadow = this.add.circle(640, 393, 16, 0x000000, 0.38);
-    this.avatar = this.add.sprite(640, 383, 'base-explorer-v2', 0).setDisplaySize(112, 112).setOrigin(0.5, 0.88);
+    generatePlayerTexture(this);
+    this.shadow = this.add.ellipse(640, 383, 26, 9, 0x000000, 0.48);
+    this.avatar = this.add.sprite(640, 383, 'player').setDisplaySize(44, 72).setOrigin(0.5, 1);
     this.cameras.main.setBounds(0, 0, SIZE.width, SIZE.height);
     this.cameras.main.startFollow(this.avatar, true, 0.09, 0.09);
     this.keys = this.input.keyboard?.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key> | undefined;
@@ -125,11 +126,10 @@ export class BaseScene extends Phaser.Scene {
       const nextX = this.avatar.x + dx * step, nextY = this.avatar.y + dy * step;
       if (this.canWalk(nextX, this.avatar.y)) this.avatar.x = nextX;
       if (this.canWalk(this.avatar.x, nextY)) this.avatar.y = nextY;
-      this.avatar.setFrame(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0));
-      this.avatar.setAngle(Math.sin(this.time.now / 100) * 2);
-    } else this.avatar.setAngle(0);
+      if (Math.abs(dx) > 0.2) this.avatar.setFlipX(dx < 0);
+    }
     this.avatar.setDepth(this.avatar.y + 1);
-    this.shadow.setPosition(this.avatar.x, this.avatar.y + 14).setDepth(this.avatar.y - 1);
+    this.shadow.setPosition(this.avatar.x, this.avatar.y + 1).setDepth(this.avatar.y - 1);
     const door = this.room === 'outside' ? { x: 435, y: 246 } : { x: 768, y: 835 };
     const nearDoor = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, door.x, door.y) < 85;
     this.prompt.setText(nearDoor ? `E  ${this.room === 'outside' ? 'ENTER HOME' : 'EXIT HOME'}` : this.decorMode ? '1–6  CHOOSE  ·  CLICK  PLACE  ·  RIGHT CLICK  REMOVE  ·  B  CLOSE' : '');

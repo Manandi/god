@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PHYSICS, TILE_SIZE, PARTICLE_TEXTURE_KEY } from '../config';
 import { Player } from '../entities/Player';
+import { generatePlayerTexture } from '../entities/PlayerAppearance';
 import { Enemy, GuardianAttack } from '../entities/Enemy';
 import { ZONES, FIRST_ZONE, FIRST_SPAWN, ZoneConfig } from '../zones/ZoneRegistry';
 import { getObjectProperties } from '../zones/TiledObjects';
@@ -1360,29 +1361,6 @@ export class ZoneScene extends Phaser.Scene {
   }
 
   private generatePlayerTexture(): void {
-    const key = 'player';
-    if (this.textures.exists(key)) this.textures.remove(key);
-    const width = 22;
-    const height = 36;
-    const graphics = this.make.graphics({ x: 0, y: 0 });
-    const skinColors = [0x8d5c3c, 0xb97950, 0xd9a675, 0xefc394, 0x7a4930];
-    const cloakColors = { moss: 0x47795a, sunroot: 0xc28b42, moonfern: 0x4c86a8, guardian: 0x7f4f78 } as const;
-    const hairColors = { raven: 0x07110b, earth: 0x553522, silver: 0xb9c6bd } as const;
-    const skin = skinColors[PlayerProgress.appearance.skinIndex] ?? skinColors[1];
-    const cloak = cloakColors[PlayerProgress.appearance.cloak];
-    const hair = hairColors[PlayerProgress.appearance.hair];
-    // Compact moss-cloaked explorer: still procedural, but with a readable
-    // silhouette and palette instead of the original featureless rectangle.
-    graphics.fillStyle(hair, 1).fillRect(6, 0, 11, 3);
-    graphics.fillStyle(skin, 1).fillRect(7, 3, 9, 9);
-    graphics.fillStyle(hair, 1).fillRect(4, 2, 4, 9).fillRect(16, 4, 3, 7);
-    graphics.fillStyle(0xbff5d0, 1).fillRect(14, 6, 2, 2);
-    graphics.fillStyle(cloak, 1).fillRect(4, 12, 14, 16);
-    graphics.fillStyle(cloak, 1).fillTriangle(2, 29, 20, 29, 11, 13);
-    graphics.fillStyle(skin, 1).fillRect(2, 15, 3, 11).fillRect(17, 15, 3, 11);
-    graphics.fillStyle(0x17241c, 1).fillRect(5, 28, 5, 7).fillRect(13, 28, 5, 7);
-    graphics.fillStyle(0xcfffe0, 1).fillRect(4, 34, 6, 2).fillRect(13, 34, 6, 2);
-    graphics.generateTexture(key, width, height);
-    graphics.destroy();
+    generatePlayerTexture(this);
   }
 }
