@@ -19,9 +19,9 @@ const damp = THREE.MathUtils.damp;
 // Behaviour tuning per kind. Times in seconds, distances in metres.
 const KINDS = {
   shellback: { size: .64, health: 6, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.5, attackRange: 3.3,
-    windup: .75, track: .5, lunge: .3, lungeDistance: 2.8, bite: [.04, .25], recover: .95, cooldown: [1.1, 2.2], biteRadius: .42 },
+    windup: .82, track: .46, lunge: .3, lungeDistance: 2.8, bite: [.04, .25], recover: 1.12, cooldown: [1.1, 2.2], biteRadius: .42 },
   thornling: { size: .57, health: 4, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, attackRange: 3.0,
-    windup: .58, track: .38, lunge: .26, lungeDistance: 2.4, bite: [.03, .22], recover: .75, cooldown: [.9, 1.8], biteRadius: .38 }
+    windup: .65, track: .34, lunge: .26, lungeDistance: 2.4, bite: [.03, .22], recover: .9, cooldown: [.9, 1.8], biteRadius: .38 }
 };
 
 /**
@@ -80,6 +80,10 @@ export class Creature {
     this.barFill = new THREE.Mesh(new THREE.PlaneGeometry(1.52, .07), new THREE.MeshBasicMaterial({ color: 0xd6c07a, depthTest: false }));
     this.barFill.position.z = .001; barBack.renderOrder = 10; this.barFill.renderOrder = 11;
     this.bar.add(barBack, this.barFill); this.bar.visible = false;
+    // Ground-level tell survives camera angle changes. Amber builds during
+    // tracking, red marks the committed lunge, pale green marks recovery.
+    this.tell = new THREE.Mesh(new THREE.RingGeometry(.82,.91,32),new THREE.MeshBasicMaterial({color:0xe9ad62,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));
+    this.tell.rotation.x=-Math.PI/2;this.tell.visible=false;scene.add(this.tell);
     this.place();
   }
   /** Hurt volumes in world space: the shell (two spheres) and the head. */
@@ -141,6 +145,7 @@ export class Creature {
     this.t += dt;
     this.flash = Math.max(0, this.flash - dt); this.shake = Math.max(0, this.shake - dt);
     if (this.state === 'defeated') {
+      this.tell.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
       if (this.t > 2.2) this.root.visible = false;
@@ -273,6 +278,14 @@ export class Creature {
     this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
     this.eyeMat.emissive.setRGB(.35 + glow * .8, .26 + glow * .4, .13);
+    this.tell.visible=this.alive&&(st==='windup'||st==='lunge'||st==='recover');
+    if(this.tell.visible){
+      const warning=st==='windup',w=warning?Math.min(1,t/k.windup):1;
+      this.tell.position.set(this.x,groundY(this.x,this.z)+.065,this.z);
+      this.tell.scale.setScalar(this.radius*(warning ? .9+.45*w : st==='lunge' ? 1.42 : 1.18));
+      this.tell.material.color.setHex(warning?0xe9ad62:st==='lunge'?0xf27d56:0xb9d892);
+      this.tell.material.opacity=warning ? .25+.45*w : st==='lunge' ? .75 : .3;
+    }
     // A small shudder on impact reads as weight without shaking the camera.
     if (this.shake > 0) { this.root.position.x += (Math.random() - .5) * .07; this.root.position.z += (Math.random() - .5) * .07; }
     this.root.updateMatrixWorld(true);

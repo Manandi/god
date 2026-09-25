@@ -60,12 +60,13 @@ export class PlayerCombat {
     let { x, z } = ctx.input;
     if (!x && !z) { x = Math.sin(this.facing); z = Math.cos(this.facing); }      // step back
     const len = Math.hypot(x, z); this.evadeDir = { x: x / len, z: z / len };
+    const forwardX=-Math.sin(this.facing),forwardZ=-Math.cos(this.facing);
+    this.evadeClip=this.evadeDir.x*forwardX+this.evadeDir.z*forwardZ<-.45?'evadeBack':'evadeForward';
     // The roll travels the way the body faces; with a lock-on the body turns back
     // to the target as soon as the roll ends.
     // Keep the upper body facing the threat for a retreat or side step. The
     // displacement is independent, so the camera and attack line stay legible.
     if (!ctx.lockTarget) this.facing = yawOf(x, z);
-    this.evadeClip = 'evadeForward';
     this.events.push({ type: 'evade' });
   }
   hurt(fromX, fromZ, x, z) {
