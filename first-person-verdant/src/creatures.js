@@ -18,33 +18,46 @@ const damp = THREE.MathUtils.damp;
 
 // Behaviour tuning per kind. Times in seconds, distances in metres.
 const KINDS = {
-  shellback: { size: .64, health: 6, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.5, attackRange: 3.3,
-    windup: .75, track: .5, lunge: .3, lungeDistance: 2.8, bite: [.04, .25], recover: .95, cooldown: [1.1, 2.2], biteRadius: .42 },
-  thornling: { size: .57, health: 4, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, attackRange: 3.0,
-    windup: .58, track: .38, lunge: .26, lungeDistance: 2.4, bite: [.03, .22], recover: .75, cooldown: [.9, 1.8], biteRadius: .38 }
+  shellback: { size: .64, health: 160, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
+  thornling: { size: .57, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 }
 };
+// The moveset. Each attack: wind-up (the telegraph), active, recovery (the
+// punish window). `track` is how long the wind-up keeps turning toward the
+// explorer before committing. `kind` decides the explorer's reaction:
+// light → flinch (hyper-armour holds), heavy → knockdown.
+const ATTACKS = {
+  lunge: { windup: .75, track: .5, active: .3, recover: .95, range: [1.5, 3.4], damage: 1, kind: 'light', label: 'shell lunge' },
+  spin:  { windup: .65, track: 0, active: 1.0, recover: 1.1, range: [0, 2.4], damage: 1, kind: 'light', label: 'shell spin' },
+  slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' }
+};
+const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
+const ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6;
+// The slam's shockwave: radius over time. Rolling through it is safe; rolling
+// away works only if you start early.
+export const SHOCKWAVE = { start: .02, duration: .4, from: .5, to: 3.1 };
+const shockwaveRadius = t => SHOCKWAVE.from + (SHOCKWAVE.to - SHOCKWAVE.from) * Math.min(1, Math.max(0, (t - SHOCKWAVE.start) / SHOCKWAVE.duration));
 
 /**
  * A creature driven by explicit states:
- *   wander → alert → approach ⇄ circle → windup → lunge → recover → approach …
- *   any state except lunge → stagger when struck;  health 0 → defeated
- * The windup is the readable telegraph: the creature rears, pulls its head in
- * and its shell glows. It tracks the explorer for the first part of the windup,
- * then commits to that line, which is what makes a sidestep work.
+ *   wander → alert → approach ⇄ circle → windup(attack) → attack → recover → …
+ *   hits wear down poise; at zero it topples onto its back (belly exposed,
+ *   Root Strike open), then rises. Heavy hits or enough damage make it
+ *   stagger; light hits alone never cancel a committed attack.
+ *   Below 40% health it enrages: shorter wind-ups and cooldowns.
  */
 export class Creature {
   constructor(scene, x, z, type = 'shellback', options = {}) {
     const k = KINDS[type];
     this.kind = k; this.type = type; this.home = { x, z }; this.x = x; this.z = z;
     this.maxHealth = k.health; this.health = k.health; this.alive = true;
-    this.respawnDelay = options.respawn ?? 0; this.deadTime = 0;
+    this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
+    this.respawnDelay = options.respawn ?? 0;
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
     this.state = 'wander'; this.t = 0; this.cooldown = 1; this.wanderTurn = 0;
-    this.lungeYaw = 0; this.bitten = false;
-    this.push = { x: 0, z: 0 }; this.flash = 0; this.shake = 0;
-    this.radius = 1.15 * k.size; this.legPhase = 0;
+    this.attack = null; this.attackYaw = 0; this.connected = false; this.enraged = false; this.combo = false;
+    this.push = { x: 0, z: 0 }; this.flash = 0; this.shake = 0; this.jolt = { pitch: 0, roll: 0 };
+    this.radius = 1.15 * k.size; this.legPhase = 0; this.spinAngle = 0;
     this.lastEvent = '';
-
     this.root = new THREE.Group(); scene.add(this.root);
     this.tilt = new THREE.Group(); this.root.add(this.tilt);       // follows the slope
     this.body = new THREE.Group(); this.tilt.add(this.body);       // rears, lunges, flinches
@@ -82,38 +95,62 @@ export class Creature {
     this.bar.add(barBack, this.barFill); this.bar.visible = false;
     this.place();
   }
-  /** Hurt volumes in world space: the shell (two spheres) and the head. */
+  get toppled() { return this.state === 'toppled'; }
+  /** Hurt volumes in world space. Upright: shell (two spheres) and head. On its back: the belly. */
   hurtVolumes() {
-    const s = this.kind.size, out = [];
-    const f = new THREE.Vector3();
-    for (const [z, r, part] of [[.45, .98, 'shell'], [-.75, .98, 'shell']]) {
-      f.set(0, 1.05, z).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: r * s, part });
+    const s = this.kind.size, out = [], f = new THREE.Vector3();
+    if (this.state === 'toppled' || this.state === 'rising') {
+      // On its back only the belly is offered; the head is tucked against the ground.
+      f.set(0, 1.0, -.2).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: 1.15 * s, part: 'belly' });
+      return out;
+    } else {
+      for (const [z, r] of [[.45, .98], [-.75, .98]]) {
+        f.set(0, 1.05, z).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: r * s, part: 'shell' });
+      }
     }
     this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .35 * s);
-    out.push({ x: f.x, y: f.y, z: f.z, r: .6 * s, part: 'head' });
+    out.push({ x: f.x, y: f.y, z: f.z, r: .52 * s, part: 'head' });
     return out;
   }
   forward() { return new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading)); }
   place() {
-    const g = groundY(this.x, this.z);
-    this.root.position.set(this.x, g, this.z);
+    this.root.position.set(this.x, groundY(this.x, this.z), this.z);
     this.root.rotation.y = this.heading;
     this.root.updateMatrixWorld(true);
   }
   setState(state) { this.state = state; this.t = 0; }
+  timing(a) { const m = this.enraged ? .78 : 1; return { windup: a.windup * m, recover: a.recover * (this.enraged ? .85 : 1), track: a.track * m }; }
 
-  hit(damage, fromX, fromZ, push, stagger) {
-    if (!this.alive) return false;
-    this.health = Math.max(0, this.health - damage);
-    const d = Math.hypot(this.x - fromX, this.z - fromZ) || 1;
-    // A lunge carries through a light hit; everything else is interrupted.
-    const armoured = this.state === 'lunge' && stagger < .6;
-    this.push = { x: (this.x - fromX) / d * push * (armoured ? .3 : 1), z: (this.z - fromZ) / d * push * (armoured ? .3 : 1) };
-    this.flash = .14; this.shake = .1;
-    if (this.health <= 0) { this.alive = false; this.setState('defeated'); this.lastEvent = 'defeated'; return true; }
-    if (!armoured) { this.setState('stagger'); this.staggerTime = stagger; }
-    this.lastEvent = armoured ? 'hit (kept lunging)' : 'staggered';
-    return true;
+  /**
+   * A strike from the explorer. Returns what happened so the game can show it:
+   * { damage, effect: 'weak'|'armored'|'belly'|'normal', toppled, defeated, staggered }
+   */
+  hit({ damage, poise, fromX, fromZ, push, stagger, part }) {
+    if (!this.alive) return null;
+    const onBack = this.state === 'toppled' || this.state === 'rising';
+    const mult = PART_DAMAGE[part] ?? 1;
+    const dealt = damage * mult;
+    this.health = Math.max(0, this.health - dealt);
+    const d = Math.hypot(this.x - fromX, this.z - fromZ) || 1, dx = (this.x - fromX) / d, dz = (this.z - fromZ) / d;
+    // Jolt away from the blow in the creature's own frame.
+    const f = this.forward(); this.jolt.pitch += -(dx * f.x + dz * f.z) * .22 * (stagger + .3); this.jolt.roll += (dx * f.z - dz * f.x) * .22 * (stagger + .3);
+    this.flash = .12; this.shake = .09 + stagger * .08;
+    const out = { damage: dealt, effect: part === 'belly' ? 'belly' : mult > 1 ? 'weak' : mult < 1 ? 'armored' : 'normal', toppled: false, defeated: false, staggered: false };
+    if (this.health <= 0) { this.alive = false; this.setState('defeated'); this.lastEvent = 'defeated'; out.defeated = true; return out; }
+    if (this.health < this.maxHealth * ENRAGE_AT && !this.enraged) { this.enraged = true; this.enragedNow = true; }
+    if (onBack) { this.lastEvent = 'struck while toppled'; return out; }
+    this.push = { x: dx * push * .6, z: dz * push * .6 };
+    this.poise -= poise; this.poiseDelay = 2.5; this.flinchMeter += dealt;
+    if (this.poise <= 0) {
+      this.poise = this.kind.poise; this.setState('toppled'); this.attack = null; this.lastEvent = 'TOPPLED';
+      out.toppled = true; return out;
+    }
+    const committed = this.state === 'attack';
+    if (stagger >= .6 || (this.flinchMeter >= 22 && !committed)) {
+      this.flinchMeter = 0; this.staggerTime = stagger >= .6 ? .8 : .45; this.setState('stagger'); this.attack = null;
+      this.lastEvent = 'staggered'; out.staggered = true;
+    } else this.lastEvent = committed ? 'hit (kept attacking)' : 'flinched';
+    return out;
   }
 
   /** Try to move; slide around obstacles and refuse slopes that are too steep. */
@@ -135,11 +172,29 @@ export class Creature {
     }
     return want;
   }
+  /** Pick an attack for the explorer's range and angle, or null. */
+  chooseAttack(dist, rel) {
+    const behind = Math.abs(rel) > 1.3;
+    const options = [];
+    for (const [name, a] of Object.entries(ATTACKS)) {
+      if (dist < a.range[0] || dist > a.range[1]) continue;
+      let w = 1;
+      if (name === 'lunge') w = behind ? 0 : Math.abs(rel) < .5 ? 1.4 : .6;
+      if (name === 'spin') w = behind || dist < 1.4 ? 2.4 : .35;
+      if (name === 'slam') w = behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
+      if (w > 0) options.push([name, w]);
+    }
+    let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
+    for (const [name, w] of options) { if ((r -= w) <= 0) return name; }
+    return null;
+  }
 
   update(dt, time, ctx) {
     const events = [], k = this.kind, p = ctx.player;
     this.t += dt;
     this.flash = Math.max(0, this.flash - dt); this.shake = Math.max(0, this.shake - dt);
+    this.jolt.pitch = damp(this.jolt.pitch, 0, 9, dt); this.jolt.roll = damp(this.jolt.roll, 0, 9, dt);
+    if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
     if (this.state === 'defeated') {
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
@@ -148,9 +203,11 @@ export class Creature {
       this.bar.visible = false;
       return events;
     }
+    // Poise recovers once the creature has had a moment without being hit.
+    this.poiseDelay -= dt; if (this.poiseDelay <= 0) this.poise = Math.min(k.poise, this.poise + dt * 4);
     const dx = p.x - this.x, dz = p.z - this.z, dist = Math.hypot(dx, dz);
-    const toPlayer = Math.atan2(dx, dz);
-    let wantHeading = this.heading, wantSpeed = 0, turn = k.turn;
+    const toPlayer = Math.atan2(dx, dz), rel = angleTo(this.heading, toPlayer);
+    let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
 
     switch (this.state) {
@@ -161,7 +218,7 @@ export class Creature {
         wantHeading = this.wanderHeading ?? this.heading; wantSpeed = k.walk; turn = 1.4;
         if (dist < k.notice) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
-      case 'alert':           // a short beat to turn and notice
+      case 'alert':
         wantHeading = toPlayer; turn = 5;
         if (this.t > .5) this.setState('approach');
         break;
@@ -169,68 +226,58 @@ export class Creature {
         wantHeading = this.steer(toPlayer, ctx.grid); wantSpeed = k.chase * THREE.MathUtils.clamp((dist - k.spacing) / 1.5, .25, 1);
         if (dist < k.spacing + .3) this.setState('circle');
         if (dist > k.notice * 1.6) this.setState('wander');
+        if (this.cooldown <= 0 && dist < 3.4) this.beginAttack(dist, rel, events);
         break;
-      case 'circle': {         // hold spacing, edging sideways, until ready to strike
+      case 'circle': {
+        // Hold spacing and face the explorer; turn in place when flanked.
         const side = Math.sin(time * .7 + this.home.x) > 0 ? 1 : -1;
-        wantHeading = toPlayer + side * .9 * (dist < k.spacing - .4 ? 1.6 : 1);
-        wantSpeed = dist < k.spacing - .6 ? k.walk * .9 : k.walk * .45;
-        if (dist < k.spacing - .6) wantHeading = toPlayer + Math.PI; // back off if crowded
-        if (dist > k.attackRange + .6) this.setState('approach');
-        else if (this.cooldown <= 0 && dist < k.attackRange && Math.abs(angleTo(this.heading, toPlayer)) < 1.2) {
-          this.setState('windup'); events.push({ type: 'windup' });
-        }
+        wantHeading = toPlayer;
+        if (Math.abs(rel) > .9) { wantSpeed = 0; turn = k.turn * 1.25; }
+        else if (dist < k.spacing - .6) { moveYaw = toPlayer + Math.PI; wantSpeed = k.walk * .9; }
+        else { moveYaw = toPlayer + side * 1.6; wantSpeed = k.walk * .45; }
+        if (dist > k.spacing + 1.4) this.setState('approach');
+        else if (this.cooldown <= 0) this.beginAttack(dist, rel, events);
         break;
       }
-      case 'windup':
-        // Track the explorer, then lock the line for the rest of the telegraph.
-        if (this.t < k.track) { wantHeading = toPlayer; turn = 4.5; } else turn = 0;
-        if (this.t >= k.windup) { this.lungeYaw = this.heading; this.bitten = false; this.setState('lunge'); events.push({ type: 'lunge' }); }
+      case 'windup': {
+        const a = ATTACKS[this.attack], tm = this.timing(a);
+        if (this.t < tm.track) { wantHeading = toPlayer; turn = 4.5; } else turn = 0;
+        if (this.t >= tm.windup) { this.attackYaw = this.heading; this.connected = false; this.closest = 9; this.setState('attack'); events.push({ type: 'attack', attack: this.attack }); }
         break;
-      case 'lunge': {
+      }
+      case 'attack':
         turn = 0;
-        const frac = this.t / k.lunge, eased = 1 - (1 - Math.min(1, frac)) ** 2;
-        const prevEased = 1 - (1 - Math.max(0, (this.t - dt) / k.lunge)) ** 2;
-        let step = (eased - prevEased) * k.lungeDistance;
-        // Stop at the explorer's body rather than passing through it.
-        const ahead = dx * Math.sin(this.lungeYaw) + dz * Math.cos(this.lungeYaw);
-        const lateral = Math.abs(dx * Math.cos(this.lungeYaw) - dz * Math.sin(this.lungeYaw));
-        if (lateral < this.radius + .35) step = Math.min(step, Math.max(0, ahead - this.radius - .38));
-        this.travel(Math.sin(this.lungeYaw) * step, Math.cos(this.lungeYaw) * step, ctx.grid);
-        if (!this.bitten && this.t >= k.bite[0] && this.t <= k.bite[1]) {
-          const bite = this.biteSphere();
-          const gap = Math.hypot(bite.x - p.x, bite.z - p.z) - (bite.r + .34);
-          const within = gap <= 0 && bite.y > p.y + .1 && bite.y < p.y + 1.8;
-          if (within) {
-            this.bitten = true;
-            events.push({ type: ctx.playerInvulnerable ? 'evaded' : 'bite', x: this.x, z: this.z });
-          } else this.closest = Math.min(this.closest ?? 9, gap);
-        }
-        if (this.t >= k.lunge) {
-          if (!this.bitten) events.push({ type: 'missed', gap: this.closest ?? 9 });
-          this.closest = undefined;
-          this.setState('recover');
+        this.runAttack(dt, p, ctx, events, dx, dz);
+        break;
+      case 'recover': {
+        turn = .6;
+        if (this.t >= this.timing(ATTACKS[this.attack]).recover) {
+          this.cooldown = k.cooldown[0] + Math.random() * (k.cooldown[1] - k.cooldown[0]);
+          if (this.enraged) this.cooldown *= .65;
+          this.setState(dist < k.spacing + 1 ? 'circle' : 'approach');
         }
         break;
       }
-      case 'recover':          // the punish window: winded, head low, slow to turn
-        turn = .6;
-        if (this.t >= k.recover) { this.cooldown = k.cooldown[0] + Math.random() * (k.cooldown[1] - k.cooldown[0]); this.setState(dist < k.attackRange ? 'circle' : 'approach'); }
-        break;
       case 'stagger':
         turn = 0;
-        if (this.t >= this.staggerTime) { this.cooldown = Math.max(this.cooldown, .5); this.setState(dist < k.attackRange ? 'circle' : 'approach'); }
+        if (this.t >= this.staggerTime) { this.cooldown = Math.max(this.cooldown, .4); this.setState(dist < k.spacing + 1 ? 'circle' : 'approach'); }
+        break;
+      case 'toppled':
+        turn = 0;
+        if (this.t >= TOPPLE_TIME) { this.setState('rising'); events.push({ type: 'rising' }); }
+        break;
+      case 'rising':
+        turn = 0;
+        if (this.t >= RISE_TIME) { this.cooldown = .6; this.setState('circle'); }
         break;
     }
 
-    // Turn at a limited rate; circle faces the explorer while stepping sideways.
-    const faceTarget = this.state === 'circle' ? toPlayer : wantHeading;
-    if (turn > 0) this.heading += THREE.MathUtils.clamp(angleTo(this.heading, faceTarget), -turn * dt, turn * dt);
+    if (turn > 0) this.heading += THREE.MathUtils.clamp(angleTo(this.heading, wantHeading), -turn * dt, turn * dt);
     this.speed = damp(this.speed, wantSpeed, 6, dt);
-    if (this.state !== 'lunge') {
-      const moveYaw = this.state === 'circle' ? wantHeading : this.heading;
-      if (this.speed > .01) this.travel(Math.sin(moveYaw) * this.speed * dt, Math.cos(moveYaw) * this.speed * dt, ctx.grid);
+    if (this.state !== 'attack' && this.speed > .01) {
+      const yaw = moveYaw ?? this.heading;
+      this.travel(Math.sin(yaw) * this.speed * dt, Math.cos(yaw) * this.speed * dt, ctx.grid);
     }
-    // Knockback from hits decays quickly and still respects obstacles.
     if (Math.hypot(this.push.x, this.push.z) > .001) {
       const f = 1 - Math.exp(-11 * dt);
       this.travel(this.push.x * f, this.push.z * f, ctx.grid);
@@ -239,55 +286,137 @@ export class Creature {
     this.animate(dt, time);
     return events;
   }
-  biteSphere() {
-    const f = new THREE.Vector3(); this.head.getWorldPosition(f);
-    f.addScaledVector(this.forward(), .5 * this.kind.size);
-    return { x: f.x, y: f.y, z: f.z, r: this.kind.biteRadius };
+
+  beginAttack(dist, rel, events) {
+    const name = this.chooseAttack(dist, rel);
+    if (!name) return;
+    this.attack = name; this.setState('windup');
+    events.push({ type: 'windup', attack: name });
+  }
+
+  /** The active part of each attack, with its own damage volume. */
+  runAttack(dt, p, ctx, events, dx, dz) {
+    const a = ATTACKS[this.attack], k = this.kind, s = k.size;
+    const strike = (extra = {}) => {
+      if (this.connected) return;
+      this.connected = true;
+      events.push({ type: 'strike', attack: this.attack, label: a.label, kind: a.kind, damage: a.damage, x: this.x, z: this.z, ...extra });
+    };
+    if (this.attack === 'lunge') {
+      const frac = Math.min(1, this.t / a.active), prev = Math.max(0, (this.t - dt) / a.active);
+      let step = ((1 - (1 - frac) ** 2) - (1 - (1 - prev) ** 2)) * 2.8;
+      const ahead = dx * Math.sin(this.attackYaw) + dz * Math.cos(this.attackYaw);
+      const lateral = Math.abs(dx * Math.cos(this.attackYaw) - dz * Math.sin(this.attackYaw));
+      if (lateral < this.radius + .35) step = Math.min(step, Math.max(0, ahead - this.radius - .38));
+      this.travel(Math.sin(this.attackYaw) * step, Math.cos(this.attackYaw) * step, ctx.grid);
+      if (this.t >= .04 && this.t <= .25) {
+        const bite = this.damageVolumes()[0];
+        const gap = Math.hypot(bite.x - p.x, bite.z - p.z) - (bite.r + .34);
+        if (gap <= 0 && bite.y > p.y + .1 && bite.y < p.y + 1.8) strike();
+        else this.closest = Math.min(this.closest, gap);
+      }
+    } else if (this.attack === 'spin') {
+      this.spinAngle += dt * 17;
+      const v = this.damageVolumes()[0];
+      const gap = Math.hypot(v.x - p.x, v.z - p.z) - (v.r + .34);
+      if (gap <= 0 && p.y < v.y + 1.2) strike();
+      else this.closest = Math.min(this.closest, gap);
+    } else if (this.attack === 'slam') {
+      // The shell hits the ground, then a shockwave ring rolls outward: roll
+      // through it or jump over it.
+      for (const v of this.damageVolumes()) {
+        const d = Math.hypot(v.x - p.x, v.z - p.z);
+        const inside = v.ring ? Math.abs(d - v.r) < .45 && ctx.playerGrounded : d < v.r + .34;
+        if (inside) strike({ ring: !!v.ring });
+        else this.closest = Math.min(this.closest, v.ring ? Math.abs(d - v.r) - .45 : d - v.r - .34);
+      }
+    }
+    if (this.t >= a.active) {
+      if (!this.connected) events.push({ type: 'missed', attack: this.attack, label: a.label, gap: this.closest ?? 9 });
+      this.setState('recover');
+    }
+  }
+  /** Damage volumes for the current attack (debug draws these). */
+  damageVolumes() {
+    const s = this.kind.size, f = new THREE.Vector3();
+    if (this.attack === 'lunge') {
+      this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .5 * s);
+      return [{ x: f.x, y: f.y, z: f.z, r: this.kind.biteRadius }];
+    }
+    if (this.attack === 'spin') {
+      const g = groundY(this.x, this.z);
+      return [{ x: this.x, y: g + .5, z: this.z, r: this.radius + .55 }];
+    }
+    if (this.attack === 'slam') {
+      const fw = this.forward(), cx = this.x + fw.x * 1.0 * s, cz = this.z + fw.z * 1.0 * s, g = groundY(cx, cz);
+      const out = [];
+      if (this.state !== 'attack') return out;
+      if (this.t < .1) out.push({ x: cx, y: g + .3, z: cz, r: .75 });
+      if (this.t >= .02) out.push({ x: cx, y: g + .1, z: cz, r: shockwaveRadius(this.t), ring: true });
+      return out;
+    }
+    return [];
   }
 
   animate(dt, time) {
     this.place();
-    // Align to the slope under the shell so feet stay on the ground.
     const s = this.kind.size * 1.1, h = this.heading;
     const fx = Math.sin(h) * s, fz = Math.cos(h) * s, rx = Math.cos(h) * s, rz = -Math.sin(h) * s;
     const pitch = Math.atan2(groundY(this.x - fx, this.z - fz) - groundY(this.x + fx, this.z + fz), 2 * s);
     const roll = Math.atan2(groundY(this.x + rx, this.z + rz) - groundY(this.x - rx, this.z - rz), 2 * s);
     this.tilt.rotation.x = damp(this.tilt.rotation.x, pitch, 10, dt);
     this.tilt.rotation.z = damp(this.tilt.rotation.z, roll, 10, dt);
-    const k = this.kind, st = this.state, t = this.t;
-    let rear = 0, headOut = 0, headLow = 0, glow = 0, lean = 0;
+    const st = this.state, t = this.t, a = this.attack ? ATTACKS[this.attack] : null, tm = a ? this.timing(a) : null;
+    let rear = 0, headOut = 0, headLow = 0, glow = 0, lean = 0, lift = 0, flip = 0, spin = 0, legsIn = 0, legRate = 1;
     if (st === 'alert') { rear = -.12 * Math.sin(Math.min(1, t / .5) * Math.PI); headOut = .15; }
-    if (st === 'windup') { const w = Math.min(1, t / k.windup); rear = -.28 * w; headOut = -.35 * w; glow = w * w; }
-    if (st === 'lunge') { rear = .16; headOut = .45; glow = .6; }
-    if (st === 'recover') { rear = .06; headOut = .1; headLow = -.25 + Math.sin(time * 5) * .03; }
+    if (st === 'windup') {
+      const w = Math.min(1, t / tm.windup); glow = w * w;
+      if (this.attack === 'lunge') { rear = -.28 * w; headOut = -.35 * w; }
+      if (this.attack === 'spin') { headOut = -.6 * w; legsIn = w; spin = Math.sin(t * 40) * .06 * w; }    // retract and rattle
+      if (this.attack === 'slam') { rear = -.75 * w; lift = .9 * w; headOut = .2 * w; }                     // rear up high
+    }
+    if (st === 'attack') {
+      glow = .7;
+      if (this.attack === 'lunge') { rear = .16; headOut = .45; }
+      if (this.attack === 'spin') { headOut = -.6; legsIn = 1; spin = this.spinAngle; }
+      if (this.attack === 'slam') { const k = Math.min(1, t / .07); rear = -.75 + .95 * k; lift = .9 * (1 - k); }
+    }
+    if (st === 'recover') { rear = .06; headOut = .1; headLow = -.25 + Math.sin(time * 5) * .03; legRate = .5; }
     if (st === 'stagger') { lean = Math.sin(t * 28) * .12 * Math.max(0, 1 - t / this.staggerTime); rear = .1; headOut = -.2; }
-    this.body.rotation.x = damp(this.body.rotation.x, rear, st === 'lunge' ? 22 : 10, dt);
-    this.body.rotation.z = damp(this.body.rotation.z, lean, 20, dt);
-    this.body.position.y = damp(this.body.position.y, Math.sin(time * 7) * .01, 10, dt);
-    this.neck.position.z = damp(this.neck.position.z, 1.2 + headOut, st === 'lunge' ? 26 : 12, dt);
+    if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
+    if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
+    this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
+    this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
+    this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
+    this.body.position.y = damp(this.body.position.y, lift + flip * 2.3 + Math.sin(time * 7) * .01, 12, dt);
+    this.neck.position.z = damp(this.neck.position.z, 1.2 + headOut, st === 'attack' ? 26 : 12, dt);
     this.neck.position.y = damp(this.neck.position.y, 1.2 + headLow, 10, dt);
-    // Walk cycle scaled by ground speed.
-    const moving = st === 'lunge' ? 2.2 : Math.min(1, this.speed / 2);
-    this.legPhase += dt * (4 + this.speed * 4.5);
-    this.legs.forEach(({ mesh, phase }) => { mesh.rotation.x = Math.sin(this.legPhase + phase) * .5 * moving; });
+    const moving = st === 'attack' && this.attack === 'lunge' ? 2.2 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
+    this.legPhase += dt * (4 + this.speed * 4.5) * legRate;
+    this.legs.forEach(({ mesh, phase }) => {
+      mesh.rotation.x = Math.sin(this.legPhase + phase) * .5 * moving;
+      mesh.scale.setScalar(damp(mesh.scale.x, 1 - legsIn * .55, 14, dt));
+    });
+    const rage = this.enraged ? 1 : 0;
     this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
-    this.eyeMat.emissive.setRGB(.35 + glow * .8, .26 + glow * .4, .13);
-    // A small shudder on impact reads as weight without shaking the camera.
+    this.eyeMat.emissive.setRGB(.35 + glow * .8 + rage * .9, (.26 + glow * .4) * (1 - rage * .8), .13 * (1 - rage));
     if (this.shake > 0) { this.root.position.x += (Math.random() - .5) * .07; this.root.position.z += (Math.random() - .5) * .07; }
     this.root.updateMatrixWorld(true);
   }
   showBar(visible, camera) {
-    this.bar.visible = visible && this.alive;
+    this.bar.visible = visible && this.alive && this.state !== 'toppled' && this.state !== 'rising';
     if (!this.bar.visible) return;
     this.bar.quaternion.copy(this.root.quaternion).invert().multiply(camera.quaternion);
     const f = this.health / this.maxHealth;
     this.barFill.scale.x = Math.max(.001, f); this.barFill.position.x = -.76 * (1 - f);
+    this.barFill.material.color.set(this.enraged ? 0xe0805a : 0xd6c07a);
   }
   respawn() {
-    this.alive = true; this.health = this.maxHealth; this.x = this.home.x; this.z = this.home.z;
+    this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
+    this.x = this.home.x; this.z = this.home.z;
     this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0);
-    this.setState('wander'); this.cooldown = 1.5; this.push = { x: 0, z: 0 };
+    this.setState('wander'); this.cooldown = 1.5; this.push = { x: 0, z: 0 }; this.attack = null;
   }
 }
 

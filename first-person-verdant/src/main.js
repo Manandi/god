@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE } from './world.js';
-import { createCreatures } from './creatures.js';
+import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
@@ -8,7 +8,7 @@ import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile } from './profile.js';
 import { PlayerCombat } from './combat/player.js';
-import { MOVES } from './combat/moves.js';
+import { MOVES, STAMINA } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
 import { CombatDebug } from './combat/debug.js';
 import './style.css';
@@ -30,7 +30,7 @@ const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
 const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:!params.has('fp'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
-const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null;
+const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
@@ -75,7 +75,8 @@ document.addEventListener('pointerlockchange',()=>{
 });
 const endEmote=()=>{if(player.emote!=='idle'){player.emote='idle';avatar.emote('idle');}};
 function evadePressed(){if(paused)return;endEmote();combat.press('evade');}
-function attackPressed(){if(paused)return;endEmote();combat.press('attack');}
+function attackPressed(){if(paused)return;endEmote();combat.press('light');}
+function heavyPressed(down){if(paused)return;combat.heavyHeld=down;if(down){endEmote();combat.press('heavy');}}
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
   keyState.add(e.code);
@@ -89,12 +90,13 @@ window.addEventListener('keydown',e=>{
   }
   if(e.code==='Space'&&!paused&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
   if(e.code==='ShiftLeft'||e.code==='ShiftRight')evadePressed();
-  if(e.code==='KeyF'||e.code==='KeyK')attackPressed();
+  if(e.code==='KeyF')attackPressed();
+  if(e.code==='KeyR')heavyPressed(true);
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
   if(e.code==='KeyE'&&!paused&&!journalOpen&&!combat.busy){if(nearestInteractable())player.interactT=0;interact();}
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
-window.addEventListener('keyup',e=>keyState.delete(e.code));
+window.addEventListener('keyup',e=>{keyState.delete(e.code);if(e.code==='KeyR')heavyPressed(false);});
 window.addEventListener('blur',()=>keyState.clear());
 document.addEventListener('mousemove',e=>{
   if(document.pointerLockElement!==canvas||paused)return;
@@ -107,12 +109,13 @@ let lockFlick=0;
 canvas.addEventListener('mousedown',e=>{
   if(paused)return;
   if(e.button===1){e.preventDefault();toggleLock();return;}
-  if(e.button===2){evadePressed();return;}
+  if(e.button===2){heavyPressed(true);return;}
   if(e.button!==0)return;
   if(document.pointerLockElement!==canvas)canvas.requestPointerLock?.()?.catch?.(()=>{});
   attackPressed();
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('mouseup',e=>{if(e.button===2)heavyPressed(false);});
 window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));});
 
 // ---------------------------------------------------------------- targeting
@@ -167,11 +170,11 @@ function interact(){
 function maxHealth(){return Math.max(3,Math.min(6,3+Math.floor(stats().defense/7)));}
 // Real-world strength scales strike damage; turtles never grant XP.
 const strikePower=()=>1+Math.max(-.3,Math.min(.5,(stats().strength-10)*.05));
-function hurtPlayer(from){
-  player.health--;combat.hurt(from.x,from.z,player.x,player.z);sound.bite();
+function hurtPlayer(from,kind='light',damage=1){
+  player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
-  hitstop=Math.max(hitstop,.08);
+  hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);combo=0;
   if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
 }
 function respawn(){
@@ -180,22 +183,73 @@ function respawn(){
 }
 
 // ------------------------------------------------------------ combat events
+// Game-feel helpers: brief slow motion, a camera nudge along the blow (never a
+// shake), a small field-of-view punch, and floating damage numbers.
+function slowMo(scale,seconds){if(scale<slowmo.scale||slowmo.left<=0)slowmo={scale,left:seconds};}
+const camKick=new THREE.Vector3();let fovKick=0;
+function kick(from,amount){const d=new THREE.Vector3(player.x-from.x,0,player.z-from.z);if(d.lengthSq()>1e-6)camKick.addScaledVector(d.normalize(),amount);}
+const damageLayer=document.createElement('div');damageLayer.id='damageLayer';document.body.appendChild(damageLayer);const numbers=[];
+function damageNumber(point,value,effect){
+  const el=document.createElement('span');el.className=`dmg ${effect}`;el.textContent=Math.round(value);damageLayer.appendChild(el);
+  numbers.push({el,point:point.clone(),life:.9,drift:(Math.random()-.5)*.4});
+}
+function updateNumbers(dt){
+  for(let i=numbers.length-1;i>=0;i--){const n=numbers[i];n.life-=dt;n.point.y+=dt*.9;n.point.x+=n.drift*dt;
+    const v=n.point.clone().project(camera),show=v.z<1&&n.life>0;
+    n.el.style.transform=`translate(${(v.x*.5+.5)*innerWidth}px,${(-v.y*.5+.5)*innerHeight}px) translate(-50%,-50%) scale(${.9+Math.max(0,n.life-.7)*1.5})`;
+    n.el.style.opacity=show?Math.min(1,n.life*2.5):0;if(n.life<=0){n.el.remove();numbers.splice(i,1);}}
+}
+function spend(amount){if(!amount)return;player.stamina=Math.max(0,player.stamina-amount);staminaRest=STAMINA.delay;}
+function critTarget(){
+  // A toppled creature in front and within reach opens the Root Strike.
+  return creatures.find(c=>c.alive&&c.toppled&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
+}
 function handleCombatEvents(){
   for(const ev of combat.events){
     if(ev.type==='swing')sound.swing(ev.move);
-    else if(ev.type==='evade'){sound.evade();player.stamina-=22;}
+    else if(ev.type==='spend')spend(ev.amount);
+    else if(ev.type==='evade')sound.evade();
+    else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
+    else if(ev.type==='charge'){sound.charge(ev.level);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
+    else if(ev.type==='release'&&ev.level)debug.note(`Taproot Heel released at charge ${ev.level}`,elapsed);
     else if(ev.type==='tired'){sound.tired();$('staminaFill').parentElement.classList.add('flash');setTimeout(()=>$('staminaFill').parentElement.classList.remove('flash'),300);}
     else if(ev.type==='hit'){
       const m=MOVES[ev.move],dir=ev.point.clone().sub(new THREE.Vector3(player.x,ev.point.y,player.z)).normalize();
-      ev.target.hit(m.damage*strikePower(),player.x,player.z,m.push,m.stagger);
-      sound.hit(ev.move);effects.burst(ev.point,dir.negate(),ev.move==='heel');if(ev.move==='heel')effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
-      hitstop=Math.max(hitstop,m.hitstop);player.engaged=4;
-      debug.note(`${m.label} → HIT ${ev.part} at t=${combat.t.toFixed(2)}s (active ${m.active.join('–')})  -${(m.damage*strikePower()).toFixed(1)} hp, ${ev.target.lastEvent}`,elapsed);
-      if(!ev.target.alive){sound.defeated();if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
+      const power=strikePower();
+      const res=ev.target.hit({damage:ev.damage*power,poise:ev.poise*power,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger,part:ev.part});
+      if(!res)continue;
+      combo++;comboTimer=2;
+      const heavy=ev.move==='heel'||ev.critical;
+      sound.hit(ev.move,res.effect,combo);
+      if(res.effect==='armored')effects.chips(ev.point);else effects.burst(ev.point,dir.clone().negate(),heavy);
+      if(heavy)effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
+      damageNumber(ev.point,res.damage,ev.critical?'crit':res.effect);
+      hitstop=Math.max(hitstop,ev.hitstop*(res.effect==='armored'?.7:1));player.engaged=4;
+      kick({x:ev.target.x,z:ev.target.z},heavy?-.12:-.04);if(heavy)fovKick=Math.max(fovKick,2.5+ev.chargeLevel*1.5);
+      if(ev.critical){slowMo(.35,.45);}
+      debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
+      if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
+      if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
     }
     else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
     else if(ev.type==='whiff'){sound.whiff();debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
   }
+}
+const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
+/** A creature's attack reached the explorer: evade, absorb with hyper-armour, or take it. */
+function incomingStrike(c,ev){
+  if(combat.invulnerable){
+    const perfect=combat.perfectWindow;
+    if(perfect)combat.perfectEvade();else sound.evadedAttack();
+    debug.note(`${c.type} ${ev.label} → ${perfect?'PERFECT EVADE':'EVADED'} (i-frames)`,elapsed);return;
+  }
+  if(combat.armored&&ev.kind==='light'){
+    player.health=Math.max(0,player.health-ev.damage);sound.bite();hitstop=Math.max(hitstop,.05);
+    debug.note(`${c.type} ${ev.label} → absorbed by hyper-armour (-${ev.damage})`,elapsed);
+    if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+    return;
+  }
+  debug.note(`${c.type} ${ev.label} → HIT you (${ev.kind}${ev.ring?', shockwave':''})`,elapsed);hurtPlayer(c,ev.kind,ev.damage);
 }
 
 // -------------------------------------------------------------------- update
@@ -213,15 +267,19 @@ function updateHUD(){
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';$('region').textContent=region;
-  const nearby=nearestInteractable();$('interaction').classList.toggle('hidden',!nearby);
-  if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
+  const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
+  $('interaction').classList.toggle('hidden',!nearby&&!crit&&!combat.charging);
+  if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
+  else if(crit)$('interaction').innerHTML='<b>CLICK</b> · ROOT STRIKE';
+  else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
 function updateModeLabel(){$('cameraMode').textContent=player.thirdPerson?(lockTarget?'THIRD PERSON · LOCKED ON':'THIRD PERSON'):'FIRST PERSON';}
 
 function update(rawDt){
   // Hit-stop: the fighters freeze for a few frames on impact; camera and effects keep running.
   const frozen=hitstop>0;hitstop=Math.max(0,hitstop-rawDt);
-  const dt=frozen?0:rawDt;
+  if(slowmo.left>0)slowmo.left-=rawDt;
+  const dt=frozen?0:rawDt*(slowmo.left>0?slowmo.scale:1);
   elapsed+=dt;
   if(lockTarget&&(!lockTarget.alive||Math.hypot(lockTarget.x-player.x,lockTarget.z-player.z)>22))lockTarget=null;
   updateModeLabel();
@@ -240,14 +298,19 @@ function update(rawDt){
   const chest=new THREE.Vector3(player.x,floor0+player.height+1.35,player.z);
   const staminaBefore=player.stamina;
   const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
-    targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest});
+    targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
+    iframeBonus:THREE.MathUtils.clamp((stats().speed-10)*.006,0,.06)});
   if(!frozen)handleCombatEvents();
   if(combat.events.some(e=>e.type==='swing'||e.type==='evade'))player.engaged=4;
   player.engaged=Math.max(0,player.engaged-dt);
 
   const speedStat=stats().speed,staminaStat=stats().stamina;
-  if(player.stamina>=staminaBefore)player.stamina=THREE.MathUtils.clamp(player.stamina+(combat.state==='evade'?0:10+staminaStat*.65)*dt,0,100);
-  const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','lunge','recover','stagger','alert'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
+  // Breath recovers after a short pause; real-world Stamina sets how fast.
+  staminaRest=Math.max(0,staminaRest-dt);
+  if(!staminaRest&&!combat.busy)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*(1+(staminaStat-10)*.04)*dt);
+  else if(!staminaRest&&combat.state==='attack'&&!combat.charging)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*.35*dt);
+  comboTimer-=dt;if(comboTimer<=0)combo=0;
+  const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','attack','recover','stagger','alert','toppled','rising'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
   const guarded=!!lockTarget||player.engaged>0||nearFight;
   const runSpeed=5.1+(speedStat-10)*.08,guardSpeed=3.2+(speedStat-10)*.04;
   let desiredX=0,desiredZ=0;
@@ -287,15 +350,17 @@ function update(rawDt){
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
   for(const c of creatures){
-    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerInvulnerable:combat.invulnerable,grid:collisionGrid});
+    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid});
     for(const ev of events){
-      if(ev.type==='windup'){sound.windup(c.type);debug.note(`${c.type} → TELEGRAPH (rearing, shell glowing)`,elapsed);}
-      else if(ev.type==='lunge')sound.lunge();
+      if(ev.type==='windup'){sound.windup(c.type,ev.attack);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert')sound.alert();
-      else if(ev.type==='bite'){debug.note(`${c.type} lunge → HIT you`,elapsed);hurtPlayer(c);}
-      else if(ev.type==='evaded'){sound.evadedAttack();debug.note(`${c.type} lunge → EVADED (invulnerable step)`,elapsed);}
-      else if(ev.type==='missed')debug.note(`${c.type} lunge → missed (${ev.gap.toFixed(2)} m wide)`,elapsed);
+      else if(ev.type==='strike')incomingStrike(c,ev);
+      else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
+      else if(ev.type==='enrage'){sound.enrage();toast('THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}
+      else if(ev.type==='rising')debug.note(`${c.type} rights itself`,elapsed);
     }
+    if(ev_attack_slam(c)){const cx=c.x+Math.sin(c.heading)*.64,cz=c.z+Math.cos(c.heading)*.64;effects.shockwave(new THREE.Vector3(cx,groundY(cx,cz),cz),SHOCKWAVE.from,SHOCKWAVE.to,SHOCKWAVE.duration);kick(c,.05);}
     c.showBar(c===lockTarget||(c.health<c.maxHealth&&Math.hypot(c.x-player.x,c.z-player.z)<12),camera);
   }
 
@@ -324,7 +389,7 @@ function update(rawDt){
     const s=THREE.MathUtils.clamp(planar/runSpeed,0,1.2),walk=THREE.MathUtils.clamp(1-Math.abs(s-.45)/.35,0,1)*(s<.8?1:0);
     a.setLocomotion({idle:Math.max(0,1-s*2.2),walk:s<.6?walk:0,run:Math.max(0,s-.3)*1.6},dt/(s<.6?1.1:.72)*Math.max(.3,s*1.25));
   }
-  avatar.setMood(combat.state==='hurt'?'hurt':combat.state==='attack'&&combat.phase()==='active'?'strain':combat.busy||guarded?'focus':player.emote==='cheer'?'cheer':'calm');
+  avatar.setMood(combat.state==='hurt'?'hurt':combat.state==='attack'&&(combat.phase()==='active'||combat.charging)?'strain':combat.busy||guarded?'focus':player.emote==='cheer'?'cheer':'calm');
   avatar.update(frozen?0:dt,player.grounded?groundY:null);
   avatar.flicker(elapsed,combat.clock<combat.invulnerableUntil?1:0);
   avatar.root.visible=avatar.root.visible&&player.thirdPerson;
@@ -349,14 +414,14 @@ function update(rawDt){
     raycaster.set(target,obstruction.normalize());raycaster.far=distance;
     const hit=raycaster.intersectObjects(world.cameraObstacles,false)[0];
     if(hit)desired.copy(target).addScaledVector(obstruction,Math.max(.55,hit.distance-.35));
-    camera.position.lerp(desired,1-Math.exp(-9*rawDt));camera.lookAt(target);
+    camera.position.lerp(desired,1-Math.exp(-9*rawDt));camera.lookAt(target);camera.position.add(camKick);
   }else{
     // First person rides the body: lunges, evades and flinches move the view a little.
     const head=avatar.bones.Head.getWorldPosition(new THREE.Vector3());
     const offset=head.clone().sub(new THREE.Vector3(player.x,floor+player.height+(avatar.headRest||1.735),player.z)).multiplyScalar(.45);
     const eye=new THREE.Vector3(player.x,eyeBase,player.z).add(offset);
     camera.position.x=eye.x;camera.position.z=eye.z;camera.position.y=THREE.MathUtils.damp(camera.position.y||eye.y,eye.y,14,rawDt);
-    camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;
+    camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;camera.position.addScaledVector(camKick,.5);
   }
   hands.group.visible=!player.thirdPerson&&(combat.busy||guarded);
   hands.update(rawDt,combat,guarded,frozen);
@@ -379,6 +444,10 @@ function update(rawDt){
   FX.position.set(player.x,groundY(player.x,player.z),player.z);
   motes.forEach((m,i)=>{m.position.y+=dt*(.1+i%4*.07);if(m.position.y>8)m.position.y=1;m.material.opacity=.28+Math.sin(elapsed*1.4+i)*.22;});
   if(toastTimer>0){toastTimer-=rawDt;if(toastTimer<=0)$('toast').classList.add('hidden');}
+  // The nudge and FOV punch spring back quickly.
+  camKick.multiplyScalar(Math.exp(-12*rawDt));fovKick=THREE.MathUtils.damp(fovKick,combat.charging?combat.chargeLevel*1.2+1:0,combat.charging?4:7,rawDt);
+  if(Math.abs(camera.fov-(70-fovKick))>.01){camera.fov=70-fovKick;camera.updateProjectionMatrix();}
+  updateNumbers(rawDt);
   updateHUD();
 }
 shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);}});
@@ -399,5 +468,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,evade:evadePressed,get elapsed(){return elapsed;}};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,get elapsed(){return elapsed;}};
 }

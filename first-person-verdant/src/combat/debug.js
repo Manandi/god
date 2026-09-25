@@ -42,7 +42,7 @@ export class CombatDebug {
     for (const c of creatures) {
       if (!c.alive) continue;
       for (const v of c.hurtVolumes()) this.ball(v.x, v.y, v.z, v.r, this.mats.hurt);
-      if (c.state === 'lunge' || c.state === 'windup') { const b = c.biteSphere(); this.ball(b.x, b.y, b.z, b.r, c.state === 'lunge' ? this.mats.bite : this.mats.idle); }
+      if (c.state === 'attack' || c.state === 'windup') for (const b of c.damageVolumes()) this.ball(b.x, b.y, b.z, b.r, c.state === 'attack' ? this.mats.bite : this.mats.idle);
     }
     // Collision capsule (what walls and creatures push against), the body a
     // bite must reach, and the striking limb.
@@ -56,11 +56,11 @@ export class CombatDebug {
     for (let i = this.used; i < this.pool.length; i++) this.pool[i].visible = false;
     const c = lockTarget || creatures.filter(x => x.alive).sort((a, b) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
     const timeline = move ? `${move.label.padEnd(14)} t=${combat.t.toFixed(2)}  ${combat.phase().toUpperCase()}\n  active ${move.active.join('–')}  chain≥${move.chainFrom}  evade≥${move.evadeFrom}  move≥${move.moveFrom}`
-      : combat.state === 'evade' ? `LEAF STEP     t=${combat.t.toFixed(2)}  ${combat.invulnerable ? 'INVULNERABLE' : 'recovering'}\n  i-frames ${EVADE.invulnerable.join('–')}  attack≥${EVADE.attackFrom}` : combat.state.toUpperCase();
+      : combat.state === 'evade' ? `LEAF STEP     t=${combat.t.toFixed(2)}  ${combat.invulnerable ? 'INVULNERABLE' : 'recovering'}\n  i-frames ${EVADE.invulnerable[0] + '–' + combat.iframeEnd.toFixed(2)}  attack≥${EVADE.attackFrom}` : combat.state.toUpperCase();
     const buf = ['attack', 'evade'].filter(a => combat.buffered(a)).join('+') || '—';
     const clip = animator?.current ? `${animator.current.name} @ ${animator.current.time.toFixed(2)}s` : 'locomotion';
     this.panel.textContent = `COMBAT READOUT (F3)\nexplorer  ${timeline}\n  buffered: ${buf}   lock: ${lockTarget ? 'on' : 'off'}\n  body: ${authored ? 'authored explorer' : 'procedural fallback'}   clip: ${clip}\n` +
-      (c ? `creature  ${c.state.padEnd(8)} t=${c.t.toFixed(2)}  hp ${c.health}/${c.maxHealth}  dist ${Math.hypot(c.x - player.x, c.z - player.z).toFixed(2)} m\n` : '') +
+      (c ? `creature  ${c.state.padEnd(8)}${c.attack && /windup|attack|recover/.test(c.state) ? ' ' + c.attack : ''} t=${c.t.toFixed(2)}  hp ${Math.round(c.health)}/${c.maxHealth}  poise ${c.poise.toFixed(1)}${c.enraged ? '  ENRAGED' : ''}  dist ${Math.hypot(c.x - player.x, c.z - player.z).toFixed(2)} m\n` : '') +
       `\n${this.log.join('\n')}`;
   }
 }
