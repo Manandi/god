@@ -7,7 +7,7 @@ import { SKIN_TONES, SHIRTS, TROUSERS, HAIR_COLORS } from './avatar.js';
 // This adapter gives it the same interface as the procedural avatar, so the
 // game, combat and camera code do not care which body is on screen.
 
-const URL = `${import.meta.env.BASE_URL}characters/explorer/explorer.glb`;
+const URL = `${import.meta.env?.BASE_URL || '/'}characters/explorer/explorer.glb`;
 const SCALE = 1.08;           // 1.81 m: matches the camera height and collision capsule
 
 // Gameplay clip names → clips exported from Blender.

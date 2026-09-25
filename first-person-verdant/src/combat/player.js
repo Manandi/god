@@ -60,9 +60,10 @@ export class PlayerCombat {
     this.state = 'attack'; this.move = name; this.t = 0;
     this.charging = false; this.chargeTime = 0; this.chargeLevel = 0;
     this.hitThisSwing.clear(); this.prevSegment = null; this.nearest = Infinity; this.blocked = null;
-    const aim = ctx.input.x || ctx.input.z ? yawOf(ctx.input.x, ctx.input.z) : this.facing;
+    const moveAim = ctx.aimWithMovement && (ctx.input.x || ctx.input.z);
+    const aim = moveAim ? yawOf(ctx.input.x, ctx.input.z) : this.facing;
     this.target = name === 'root' ? ctx.critTarget : ctx.pickTarget(aim);
-    if (!this.target && (ctx.input.x || ctx.input.z)) this.facing = aim;   // strike where the stick points
+    if (!this.target && moveAim) this.facing = aim;   // strike where the stick points
     this.events.push({ type: 'swing', move: name }, { type: 'spend', amount: m.stamina });
     return true;
   }
@@ -85,9 +86,11 @@ export class PlayerCombat {
     let { x, z } = ctx.input;
     if (!x && !z) { x = Math.sin(this.facing); z = Math.cos(this.facing); }      // roll back
     const len = Math.hypot(x, z); this.evadeDir = { x: x / len, z: z / len };
-    // The roll travels the way the body faces; with a lock-on the body turns back
-    // to the target as soon as the roll ends.
-    this.facing = yawOf(x, z); this.evadeClip = 'evadeForward';
+    const forwardX = -Math.sin(this.facing), forwardZ = -Math.cos(this.facing);
+    this.evadeClip = this.evadeDir.x * forwardX + this.evadeDir.z * forwardZ < -.45 ? 'evadeBack' : 'evadeForward';
+    // Keep the upper body facing the threat for a retreat or side step while
+    // locked on; otherwise the roll turns the body toward where it travels.
+    if (!ctx.lockTarget) this.facing = yawOf(x, z);
     this.events.push({ type: 'evade' }, { type: 'spend', amount: EVADE.stamina });
     return true;
   }
@@ -146,9 +149,11 @@ export class PlayerCombat {
       out.dx = -Math.sin(this.facing) * step; out.dz = -Math.cos(this.facing) * step;
 
       // Hit detection runs only while the strike is active, against the posed limb.
-      if (this.t >= m.active[0] && t0 < m.active[1] && !this.blocked) {
+      // The limb is also sampled during startup, so the first active frame sweeps
+      // from the pose just before it instead of losing a frame.
+      if (this.t < m.active[1] && !this.blocked) {
         strikeSegment(ctx.bones, m.hitbox, this.segment);
-        if (this.prevSegment) {
+        if (this.t >= m.active[0] && this.prevSegment) {
           const obstacle = obstacleBetween(ctx.chest, this.segment.b, ctx.grid);
           const result = sweep(this.prevSegment, this.segment, m.hitbox.radius, ctx.targets.filter(tg => !this.hitThisSwing.has(tg)));
           this.nearest = Math.min(this.nearest, result.nearest);
@@ -203,7 +208,6 @@ export class PlayerCombat {
   clip() {
     if (this.state === 'attack') {
       const m = MOVES[this.move];
-      // Root Strike plays the heel clip a touch slower in its wind-up for weight.
       return { name: m.clip, time: this.t, fade: this.t < .05 ? 30 : 14 };
     }
     if (this.state === 'evade') return { name: this.evadeClip, time: this.t, fade: 30 };

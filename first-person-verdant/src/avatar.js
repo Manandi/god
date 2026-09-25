@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {createHumanoid} from './humanoid.js';
 import {Animator,solveLeg} from './anim/animator.js';
 import {buildClips} from './anim/clips.js';
@@ -92,7 +93,7 @@ export function createAvatar(scene){
 // body's strikes (see combat/moves.js), so a first-person palm lands on the
 // same frame as a third-person one. Values are camera-space [x,y,z,rx,ry,rz]
 // with the forearm pointing along -Z.
-const FP_GUARD={L:[-.27,-.34,-.52,.95,-.25,-.2],R:[.3,-.4,-.46,1.05,.3,.25],Leg:[.12,-1.6,-.4,-.4,0,0]};
+const FP_GUARD={L:[-.3,-.28,-.62,.45,-.2,-.16],R:[.32,-.3,-.58,.48,.2,.16],Leg:[.12,-1.6,-.4,-.4,0,0]};
 const fp=(o)=>({...FP_GUARD,...o});
 const FP_CLIPS={
   fp_palm:[[0,FP_GUARD],[.07,fp({L:[-.3,-.38,-.4,.7,-.3,-.25]})],[.12,fp({L:[-.06,-.24,-.98,.08,-.05,-.1],R:[.34,-.44,-.42,1.1,.35,.3]})],
@@ -104,7 +105,7 @@ const FP_CLIPS={
     [.47,fp({Leg:[.14,-.95,-.55,.5,0,0]})],[.62,FP_GUARD],[.82,FP_GUARD]],
   fp_evade:[[0,FP_GUARD],[.16,fp({L:[-.22,-.3,-.44,1.25,-.2,-.2],R:[.24,-.34,-.4,1.3,.25,.25]})],[.28,fp({L:[-.22,-.3,-.44,1.25,-.2,-.2],R:[.24,-.34,-.4,1.3,.25,.25]})],[.5,FP_GUARD]],
   fp_hurt:[[0,FP_GUARD],[.07,fp({L:[-.42,-.2,-.44,1.4,-.6,-.6],R:[.46,-.24,-.42,1.3,.6,.6]})],[.42,FP_GUARD]],
-  fp_guard:[[0,FP_GUARD],[.7,fp({L:[-.27,-.35,-.52,.93,-.25,-.2],R:[.3,-.41,-.46,1.03,.3,.25]})],[1.4,FP_GUARD]]
+  fp_guard:[[0,FP_GUARD],[.7,fp({L:[-.27,-.35,-.52,.66,-.25,-.2],R:[.3,-.41,-.46,.71,.3,.25]})],[1.4,FP_GUARD]]
 };
 function fpClip(name,keys){
   const times=keys.map(k=>k[0]),tracks=[],q=new THREE.Quaternion(),e=new THREE.Euler();
@@ -116,25 +117,32 @@ function fpClip(name,keys){
 }
 export function createFirstPersonHands(camera){
   const group=new THREE.Group();camera.add(group);
-  const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:.94});
-  const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.89});
-  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:.95});
-  const boot=new THREE.MeshStandardMaterial({color:'#242b25',roughness:1});
-  function arm(name,side){
+  // Keep the guard below the sight line. The authored explorer still supplies
+  // the world-space strike pose and hitbox; this rig only frames the action.
+  group.position.set(0,-.12,-.24);group.scale.setScalar(.75);
+  const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:1});
+  const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.94});
+  const leather=new THREE.MeshStandardMaterial({color:'#524537',roughness:.9});
+  const seam=new THREE.MeshStandardMaterial({color:'#8b7551',roughness:.95});
+  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:1});
+  const boot=new THREE.MeshStandardMaterial({color:'#292d28',roughness:1});
+  // A deliberate block style, matching the low-poly world. No faux fingers
+  // or floating knuckles; the sleeve, cuff and hand form one clear silhouette.
+  function arm(name){
     const g=new THREE.Group();g.name=name;group.add(g);
-    // Sleeve runs back toward the shoulder, off screen; forearm and fist lead.
-    const sleeve=part(g,new THREE.CapsuleGeometry(.075,.34,6,14),shirt,side*.02,.02,.3);sleeve.rotation.x=Math.PI/2;
-    const fore=part(g,new THREE.CapsuleGeometry(.058,.2,6,14),skin,0,0,.02);fore.rotation.x=Math.PI/2;
-    const fist=part(g,new THREE.SphereGeometry(.078,18,14),skin,0,.005,-.13);fist.scale.set(1.05,.85,1.05);
-    for(let i=0;i<4;i++)part(g,new THREE.SphereGeometry(.024,10,8),skin,-.05+i*.033,.035,-.185);
+    part(g,new THREE.BoxGeometry(.22,.22,.64),shirt,0,0,.21);
+    part(g,new THREE.BoxGeometry(.235,.235,.09),leather,0,0,-.15);
+    part(g,new THREE.BoxGeometry(.18,.18,.15),skin,0,0,-.275);
+    part(g,new THREE.BoxGeometry(.23,.012,.015),seam,0,.118,-.14);
     return g;
   }
-  arm('fpL',-1);arm('fpR',1);
+  arm('fpL');arm('fpR');
   const leg=new THREE.Group();leg.name='fpLeg';group.add(leg);
-  const shin=part(leg,new THREE.CapsuleGeometry(.09,.5,6,14),trousers,0,0,.2);shin.rotation.x=Math.PI/2;
-  const sole=part(leg,new THREE.SphereGeometry(.13,16,12),boot,0,.02,-.16);sole.scale.set(.9,.7,1.3);
+  part(leg,new THREE.BoxGeometry(.2,.2,.53),trousers,0,0,.2);
+  part(leg,new THREE.BoxGeometry(.22,.17,.29),boot,0,-.01,-.18);
+  group.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
   const animator=new Animator(group,Object.entries(FP_CLIPS).map(([n,k])=>fpClip(n,k)));
-  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);},
+  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
     update(dt,combat,guarded,frozen){
       const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',hurt:'fp_hurt'};
       if(clip)animator.play(clip.name.startsWith('evade')?'fp_evade':map[clip.name],clip.time,clip.fade);else animator.stop();

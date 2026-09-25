@@ -18,7 +18,8 @@ const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const canvas=$('game'),journal=$('journal'),ending=$('ending'),entry=$('entry');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
-renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+let pixelRatio=Math.min(devicePixelRatio,1.25);
+renderer.setPixelRatio(pixelRatio);renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
 const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene);
@@ -29,8 +30,10 @@ const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
-const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:!params.has('fp'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
+const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
+let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
+let cueText='',cueUntil=0,cameraKick=0;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
@@ -41,7 +44,7 @@ const motes=[];for(let i=0;i<24;i++){
   mesh.position.set((Math.random()-.5)*20,1+Math.random()*7,(Math.random()-.5)*20);FX.add(mesh);motes.push(mesh);
 }
 // A small diamond over the locked creature: enough to read, never in the way.
-const lockMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.12,0),new THREE.MeshBasicMaterial({color:0xf3e6b0,transparent:true,opacity:.9,depthTest:false}));
+const lockMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.12,0),new THREE.MeshBasicMaterial({color:0xf3e6b0,transparent:true,opacity:.9,depthTest:true}));
 lockMarker.renderOrder=12;lockMarker.scale.set(1,1.6,1);scene.add(lockMarker);lockMarker.visible=false;
 
 function playTone(freq=140,duration=.1,volume=.04,type='sine'){
@@ -77,6 +80,7 @@ const endEmote=()=>{if(player.emote!=='idle'){player.emote='idle';avatar.emote('
 function evadePressed(){if(paused)return;endEmote();combat.press('evade');}
 function attackPressed(){if(paused)return;endEmote();combat.press('light');}
 function heavyPressed(down){if(paused)return;combat.heavyHeld=down;if(down){endEmote();combat.press('heavy');}}
+function cue(text,duration=.4){cueText=text;cueUntil=elapsed+duration;}
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
   keyState.add(e.code);
@@ -84,7 +88,16 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyJ'&&started){toggleJournal(!journalOpen);return;}
   if(e.repeat)return;
   if(e.code==='KeyM'&&started&&!journalOpen){paused=true;$('hud').classList.add('hidden');shell.show('map');if(document.pointerLockElement)document.exitPointerLock();return;}
-  if(e.code==='KeyV'&&started&&!paused){player.thirdPerson=!player.thirdPerson;if(player.thirdPerson)player.cameraYaw=player.yaw;else player.cameraYaw=player.yaw;updateModeLabel();playTone(410,.12,.025);}
+  if(e.code==='KeyV'&&started&&!paused){
+    viewFromPosition.copy(camera.position);viewFromRotation.copy(camera.quaternion);viewBlend=.28;
+    player.thirdPerson=!player.thirdPerson;
+    if(!player.thirdPerson){
+      const sight=camera.getWorldDirection(new THREE.Vector3());
+      player.cameraYaw=yawOf(sight.x,sight.z);
+      if(!combat.busy)combat.facing=player.yaw=player.cameraYaw;
+    }
+    updateModeLabel();playTone(410,.12,.025);
+  }
   if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!combat.busy){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
@@ -116,7 +129,7 @@ canvas.addEventListener('mousedown',e=>{
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('mouseup',e=>{if(e.button===2)heavyPressed(false);});
-window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));});
+window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(pixelRatio);});
 
 // ---------------------------------------------------------------- targeting
 const yawOf=(x,z)=>Math.atan2(-x,-z);
@@ -128,7 +141,7 @@ function toggleLock(){
   if(paused)return;
   if(lockTarget){lockTarget=null;playTone(300,.08,.02);return;}
   // Prefer what the camera is looking at, then what is closest.
-  const view=player.thirdPerson?player.cameraYaw:player.yaw;
+  const view=player.cameraYaw;
   const best=lockCandidates().map(c=>({c,score:Math.abs(angleTo(view,yawOf(c.x-player.x,c.z-player.z)))*4+Math.hypot(c.x-player.x,c.z-player.z)*.25}))
     .filter(v=>v.score<9).sort((a,b)=>a.score-b.score)[0];
   if(best){lockTarget=best.c;playTone(620,.09,.03,'triangle');}
@@ -141,7 +154,8 @@ function switchTarget(dir){
 }
 /** Soft targeting for strikes: the lock, or the creature best in front within reach. */
 function pickTarget(yaw){
-  if(lockTarget?.alive)return lockTarget;
+  // In first person the reticle is authoritative, even with a target marked.
+  if(lockTarget?.alive&&(player.thirdPerson||Math.abs(angleTo(yaw,yawOf(lockTarget.x-player.x,lockTarget.z-player.z)))<.45))return lockTarget;
   const cone=player.thirdPerson?1.35:.45;
   return creatures.filter(c=>c.alive).map(c=>{
     const d=Math.hypot(c.x-player.x,c.z-player.z)-c.radius,a=Math.abs(angleTo(yaw,yawOf(c.x-player.x,c.z-player.z)));
@@ -179,6 +193,7 @@ function hurtPlayer(from,kind='light',damage=1){
 }
 function respawn(){
   player.defeated=0;player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');
   toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');
 }
 
@@ -206,11 +221,11 @@ function critTarget(){
 }
 function handleCombatEvents(){
   for(const ev of combat.events){
-    if(ev.type==='swing')sound.swing(ev.move);
+    if(ev.type==='swing'){sound.swing(ev.move);cue(MOVES[ev.move].label.toUpperCase(),.22);}
     else if(ev.type==='spend')spend(ev.amount);
-    else if(ev.type==='evade')sound.evade();
-    else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
-    else if(ev.type==='charge'){sound.charge(ev.level);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
+    else if(ev.type==='evade'){sound.evade();cue('ROLL',.3);}
+    else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
+    else if(ev.type==='charge'){sound.charge(ev.level);cue(`CHARGE ${'I'.repeat(ev.level)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
     else if(ev.type==='release'&&ev.level)debug.note(`Taproot Heel released at charge ${ev.level}`,elapsed);
     else if(ev.type==='tired'){sound.tired();$('staminaFill').parentElement.classList.add('flash');setTimeout(()=>$('staminaFill').parentElement.classList.remove('flash'),300);}
     else if(ev.type==='hit'){
@@ -225,14 +240,15 @@ function handleCombatEvents(){
       if(heavy)effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
       damageNumber(ev.point,res.damage,ev.critical?'crit':res.effect);
       hitstop=Math.max(hitstop,ev.hitstop*(res.effect==='armored'?.7:1));player.engaged=4;
-      kick({x:ev.target.x,z:ev.target.z},heavy?-.12:-.04);if(heavy)fovKick=Math.max(fovKick,2.5+ev.chargeLevel*1.5);
+      kick({x:ev.target.x,z:ev.target.z},heavy?-.12:-.04);cameraKick=Math.max(cameraKick,heavy?.065:.04);
+      cue(ev.critical?'ROOT STRIKE':res.toppled?'TOPPLED':res.defeated?'DRIVEN BACK':ev.counter?'COUNTER':res.effect==='weak'?'WEAK POINT':res.effect==='armored'?'ARMOURED':res.effect==='belly'?'EXPOSED':'SOLID HIT',.5);if(heavy)fovKick=Math.max(fovKick,2.5+ev.chargeLevel*1.5);
       if(ev.critical){slowMo(.35,.45);}
       debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
       if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
       if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
     }
-    else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
-    else if(ev.type==='whiff'){sound.whiff();debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
+    else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);cue('BLOCKED',.45);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
+    else if(ev.type==='whiff'){sound.whiff();cue('MISSED',.3);debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
   }
 }
 const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
@@ -240,7 +256,7 @@ const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
 function incomingStrike(c,ev){
   if(combat.invulnerable){
     const perfect=combat.perfectWindow;
-    if(perfect)combat.perfectEvade();else sound.evadedAttack();
+    if(perfect)combat.perfectEvade();else{sound.evadedAttack();cue('EVADED',.5);}
     debug.note(`${c.type} ${ev.label} → ${perfect?'PERFECT EVADE':'EVADED'} (i-frames)`,elapsed);return;
   }
   if(combat.armored&&ev.kind==='light'){
@@ -249,6 +265,7 @@ function incomingStrike(c,ev){
     if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
     return;
   }
+  cue(ev.kind==='heavy'?'KNOCKED DOWN':'STRUCK',.5);cameraKick=Math.max(cameraKick,ev.kind==='heavy'?.1:.08);
   debug.note(`${c.type} ${ev.label} → HIT you (${ev.kind}${ev.ring?', shockwave':''})`,elapsed);hurtPlayer(c,ev.kind,ev.damage);
 }
 
@@ -289,15 +306,19 @@ function update(rawDt){
   let side=Number(keyState.has('KeyD')||keyState.has('ArrowRight'))-Number(keyState.has('KeyA')||keyState.has('ArrowLeft'));
   if((f||side)&&player.emote!=='idle')endEmote();
   const len=Math.hypot(f,side)||1;f/=len;side/=len;
-  const view=player.thirdPerson?player.cameraYaw:player.yaw;
+  const view=player.cameraYaw;
   const input={x:-Math.sin(view)*f+Math.cos(view)*side,z:-Math.cos(view)*f-Math.sin(view)*side};
   const hasInput=!!(f||side);
+  // A new first-person press must use the mouse heading from this frame.
+  // Once committed, the body keeps the strike/evade heading until its window
+  // ends; mouse look remains free and the rendered hands follow that line.
+  if(!player.thirdPerson&&!combat.busy)combat.facing=player.yaw=player.cameraYaw;
 
   // Combat decides root motion and state; bones are last frame's pose.
   const floor0=groundY(player.x,player.z);
   const chest=new THREE.Vector3(player.x,floor0+player.height+1.35,player.z);
   const staminaBefore=player.stamina;
-  const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
+  const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
     iframeBonus:THREE.MathUtils.clamp((stats().speed-10)*.006,0,.06)});
   if(!frozen)handleCombatEvents();
@@ -320,7 +341,7 @@ function update(rawDt){
   if(combat.busy){player.vx=0;player.vz=0;}
 
   // Facing: toward the lock in a fight, along the path when roaming, the camera in first person.
-  if(!player.thirdPerson)combat.facing=player.yaw=player.cameraYaw;
+  if(!player.thirdPerson)player.yaw=combat.facing;
   else if(!combat.busy){
     let want=null;
     if(lockTarget)want=yawOf(lockTarget.x-player.x,lockTarget.z-player.z);
@@ -352,7 +373,7 @@ function update(rawDt){
   for(const c of creatures){
     const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid});
     for(const ev of events){
-      if(ev.type==='windup'){sound.windup(c.type,ev.attack);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR ROLL THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert')sound.alert();
       else if(ev.type==='strike')incomingStrike(c,ev);
@@ -421,13 +442,30 @@ function update(rawDt){
     const offset=head.clone().sub(new THREE.Vector3(player.x,floor+player.height+(avatar.headRest||1.735),player.z)).multiplyScalar(.45);
     const eye=new THREE.Vector3(player.x,eyeBase,player.z).add(offset);
     camera.position.x=eye.x;camera.position.z=eye.z;camera.position.y=THREE.MathUtils.damp(camera.position.y||eye.y,eye.y,14,rawDt);
-    camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;camera.position.addScaledVector(camKick,.5);
+    // Set all three axes: rotateZ below is a transient impact cue, never
+    // part of the persistent mouse-look orientation.
+    camera.rotation.set(player.pitch,player.cameraYaw,0,'YXZ');camera.position.addScaledVector(camKick,.5);
   }
-  hands.group.visible=!player.thirdPerson&&(combat.busy||guarded);
-  hands.update(rawDt,combat,guarded,frozen);
+  cameraKick=THREE.MathUtils.damp(cameraKick,0,18,rawDt);
+  camera.rotateZ(Math.sin(elapsed*60)*cameraKick);
+  if(viewBlend>0){
+    viewBlend=Math.max(0,viewBlend-rawDt);
+    const progress=1-(viewBlend/.28)**3;
+    camera.position.lerpVectors(viewFromPosition,camera.position,progress);
+    camera.quaternion.slerpQuaternions(viewFromRotation,camera.quaternion,progress);
+  }
+  hands.group.visible=!player.thirdPerson&&viewBlend<.12&&(combat.busy||guarded);
+  hands.group.rotation.y=combat.busy?angleTo(player.cameraYaw,combat.facing):0;
+  hands.update(frozen?0:dt,combat,guarded,frozen);
 
-  lockMarker.visible=!!lockTarget&&player.thirdPerson;
+  lockMarker.visible=!!lockTarget;
   if(lockTarget){lockMarker.position.set(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+1.75+Math.sin(elapsed*4)*.05,lockTarget.z);lockMarker.rotation.y+=rawDt*2;}
+  const imminent=creatures.find(c=>c.alive&&c.state==='windup'&&Math.hypot(c.x-player.x,c.z-player.z)<6);
+  const cueElement=$('combatCue');
+  const threat=imminent&&{lunge:'EVADE THE LUNGE',spin:'GET CLEAR OF THE SPIN',slam:'JUMP OR ROLL THROUGH THE SLAM'}[imminent.attack];
+  cueElement.textContent=elapsed<cueUntil?cueText:threat||(combat.state==='attack'?`${combat.phase().toUpperCase()} · ${MOVES[combat.move].label.toUpperCase()}`:'');
+  cueElement.classList.toggle('warning',imminent&&elapsed>=cueUntil);
+  $('crosshair').classList.toggle('impact',elapsed<cueUntil&&['SOLID HIT','DRIVEN BACK','WEAK POINT','EXPOSED','ROOT STRIKE','COUNTER','TOPPLED'].includes(cueText));
 
   player.step-=dt;if(planar>.5&&player.grounded&&player.step<=0){player.step=guarded?.38:.45;playTone(74+Math.random()*20,.06,.013,'triangle');}
   effects.update(rawDt);
@@ -458,7 +496,26 @@ if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   if(window.__verdant)window.__verdant.avatar=avatar;
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');
-function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.045);if(capture)return;if(!paused)update(dt);if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}else renderer.render(scene,camera);}frame();
+let perfSeconds=0,perfFrames=0,foliageReduced=false,pausedRender=0;
+function frame(){
+  requestAnimationFrame(frame);
+  const rawDt=clock.getDelta(),dt=Math.min(rawDt,.045);
+  if(capture)return;
+  if(!paused&&shell.view==='game'){
+    perfSeconds+=rawDt;perfFrames++;
+    if(perfSeconds>=2){
+      const frameTime=perfSeconds/perfFrames;
+      if(frameTime>.027){
+        if(!foliageReduced){world.setFoliageShadows(false);foliageReduced=true;}
+        else if(pixelRatio>.85){pixelRatio=Math.max(.85,pixelRatio-.12);renderer.setPixelRatio(pixelRatio);}
+      }
+      perfSeconds=0;perfFrames=0;
+    }
+  }else{perfSeconds=0;perfFrames=0;}
+  if(!paused)update(dt);
+  if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}
+  else if(!paused||((pausedRender+=rawDt)>.15)){pausedRender=0;renderer.render(scene,camera);}
+}frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a
 // slow machine still plays back at true speed. The rules are the same code.
 if(capture)window.__capture={step(frames=1,dt=1/60,draw=true){for(let i=0;i<frames;i++)if(!paused)update(dt);if(draw)renderer.render(scene,camera);}};

@@ -18,15 +18,15 @@ const damp = THREE.MathUtils.damp;
 
 // Behaviour tuning per kind. Times in seconds, distances in metres.
 const KINDS = {
-  shellback: { size: .64, health: 160, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
-  thornling: { size: .57, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 }
+  shellback: { size: .64, pace: 1, health: 160, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
+  thornling: { size: .57, pace: .8, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 }
 };
 // The moveset. Each attack: wind-up (the telegraph), active, recovery (the
 // punish window). `track` is how long the wind-up keeps turning toward the
 // explorer before committing. `kind` decides the explorer's reaction:
 // light → flinch (hyper-armour holds), heavy → knockdown.
 const ATTACKS = {
-  lunge: { windup: .75, track: .5, active: .3, recover: .95, range: [1.5, 3.4], damage: 1, kind: 'light', label: 'shell lunge' },
+  lunge: { windup: .82, track: .46, active: .3, recover: 1.12, range: [1.5, 3.4], damage: 1, kind: 'light', label: 'shell lunge' },
   spin:  { windup: .65, track: 0, active: 1.0, recover: 1.1, range: [0, 2.4], damage: 1, kind: 'light', label: 'shell spin' },
   slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' }
 };
@@ -93,6 +93,10 @@ export class Creature {
     this.barFill = new THREE.Mesh(new THREE.PlaneGeometry(1.52, .07), new THREE.MeshBasicMaterial({ color: 0xd6c07a, depthTest: false }));
     this.barFill.position.z = .001; barBack.renderOrder = 10; this.barFill.renderOrder = 11;
     this.bar.add(barBack, this.barFill); this.bar.visible = false;
+    // Ground-level tell survives camera angle changes. Amber builds during
+    // tracking, red marks the committed attack, pale green marks recovery.
+    this.tell = new THREE.Mesh(new THREE.RingGeometry(.82, .91, 32), new THREE.MeshBasicMaterial({ color: 0xe9ad62, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    this.tell.rotation.x = -Math.PI / 2; this.tell.visible = false; scene.add(this.tell);
     this.place();
   }
   get toppled() { return this.state === 'toppled'; }
@@ -119,7 +123,7 @@ export class Creature {
     this.root.updateMatrixWorld(true);
   }
   setState(state) { this.state = state; this.t = 0; }
-  timing(a) { const m = this.enraged ? .78 : 1; return { windup: a.windup * m, recover: a.recover * (this.enraged ? .85 : 1), track: a.track * m }; }
+  timing(a) { const m = (this.enraged ? .78 : 1) * this.kind.pace; return { windup: a.windup * m, recover: a.recover * (this.enraged ? .85 : 1) * this.kind.pace, track: a.track * m }; }
 
   /**
    * A strike from the explorer. Returns what happened so the game can show it:
@@ -196,6 +200,7 @@ export class Creature {
     this.jolt.pitch = damp(this.jolt.pitch, 0, 9, dt); this.jolt.roll = damp(this.jolt.roll, 0, 9, dt);
     if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
     if (this.state === 'defeated') {
+      this.tell.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
       if (this.t > 2.2) this.root.visible = false;
@@ -401,6 +406,16 @@ export class Creature {
     this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
     this.eyeMat.emissive.setRGB(.35 + glow * .8 + rage * .9, (.26 + glow * .4) * (1 - rage * .8), .13 * (1 - rage));
+    this.tell.visible = this.alive && (st === 'windup' || st === 'attack' || st === 'recover');
+    if (this.tell.visible) {
+      const warning = st === 'windup', w = warning ? Math.min(1, t / tm.windup) : 1;
+      // The spin's danger zone is wider than the body; size the tell to match.
+      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : 1;
+      this.tell.position.set(this.x, groundY(this.x, this.z) + .065, this.z);
+      this.tell.scale.setScalar(this.radius * reach * (warning ? .9 + .45 * w : st === 'attack' ? 1.42 : 1.18));
+      this.tell.material.color.setHex(warning ? 0xe9ad62 : st === 'attack' ? 0xf27d56 : 0xb9d892);
+      this.tell.material.opacity = warning ? .25 + .45 * w : st === 'attack' ? .75 : .3;
+    }
     if (this.shake > 0) { this.root.position.x += (Math.random() - .5) * .07; this.root.position.z += (Math.random() - .5) * .07; }
     this.root.updateMatrixWorld(true);
   }
