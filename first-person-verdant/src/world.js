@@ -113,7 +113,7 @@ export function buildWorld(scene){
   const random=rng(),colliders=[],animated=[],particles=[];
   scene.background=color('#779d92');scene.fog=new THREE.FogExp2(0x83a79a,.0057);
   scene.add(new THREE.HemisphereLight(0xc6e9e4,0x33462b,1.8));
-  const sun=new THREE.DirectionalLight(0xf6dda0,2.45);sun.position.set(-45,95,-50);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-65;sun.shadow.camera.right=65;sun.shadow.camera.top=65;sun.shadow.camera.bottom=-65;sun.shadow.camera.near=.5;sun.shadow.camera.far=230;sun.shadow.normalBias=.035;sun.shadow.bias=-.00012;scene.add(sun,sun.target);
+  const sun=new THREE.DirectionalLight(0xf6dda0,2.45);sun.position.set(-45,95,-50);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-48;sun.shadow.camera.right=48;sun.shadow.camera.top=48;sun.shadow.camera.bottom=-48;sun.shadow.camera.near=.5;sun.shadow.camera.far=230;sun.shadow.normalBias=.035;sun.shadow.bias=-.00012;scene.add(sun,sun.target);
   const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);gl_FragColor=vec4(mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h)),1.);}' }));scene.add(sky);
   const s=420,steps=168,positions=[],colors=[],indices=[],uvs=[];
   const cLow=color('#365333'),cMid=color('#567b46'),cHigh=color('#87966a');
@@ -239,5 +239,6 @@ export function buildWorld(scene){
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,nearTrail,cameraObstacles:[land],sun};
+  return {colliders,echoes,animated,particles,gateGlow,nearTrail,cameraObstacles:[land],sun,
+    setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }

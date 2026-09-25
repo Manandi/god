@@ -8,7 +8,7 @@ import { SKIN_TONES, SHIRTS, TROUSERS, HAIR_COLORS } from './avatar.js';
 // This adapter gives it the same interface as the procedural avatar, so the
 // game, combat and camera code do not care which body is on screen.
 
-const URL = `${import.meta.env.BASE_URL}characters/explorer/explorer.glb`;
+const URL = `${import.meta.env?.BASE_URL || '/'}characters/explorer/explorer.glb`;
 const SCALE = 1.08;           // 1.81 m: matches the camera height and collision capsule
 
 // Gameplay clip names → clips exported from Blender.
@@ -27,6 +27,57 @@ const BONE_ALIASES = {
   LeftUpLeg: 'thigh_l', LeftLeg: 'calf_l', LeftFoot: 'foot_l', RightUpLeg: 'thigh_r', RightLeg: 'calf_r', RightFoot: 'foot_r'
 };
 const HAIR_MESH = { short: 'Hair_short', curly: 'Hair_curly', swept: 'Hair_swept', tied: 'Hair_tied', braid: 'Hair_braid' };
+
+/** First-person geometry from the same skinned explorer and authored clips. */
+export function createArmViewmodel(camera, model, clips) {
+  const holder = new THREE.Group();
+  holder.position.set(0, -1.3, -.4);
+  holder.scale.setScalar(.84);
+  const figure = cloneRig(model);
+  holder.add(figure);
+  camera.add(holder);
+  const visibleMeshes = new Map();
+  figure.traverse(o => {
+    if (!o.isMesh) return;
+    const skin = o.geometry.getAttribute('skinIndex'), weight = o.geometry.getAttribute('skinWeight');
+    if (!o.isSkinnedMesh || !skin || !weight) { o.visible = false; return; }
+    const armJoints = new Set(o.skeleton.bones.map((b, i) =>
+      /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)_[lr]/.test(b.name) ? i : -1).filter(i => i >= 0));
+    const influence = i => {
+      let sum = 0;
+      for (let j = 0; j < 4; j++) if (armJoints.has(skin.getComponent(i, j))) sum += weight.getComponent(i, j);
+      return sum;
+    };
+    const original = o.geometry.index;
+    const count = original ? original.count : o.geometry.getAttribute('position').count;
+    const keep = [];
+    for (let i = 0; i + 2 < count; i += 3) {
+      const a = original ? original.getX(i) : i, b = original ? original.getX(i + 1) : i + 1, c = original ? original.getX(i + 2) : i + 2;
+      if (influence(a) + influence(b) + influence(c) > 1.45) keep.push(a, b, c);
+    }
+    if (!keep.length) { o.visible = false; return; }
+    o.geometry = o.geometry.clone();
+    o.geometry.setIndex(keep);
+    o.frustumCulled = false;
+    o.castShadow = false;
+    // Only retained arm geometry may follow outfit visibility. Re-enabling
+    // unfiltered head/torso meshes here put the face inside the camera.
+    const source = model.getObjectByName(o.name);
+    if (source) visibleMeshes.set(o, source);
+  });
+  const viewAnimator = new Animator(figure, clips);
+  return {
+    group: holder,
+    update(dt, sourceAnimator) {
+      for (const [mesh, source] of visibleMeshes) mesh.visible = source.visible;
+      if (sourceAnimator.current) viewAnimator.play(sourceAnimator.current.name, sourceAnimator.current.time, sourceAnimator.fadeIn);
+      else viewAnimator.stop();
+      viewAnimator.setLocomotion(sourceAnimator.loco, 0);
+      viewAnimator.phase = sourceAnimator.phase;
+      viewAnimator.update(dt);
+    }
+  };
+}
 
 export async function loadExplorer(scene) {
   const gltf = await new GLTFLoader().loadAsync(URL);
@@ -62,57 +113,6 @@ export async function loadExplorer(scene) {
   }
   const animator = new Animator(model, clips);
 
-  // Keep a second copy of the *authored* rig at the camera. Strip its geometry
-  // down to the arms; the world body remains available for character inspection.
-  // Both copies use the same materials and animation clips, so a new outfit or
-  // strike cannot silently fall back to unrelated capsule hands.
-  function createViewmodel(camera) {
-    const holder = new THREE.Group();
-    holder.position.set(0, -1.45, -.24);
-    const figure = cloneRig(model);
-    holder.add(figure);
-    camera.add(holder);
-    const visibleMeshes = new Map();
-    figure.traverse(o => {
-      if (!o.isMesh) return;
-      const source = model.getObjectByName(o.name);
-      if (source) visibleMeshes.set(o, source);
-      const skin = o.geometry.getAttribute('skinIndex'), weight = o.geometry.getAttribute('skinWeight');
-      if (!o.isSkinnedMesh || !skin || !weight) { o.visible = false; return; }
-      const armJoints = new Set(o.skeleton.bones.map((b, i) =>
-        /^(upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)_[lr]/.test(b.name) ? i : -1).filter(i => i >= 0));
-      const influence = i => {
-        let sum = 0;
-        for (let j = 0; j < 4; j++) if (armJoints.has(skin.getComponent(i, j))) sum += weight.getComponent(i, j);
-        return sum;
-      };
-      const original = o.geometry.index;
-      const count = original ? original.count : o.geometry.getAttribute('position').count;
-      const keep = [];
-      for (let i = 0; i + 2 < count; i += 3) {
-        const a = original ? original.getX(i) : i, b = original ? original.getX(i + 1) : i + 1, c = original ? original.getX(i + 2) : i + 2;
-        if (influence(a) + influence(b) + influence(c) > 1.45) keep.push(a, b, c);
-      }
-      if (!keep.length) { o.visible = false; return; }
-      o.geometry = o.geometry.clone();
-      o.geometry.setIndex(keep);
-      o.frustumCulled = false;
-      o.castShadow = false;
-    });
-    const viewAnimator = new Animator(figure, clips);
-    return {
-      group: holder,
-      update(dt, sourceAnimator) {
-        for (const [mesh, source] of visibleMeshes) if (mesh.geometry.index?.count) mesh.visible = source.visible;
-        if (sourceAnimator.current) viewAnimator.play(sourceAnimator.current.name, sourceAnimator.current.time, sourceAnimator.fadeIn);
-        else viewAnimator.stop();
-        viewAnimator.setLocomotion(sourceAnimator.loco, 0);
-        viewAnimator.phase = sourceAnimator.phase;
-        viewAnimator.update(dt);
-      }
-    };
-  }
-
   function morph(name, value) {
     for (const m of morphMeshes) {
       const i = m.morphTargetDictionary[name];
@@ -128,7 +128,8 @@ export async function loadExplorer(scene) {
   const headRest = byName.head.getWorldPosition(new THREE.Vector3()).y;
 
   return {
-    root, bones, animator, isAuthored: true, headRest, createViewmodel,
+    root, bones, animator, isAuthored: true, headRest,
+    createViewmodel(camera) { return createArmViewmodel(camera, model, clips); },
     setAppearance(a) {
       const tone = new THREE.Color(SKIN_TONES[a.skinIndex] || SKIN_TONES[2]).multiplyScalar(1.22);
       materials.skin.forEach(m => m.color.copy(tone));

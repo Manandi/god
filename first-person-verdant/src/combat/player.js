@@ -47,9 +47,10 @@ export class PlayerCombat {
   startAttack(name, ctx) {
     this.state = 'attack'; this.move = name; this.t = 0;
     this.hitThisSwing.clear(); this.prevSegment = null; this.nearest = Infinity; this.blocked = null;
-    this.target = ctx.pickTarget(ctx.input.x || ctx.input.z ? yawOf(ctx.input.x, ctx.input.z) : this.facing);
+    const moveAim = ctx.aimWithMovement && (ctx.input.x || ctx.input.z);
+    this.target = ctx.pickTarget(moveAim ? yawOf(ctx.input.x, ctx.input.z) : this.facing);
     // Without a target, strike the way the stick points.
-    if (!this.target && (ctx.input.x || ctx.input.z)) this.facing = yawOf(ctx.input.x, ctx.input.z);
+    if (!this.target && moveAim) this.facing = yawOf(ctx.input.x, ctx.input.z);
     this.events.push({ type: 'swing', move: name });
   }
   startEvade(ctx) {

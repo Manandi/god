@@ -18,7 +18,8 @@ const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const canvas=$('game'),journal=$('journal'),ending=$('ending'),entry=$('entry');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
-renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+let pixelRatio=Math.min(devicePixelRatio,1.25);
+renderer.setPixelRatio(pixelRatio);renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
 const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene);
@@ -114,7 +115,7 @@ canvas.addEventListener('mousedown',e=>{
   attackPressed();
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));});
+window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(pixelRatio);});
 
 // ---------------------------------------------------------------- targeting
 const yawOf=(x,z)=>Math.atan2(-x,-z);
@@ -241,7 +242,7 @@ function update(rawDt){
   const floor0=groundY(player.x,player.z);
   const chest=new THREE.Vector3(player.x,floor0+player.height+1.35,player.z);
   const staminaBefore=player.stamina;
-  const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
+  const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget:player.thirdPerson?lockTarget:null,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest});
   if(!frozen)handleCombatEvents();
   if(combat.events.some(e=>e.type==='swing'||e.type==='evade'))player.engaged=4;
@@ -393,7 +394,26 @@ if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   if(window.__verdant)window.__verdant.avatar=avatar;
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');
-function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.045);if(capture)return;if(!paused)update(dt);if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}else renderer.render(scene,camera);}frame();
+let perfSeconds=0,perfFrames=0,foliageReduced=false,pausedRender=0;
+function frame(){
+  requestAnimationFrame(frame);
+  const rawDt=clock.getDelta(),dt=Math.min(rawDt,.045);
+  if(capture)return;
+  if(!paused&&shell.view==='game'){
+    perfSeconds+=rawDt;perfFrames++;
+    if(perfSeconds>=2){
+      const frameTime=perfSeconds/perfFrames;
+      if(frameTime>.027){
+        if(!foliageReduced){world.setFoliageShadows(false);foliageReduced=true;}
+        else if(pixelRatio>.85){pixelRatio=Math.max(.85,pixelRatio-.12);renderer.setPixelRatio(pixelRatio);}
+      }
+      perfSeconds=0;perfFrames=0;
+    }
+  }else{perfSeconds=0;perfFrames=0;}
+  if(!paused)update(dt);
+  if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}
+  else if(!paused||((pausedRender+=rawDt)>.15)){pausedRender=0;renderer.render(scene,camera);}
+}frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a
 // slow machine still plays back at true speed. The rules are the same code.
 if(capture)window.__capture={step(frames=1,dt=1/60,draw=true){for(let i=0;i<frames;i++)if(!paused)update(dt);if(draw)renderer.render(scene,camera);}};
