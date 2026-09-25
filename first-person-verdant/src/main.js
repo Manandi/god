@@ -36,7 +36,6 @@ let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const hands=createFirstPersonHands(camera);scene.add(camera);
-let riggedHands=null;
 const FX=new THREE.Group();scene.add(FX);
 const motes=[];for(let i=0;i<24;i++){
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(.075,6,5),new THREE.MeshBasicMaterial({color:0xc4efb0,transparent:true,opacity:.6}));
@@ -361,9 +360,8 @@ function update(rawDt){
     camera.position.x=eye.x;camera.position.z=eye.z;camera.position.y=THREE.MathUtils.damp(camera.position.y||eye.y,eye.y,14,rawDt);
     camera.rotation.y=player.cameraYaw;camera.rotation.x=player.pitch;
   }
-  hands.group.visible=!riggedHands&&!player.thirdPerson&&(combat.busy||guarded);
-  if(!riggedHands)hands.update(rawDt,combat,guarded,frozen);
-  if(riggedHands){riggedHands.group.visible=!player.thirdPerson;riggedHands.update(frozen?0:dt,a);}
+  hands.group.visible=!player.thirdPerson&&(combat.busy||guarded);
+  hands.update(frozen?0:dt,combat,guarded,frozen);
 
   lockMarker.visible=!!lockTarget&&player.thirdPerson;
   if(lockTarget){lockMarker.position.set(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+1.75+Math.sin(elapsed*4)*.05,lockTarget.z);lockMarker.rotation.y+=rawDt*2;}
@@ -390,7 +388,6 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
   scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
-  riggedHands=explorer.createViewmodel(camera);
   if(window.__verdant)window.__verdant.avatar=avatar;
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {createHumanoid} from './humanoid.js';
 import {Animator,solveLeg} from './anim/animator.js';
 import {buildClips} from './anim/clips.js';
@@ -116,25 +117,41 @@ function fpClip(name,keys){
 }
 export function createFirstPersonHands(camera){
   const group=new THREE.Group();camera.add(group);
-  const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:.94});
-  const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.89});
-  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:.95});
-  const boot=new THREE.MeshStandardMaterial({color:'#242b25',roughness:1});
+  const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:1});
+  const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.94});
+  const leather=new THREE.MeshStandardMaterial({color:'#524537',roughness:.9});
+  const seam=new THREE.MeshStandardMaterial({color:'#8b7551',roughness:.95});
+  const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:1});
+  const boot=new THREE.MeshStandardMaterial({color:'#292d28',roughness:1});
+  const cylinder=(a,b,length)=>new THREE.CylinderGeometry(a,b,length,18,3);
+  const finger=new THREE.CapsuleGeometry(.028,.055,6,12);
   function arm(name,side){
     const g=new THREE.Group();g.name=name;group.add(g);
-    // Sleeve runs back toward the shoulder, off screen; forearm and fist lead.
-    const sleeve=part(g,new THREE.CapsuleGeometry(.075,.34,6,14),shirt,side*.02,.02,.3);sleeve.rotation.x=Math.PI/2;
-    const fore=part(g,new THREE.CapsuleGeometry(.058,.2,6,14),skin,0,0,.02);fore.rotation.x=Math.PI/2;
-    const fist=part(g,new THREE.SphereGeometry(.078,18,14),skin,0,.005,-.13);fist.scale.set(1.05,.85,1.05);
-    for(let i=0;i<4;i++)part(g,new THREE.SphereGeometry(.024,10,8),skin,-.05+i*.033,.035,-.185);
+    // Closed, overlapping shapes: no clipped skin triangles or open sleeves.
+    // The upper arm enters from below the camera; the cuff, wrist and palm
+    // make one continuous silhouette even while a punch rotates the group.
+    const sleeve=part(g,cylinder(.137,.085,.56),shirt,side*.02,-.01,.37);sleeve.rotation.x=Math.PI/2;
+    const cuff=part(g,cylinder(.098,.096,.105),leather,side*.01,-.01,.11);cuff.rotation.x=Math.PI/2;
+    const stitch=part(g,new THREE.TorusGeometry(.098,.006,6,24),seam,side*.01,-.01,.065);
+    const fore=part(g,new THREE.CapsuleGeometry(.069,.175,8,16),skin,0,-.012,-.045);fore.rotation.x=Math.PI/2;
+    const palm=part(g,new RoundedBoxGeometry(.188,.142,.172,4,.058),skin,0,-.01,-.2);
+    for(let i=0;i<4;i++){
+      const x=(i-1.5)*.045;
+      const knuckle=part(g,new THREE.SphereGeometry(.031,12,10),skin,x,.047,-.261);knuckle.scale.set(1,.75,.8);
+      const digit=part(g,finger,skin,x,.012,-.298);digit.rotation.x=Math.PI/2;
+      digit.rotation.y=(i-1.5)*.08;
+    }
+    const thumb=part(g,new THREE.CapsuleGeometry(.034,.069,6,12),skin,-side*.105,-.035,-.17);
+    thumb.rotation.z=side*.85;thumb.rotation.x=.55;
     return g;
   }
   arm('fpL',-1);arm('fpR',1);
   const leg=new THREE.Group();leg.name='fpLeg';group.add(leg);
-  const shin=part(leg,new THREE.CapsuleGeometry(.09,.5,6,14),trousers,0,0,.2);shin.rotation.x=Math.PI/2;
-  const sole=part(leg,new THREE.SphereGeometry(.13,16,12),boot,0,.02,-.16);sole.scale.set(.9,.7,1.3);
+  const shin=part(leg,cylinder(.115,.085,.52),trousers,0,0,.21);shin.rotation.x=Math.PI/2;
+  const sole=part(leg,new RoundedBoxGeometry(.19,.13,.27,4,.06),boot,0,-.01,-.16);
+  group.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
   const animator=new Animator(group,Object.entries(FP_CLIPS).map(([n,k])=>fpClip(n,k)));
-  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);},
+  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
     update(dt,combat,guarded,frozen){
       const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',hurt:'fp_hurt'};
       if(clip)animator.play(clip.name.startsWith('evade')?'fp_evade':map[clip.name],clip.time,clip.fade);else animator.stop();
