@@ -62,7 +62,10 @@ export class PlayerCombat {
     const len = Math.hypot(x, z); this.evadeDir = { x: x / len, z: z / len };
     // The roll travels the way the body faces; with a lock-on the body turns back
     // to the target as soon as the roll ends.
-    this.facing = yawOf(x, z); this.evadeClip = 'evadeForward';
+    // Keep the upper body facing the threat for a retreat or side step. The
+    // displacement is independent, so the camera and attack line stay legible.
+    if (!ctx.lockTarget) this.facing = yawOf(x, z);
+    this.evadeClip = 'evadeForward';
     this.events.push({ type: 'evade' });
   }
   hurt(fromX, fromZ, x, z) {
@@ -107,9 +110,11 @@ export class PlayerCombat {
       out.dx = -Math.sin(this.facing) * step; out.dz = -Math.cos(this.facing) * step;
 
       // Hit detection runs only while the strike is active, against the posed limb.
-      if (this.t >= m.active[0] && t0 < m.active[1] && !this.blocked) {
+      // Save the posed limb during startup too. The first active sample then
+      // sweeps from the immediately preceding pose instead of losing a frame.
+      if (this.t < m.active[1] && !this.blocked) {
         strikeSegment(ctx.bones, m.hitbox, this.segment);
-        if (this.prevSegment) {
+        if (this.t >= m.active[0] && this.prevSegment) {
           const obstacle = obstacleBetween(ctx.chest, this.segment.b, ctx.grid);
           const result = sweep(this.prevSegment, this.segment, m.hitbox.radius, ctx.targets.filter(tg => !this.hitThisSwing.has(tg)));
           this.nearest = Math.min(this.nearest, result.nearest);

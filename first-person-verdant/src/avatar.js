@@ -117,6 +117,9 @@ function fpClip(name,keys){
 }
 export function createFirstPersonHands(camera){
   const group=new THREE.Group();camera.add(group);
+  // Keep the guard below the sight line. The authored explorer still supplies
+  // the world-space strike pose and hitbox; this rig only frames the action.
+  group.position.set(0,-.16,-.08);group.scale.setScalar(.84);
   const shirt=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:1});
   const skin=new THREE.MeshStandardMaterial({color:SKIN_TONES[2],roughness:.94});
   const leather=new THREE.MeshStandardMaterial({color:'#524537',roughness:.9});
@@ -124,7 +127,7 @@ export function createFirstPersonHands(camera){
   const trousers=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:1});
   const boot=new THREE.MeshStandardMaterial({color:'#292d28',roughness:1});
   const cylinder=(a,b,length)=>new THREE.CylinderGeometry(a,b,length,18,3);
-  const finger=new THREE.CapsuleGeometry(.028,.055,6,12);
+  const finger=new THREE.CapsuleGeometry(.02,.032,6,12);
   function arm(name,side){
     const g=new THREE.Group();g.name=name;group.add(g);
     // Closed, overlapping shapes: no clipped skin triangles or open sleeves.
@@ -133,15 +136,15 @@ export function createFirstPersonHands(camera){
     const sleeve=part(g,cylinder(.137,.085,.56),shirt,side*.02,-.01,.37);sleeve.rotation.x=Math.PI/2;
     const cuff=part(g,cylinder(.098,.096,.105),leather,side*.01,-.01,.11);cuff.rotation.x=Math.PI/2;
     const stitch=part(g,new THREE.TorusGeometry(.098,.006,6,24),seam,side*.01,-.01,.065);
-    const fore=part(g,new THREE.CapsuleGeometry(.069,.175,8,16),skin,0,-.012,-.045);fore.rotation.x=Math.PI/2;
-    const palm=part(g,new RoundedBoxGeometry(.188,.142,.172,4,.058),skin,0,-.01,-.2);
+    const fore=part(g,new THREE.CapsuleGeometry(.063,.16,8,16),skin,0,-.012,-.045);fore.rotation.x=Math.PI/2;
+    part(g,new RoundedBoxGeometry(.165,.12,.17,4,.048),skin,0,-.01,-.2);
     for(let i=0;i<4;i++){
-      const x=(i-1.5)*.045;
-      const knuckle=part(g,new THREE.SphereGeometry(.031,12,10),skin,x,.047,-.261);knuckle.scale.set(1,.75,.8);
-      const digit=part(g,finger,skin,x,.012,-.298);digit.rotation.x=Math.PI/2;
+      const x=(i-1.5)*.038;
+      const knuckle=part(g,new THREE.SphereGeometry(.022,12,10),skin,x,.035,-.253);knuckle.scale.set(1,.7,.75);
+      const digit=part(g,finger,skin,x,.004,-.267);digit.rotation.x=Math.PI/2;
       digit.rotation.y=(i-1.5)*.08;
     }
-    const thumb=part(g,new THREE.CapsuleGeometry(.034,.069,6,12),skin,-side*.105,-.035,-.17);
+    const thumb=part(g,new THREE.CapsuleGeometry(.029,.06,6,12),skin,-side*.09,-.035,-.17);
     thumb.rotation.z=side*.85;thumb.rotation.x=.55;
     return g;
   }
