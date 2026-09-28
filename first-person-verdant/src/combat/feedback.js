@@ -52,6 +52,22 @@ export class CombatSound {
     if (name === 'spin') { for (let i = 0; i < 5; i++) this.hiss(.12, .05, 700, 300, 3, i * .18); }
     if (name === 'slam') { this.tone(48, .7, .26, 'sine', .45); this.hiss(.5, .12, 400, 90, .8); }
   }
+  // The Warden: everything an octave lower and longer.
+  wardenWindup(attack) {
+    if (attack === 'bite') { this.tone(70, .7, .09, 'sawtooth', 2.2); this.hiss(.5, .04, 300, 900, 3); }
+    if (attack === 'stomp') { this.tone(42, 1.1, .12, 'sawtooth', 2.6); this.hiss(1.0, .05, 150, 1200, 2); }
+    if (attack === 'sweep') { this.hiss(.7, .06, 500, 200, 1.5); this.tone(60, .7, .06, 'triangle', 1.6); }
+    if (attack === 'charge') { for (let i = 0; i < 4; i++) this.tone(55, .18, .1, 'triangle', .7, i * .22); this.hiss(.9, .05, 200, 900, 1); }
+    if (attack === 'erupt') { this.tone(36, 1.2, .12, 'sine', 1.8); this.hiss(1.1, .06, 90, 700, 1); }
+  }
+  wardenAttack(attack) {
+    if (attack === 'bite') { this.tone(95, .25, .2, 'sawtooth', .4); this.hiss(.18, .15, 1400, 400, 1); }
+    if (attack === 'stomp') { this.tone(32, 1.0, .35, 'sine', .45); this.hiss(.7, .2, 300, 60, .8); }
+    if (attack === 'sweep') this.hiss(.45, .14, 900, 250, .9);
+    if (attack === 'charge') this.tone(40, 1.2, .16, 'triangle', .6);
+  }
+  roar() { this.tone(58, 1.6, .22, 'sawtooth', .7); this.tone(87, 1.4, .12, 'sawtooth', .8, .05); this.hiss(1.6, .12, 200, 900, .7); }
+  erupt() { this.tone(50, .45, .2, 'triangle', .5); this.hiss(.35, .16, 1600, 300, .8); }
   blocked() { this.tone(210, .09, .09, 'square', .55); this.hiss(.09, .08, 700, 300, 2); }
   whiff() { this.hiss(.1, .025, 2400, 1200, 1); }
   evade() { this.hiss(.2, .045, 900, 2200, .9); }

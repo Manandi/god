@@ -14,3 +14,9 @@
 #dialogueText{margin:10px 0 12px;min-height:3.4em;font:16px/1.6 'Cinzel',serif;color:#e8f1df}#dialogueHint{display:block;text-align:right;font-size:11px;letter-spacing:.1em;color:#bcd0b8}#dialogueHint b{color:#ccebab}#dialogueHint em{font-style:normal;opacity:.6;margin-left:8px}
 #interaction small{display:block;font-size:10px;letter-spacing:.16em;color:#a9c6a2;margin-top:3px}
 @media(max-width:700px){#dialogue{bottom:70px;padding:14px 16px 10px}#dialogueText{font-size:14px}}
+#bossBar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);width:min(620px,80vw);pointer-events:none;text-shadow:0 2px 8px #000}
+#bossBar strong{display:block;font:600 15px 'Cinzel',serif;letter-spacing:.14em;color:#e9e0bd;margin-bottom:6px}
+#bossBar .track{position:relative;height:9px;background:#1b2a24cc;border:1px solid #9fb58f88}
+#bossBar i{position:absolute;left:0;top:0;bottom:0}#bossTrail{background:#e8dcb0}#bossFill{background:linear-gradient(90deg,#8f3c2c,#c96a3d)}
+#bossBar.phase2 #bossFill{background:linear-gradient(90deg,#2c8f76,#63f2c4)}
+@media(max-width:700px){#bossBar{bottom:48px}}

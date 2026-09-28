@@ -6,6 +6,8 @@ export const SITES = [
   { id: 'shrine', title: 'THE CANOPY SHRINE', x: -12, z: -151, story: 'The forest kept one name hidden in the crown of its tallest tree.' }
 ];
 export const GATE = { x: 23, z: -186 };
+// The Warden's Hollow: the boss arena before the Canopy Gate (tools/blender/build_arena.py).
+export const ARENA = { x: 23, z: -168, r: 21 };
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -15,11 +17,19 @@ function noise(x,z) {
   const u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);
   return THREE.MathUtils.lerp(THREE.MathUtils.lerp(rand2(a,b),rand2(a+1,b),u),THREE.MathUtils.lerp(rand2(a,b+1),rand2(a+1,b+1),u),v);
 }
-export function groundY(x,z) {
+function terrainY(x,z) {
   const broad=Math.sin(x*.022)*2.8+Math.cos(z*.020)*3.0;
   const ridges=(noise(x*.022,z*.022)-.5)*9+(noise(x*.064,z*.064)-.5)*1.8;
   const edge=Math.max(0,(Math.hypot(x*.85,z+58)-142)/45);
   return broad+ridges+edge*edge*18;
+}
+export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
+export function groundY(x,z) {
+  // The arena floor is level; the land eases into it.
+  const d=Math.hypot(x-ARENA.x,z-ARENA.z),h=terrainY(x,z);
+  if(d>=34)return h;
+  const k=d<=25?1:(1-(d-25)/9)**2*(3-2*(1-(d-25)/9));
+  return h+(ARENA_Y-h)*k;
 }
 function rng(seed=87122){let s=seed>>>0;return()=>{s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
 const color=(value)=>new THREE.Color(value);
@@ -143,7 +153,7 @@ export function buildWorld(scene){
   const trunkGeometry=new THREE.CylinderGeometry(.32,.58,1,14),crownGeometry=organicCrown();
   const trees=[];for(let i=0;i<540;i++){
     const x=(random()-.5)*355,z=(random()-.5)*355;
-    if(Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15)continue;
+    if(Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
     const ridge=Math.hypot(x*.85,z+58)>158;if(ridge&&random()<.45)continue;
     trees.push({x,z,height:5.7+random()*7.2,size:.85+random()*.75,kind:Math.floor(random()*leafMaterials.length)});
   }
@@ -168,7 +178,7 @@ export function buildWorld(scene){
   crowns.forEach((c,i)=>{c.count=counts[i];scene.add(c);});scene.add(trunkInstances);limbs.count=limbCount;limbs.castShadow=true;scene.add(limbs);
   const rockMat=new THREE.MeshStandardMaterial({color:0x747d69,roughness:1}),mossMat=new THREE.MeshStandardMaterial({color:0x52784a,roughness:1});
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,1),rockMat,700),lichens=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),mossMat,420);let nR=0,nL=0;
-  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9))continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*.94,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
+  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*.94,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
   rocks.count=nR;rocks.castShadow=true;lichens.count=nL;scene.add(rocks,lichens);
   const grass=new THREE.InstancedMesh(leafCluster(),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
   for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if(nearTrail(x,z)&&random()<.85)continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
@@ -179,7 +189,7 @@ export function buildWorld(scene){
   const petals=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.17,0),new THREE.MeshStandardMaterial({color:0xe5c688,roughness:.95}),520);let flowerCount=0;
   for(let i=0;i<2200;i++){
     const x=(random()-.5)*300,z=(random()-.5)*300;
-    if(Math.hypot(x,z-39)<4||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<3))continue;
+    if(Math.hypot(x,z-39)<4||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<3)||Math.hypot(x-ARENA.x,z-ARENA.z)<22)continue;
     const y=groundY(x,z),near=nearTrail(x,z);
     if(near&&random()<.42&&flowerCount<520){
       const a=flowerCount++;dummy.position.set(x,y+.33,z);dummy.rotation.set(0,random()*6.28,(random()-.5)*.3);dummy.scale.setScalar(.75+random()*.8);dummy.updateMatrix();flowerStem.setMatrixAt(a,dummy.matrix);

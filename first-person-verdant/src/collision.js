@@ -1,14 +1,17 @@
 // A small spatial grid keeps collision checks local even when the woodland is dense.
 export function createCollisionGrid(colliders,cellSize=12){
-  const cells=new Map(),key=(x,z)=>`${x},${z}`;
-  for(const collider of colliders){
+  const cells=new Map(),key=(x,z)=>`${x},${z}`;let count=0;
+  function add(collider){
     const minX=Math.floor((collider.x-collider.r)/cellSize),maxX=Math.floor((collider.x+collider.r)/cellSize);
     const minZ=Math.floor((collider.z-collider.r)/cellSize),maxZ=Math.floor((collider.z+collider.r)/cellSize);
     for(let i=minX;i<=maxX;i++)for(let j=minZ;j<=maxZ;j++){
       const id=key(i,j);if(!cells.has(id))cells.set(id,[]);cells.get(id).push(collider);
     }
+    count++;
   }
-  return {near(x,z){return cells.get(key(Math.floor(x/cellSize),Math.floor(z/cellSize)))||[];},count:colliders.length};
+  colliders.forEach(add);
+  // add() takes colliders that arrive later (the arena loads after the world).
+  return {near(x,z){return cells.get(key(Math.floor(x/cellSize),Math.floor(z/cellSize)))||[];},add,get count(){return count;}};
 }
 
 export function canOccupy(x,z,footY,grid,groundY,radius=.43){

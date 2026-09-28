@@ -4,6 +4,7 @@ import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer,createNPC } from './avatarGLB.js';
 import { createStory,NPCS,CHAPTERS } from './story.js';
+import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
@@ -42,6 +43,16 @@ const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITE
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const story=createStory(save.story,memories);
 const npcs={};let dialogue=null;const spawned=new Set();
+// Orrun, the Hollow Warden, and its arena load after the world; until then the gate is just a gate.
+let warden=null,gateRoots=null,bossShown=false,bossTrail=1;
+const SPEAKERS={orrun:{name:'ORRUN',title:'THE WARDEN, REMEMBERED',get x(){return warden?.x??BED.x;},get z(){return warden?.z??BED.z;}}};
+const speakerOf=id=>NPCS[id]||SPEAKERS[id];
+const RELEASE_LINES=[
+  'You speak the name the forest kept for it: Orrun.',
+  'The word falls into the Hollow like a stone into still water. The teal light drains out of its shell.',
+  'Its eyes clear. It remembers the spring it hatched in, the oath it swore at Mosswatch, the name carved in the crown.',
+  'The forest remembers it, so its watch is over. The roots in the gate loosen, and Orrun bows its head, as it bowed on the oath-stones long ago.'
+];
 const hands=createFirstPersonHands(camera);scene.add(camera);
 const FX=new THREE.Group();scene.add(FX);
 const motes=[];for(let i=0;i<24;i++){
@@ -182,6 +193,7 @@ function nearestInteractable(){
   const d=(p)=>Math.hypot(p.x-player.x,p.z-player.z);
   const npc=Object.entries(NPCS).map(([id,n])=>({id,n,dist:d(n)})).filter(v=>v.dist<3.3).sort((a,b)=>a.dist-b.dist)[0];
   if(npc)return{type:'npc',id:npc.id,value:npc.n};
+  if(warden?.state==='released'&&story.stage==='gate'&&d(warden)<8)return{type:'orrun'};
   const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+Math.max(0,stats().intelligence-10)*.18);
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
@@ -191,6 +203,7 @@ function nearestInteractable(){
 function interact(){
   const nearby=nearestInteractable();if(!nearby)return;
   if(nearby.type==='npc')openDialogue(nearby.id);
+  else if(nearby.type==='orrun')openDialogue('orrun',{lines:RELEASE_LINES});
   else if(nearby.type==='echo'){
     const e=nearby.value,locked=story.memoryLocked(e.id);
     if(locked){toast(...locked);playTone(180,.3,.04);return;}
@@ -199,7 +212,7 @@ function interact(){
     toast(`MEMORY FOUND · ${c.memoryTitle}`,`${c.memoryText}<br><br>${story.info.objective}`);toastTimer=7;
   }else if(nearby.type==='gate'){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
-    if(story.stage==='gate'){story.advance('end');persist();}
+    if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
   }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY','Sap Flasks refilled.');}
 }
@@ -208,10 +221,10 @@ function interact(){
 // E (or click) reveals the rest of a line, then moves to the next; walking
 // away ends the conversation. Story conversations advance the quest when
 // they finish, and may wake the chapter's hollowed.
-function openDialogue(id){
-  const conv=story.talk(id,profile.name);
+function openDialogue(id,conversation=null){
+  const conv=conversation||story.talk(id,profile.name),who=speakerOf(id);
   dialogue={id,...conv,i:0,chars:0,opened:elapsed};npcs[id]?.setTalking(true);
-  $('dialogueName').textContent=NPCS[id].name;$('dialogueTitle').textContent=NPCS[id].title;
+  $('dialogueName').textContent=who.name;$('dialogueTitle').textContent=who.title;
   $('dialogue').classList.remove('hidden');renderDialogue();playTone(520,.12,.025,'triangle');
 }
 function renderDialogue(){
@@ -229,6 +242,7 @@ function advanceDialogue(){
 function closeDialogue(finished){
   const d=dialogue;if(!d)return;dialogue=null;
   $('dialogue').classList.add('hidden');npcs[d.id]?.setTalking(false);
+  if(finished&&d.id==='orrun'){finishStory();return;}
   if(!finished||!d.then)return;
   const from=story.stage;story.advance(d.then);
   if(from==='trial_report'){player.flasks=FLASK.charges;player.health=maxHealth();}
@@ -237,11 +251,44 @@ function closeDialogue(finished){
 }
 function updateDialogue(dt){
   if(!dialogue)return;
-  const n=NPCS[dialogue.id];
-  if(Math.hypot(n.x-player.x,n.z-player.z)>5.5){closeDialogue(false);return;}
+  const n=speakerOf(dialogue.id);
+  if(Math.hypot(n.x-player.x,n.z-player.z)>(dialogue.id==='orrun'?11:5.5)){closeDialogue(false);return;}
   const line=dialogue.lines[dialogue.i];
   if(dialogue.chars<line.length){dialogue.chars=Math.min(line.length,dialogue.chars+dt*62);renderDialogue();}
 }
+
+/** Orrun is released: the gate roots wither, the story ends, the gate opens. */
+function finishStory(){
+  story.advance('end');persist();witherT=0;
+  toast('THE FOREST REMEMBERS','Orrun is released. The Canopy Gate stands open.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
+  setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
+}
+let witherT=-1;
+function updateBoss(rawDt){
+  if(!warden)return;
+  warden.setSealed(story.before('gate'));
+  if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
+  const fighting=warden.awake&&warden.alive;
+  if(fighting!==bossShown){bossShown=fighting;$('bossBar').classList.toggle('hidden',!fighting);$('bossName').textContent=warden.name;}
+  if(fighting){
+    const f=warden.health/warden.maxHealth;bossTrail=Math.max(f,bossTrail-rawDt*.25);
+    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',warden.phase>1);
+  }else bossTrail=1;
+}
+function handleBossEvent(c,ev){
+  if(ev.type==='awaken'){sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
+  if(ev.type==='roar'){sound.roar();cameraKick=Math.max(cameraKick,.12);cue('ROAR',.7);return true;}
+  if(ev.type==='phase'){toast('THE HOLLOWING DEEPENS','The memories on its back burn brighter. Roots will rise beneath you.');return true;}
+  if(ev.type==='enrage'){sound.enrage();toast('ORRUN IS ENRAGED','Faster, and more roots');return true;}
+  if(ev.type==='shockwave'){effects.shockwave(ev.point,ev.from,ev.to,ev.duration);kick(c,.12);cameraKick=Math.max(cameraKick,.1);return true;}
+  if(ev.type==='erupt'){sound.erupt();effects.chips(new THREE.Vector3(ev.x,groundY(ev.x,ev.z)+.3,ev.z));return true;}
+  if(ev.type==='skid'){effects.ring(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z));return true;}
+  if(ev.type==='leash'){toast('ORRUN RETURNS TO ITS ROOTS','Leave the Hollow and it heals.');return true;}
+  if(ev.type==='windup'){sound.wardenWindup(ev.attack);cue(BOSS_CUES[ev.attack],.8);debug.note(`Warden → TELEGRAPH ${ev.attack}`,elapsed);return true;}
+  if(ev.type==='attack'){sound.wardenAttack(ev.attack);return true;}
+  return false;
+}
+const BOSS_CUES={bite:'BITE · PARRY OR ROLL',stomp:'STOMP · JUMP OR ROLL THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · ROLL ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
 
 // ---------------------------------------------------------------- encounters
 // The hollowed gather only at the site of the chapter being played: they rise
@@ -287,9 +334,13 @@ function hurtPlayer(from,kind='light',damage=1){
   if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
 }
 function respawn(){
-  player.defeated=0;player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  // Once the story reaches the gate, you wake at Pip's lookout below the Hollow instead of the camp.
+  const checkpoint=story.reached('gate')&&!story.reached('end');
+  if(warden?.awake&&warden.alive)warden.reset();
+  player.defeated=0;player.health=maxHealth();player.x=checkpoint?5:0;player.z=checkpoint?-144:39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;
-  toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');
+  if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
+  toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');
 }
 
 // ------------------------------------------------------------ combat events
@@ -344,7 +395,8 @@ function handleCombatEvents(){
       if(ev.critical){slowMo(.35,.45);}
       debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
       if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
-      if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');
+      if(res.defeated&&ev.target===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
+      else if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');
 }
     }
     else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);cue('BLOCKED',.45);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
@@ -413,6 +465,7 @@ function updateHUD(){
   $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
   if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
   else if(crit)$('interaction').innerHTML='<b>CLICK</b> · ROOT STRIKE';
+  else if(nearby?.type==='orrun')$('interaction').innerHTML='<b>E</b> · SPEAK ITS NAME <small>ORRUN</small>';
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
@@ -474,7 +527,7 @@ function update(rawDt){
   if(!player.thirdPerson)player.yaw=combat.facing;
   else if(!combat.busy){
     let want=null;
-    if(dialogue)want=yawOf(NPCS[dialogue.id].x-player.x,NPCS[dialogue.id].z-player.z);
+    if(dialogue)want=yawOf(speakerOf(dialogue.id).x-player.x,speakerOf(dialogue.id).z-player.z);
     else if(lockTarget)want=yawOf(lockTarget.x-player.x,lockTarget.z-player.z);
     else if(hasInput)want=yawOf(input.x,input.z);
     if(want!==null)combat.facing+=angleTo(combat.facing,want)*(1-Math.exp(-(lockTarget?16:12)*dt));
@@ -485,8 +538,9 @@ function update(rawDt){
   const impact=moveWithCollision(player,player.vx*dt+motion.dx,player.vz*dt+motion.dz,collisionGrid,groundY);
   if(impact.hitX)player.vx=0;if(impact.hitZ)player.vz=0;
   // Creatures are solid: slide around them rather than through.
-  for(const c of creatures){if(!c.alive)continue;const dx=player.x-c.x,dz=player.z-c.z,d=Math.hypot(dx,dz),min=c.radius+.36;
-    if(d<min&&d>1e-4){const push=(min-d);const nx=player.x+dx/d*push,nz=player.z+dz/d*push;moveWithCollision(player,nx-player.x,nz-player.z,collisionGrid,groundY);}}
+  for(const c of creatures){if(!c.alive&&c!==warden)continue;
+    for(const b of c.bodyCircles?.()||[{x:c.x,z:c.z,r:c.radius}]){const dx=player.x-b.x,dz=player.z-b.z,d=Math.hypot(dx,dz),min=b.r+.36;
+    if(d<min&&d>1e-4){const push=(min-d);const nx=player.x+dx/d*push,nz=player.z+dz/d*push;moveWithCollision(player,nx-player.x,nz-player.z,collisionGrid,groundY);}}}
   const moved=Math.hypot(player.x-oldX,player.z-oldZ)/Math.max(dt,1e-4);
 
   const oldFeet=groundY(player.x,player.z)+player.height;
@@ -500,8 +554,8 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();
-  if(dialogue&&elapsed-dialogue.opened<.9){const n=NPCS[dialogue.id];player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);
+  if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
   for(const [id,npc] of Object.entries(npcs))npc.update(dt,player);
   const speaker=story.speaker&&NPCS[story.speaker];questMarker.visible=!!speaker&&!dialogue;
   if(speaker){questMarker.position.set(speaker.x,groundY(speaker.x,speaker.z)+2.3*speaker.scale+Math.sin(elapsed*3)*.08,speaker.z);questMarker.rotation.y+=rawDt*1.6;}
@@ -510,14 +564,15 @@ function update(rawDt){
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
   for(const c of creatures){
-    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack});
+    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
     for(const ev of events){
+      if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR ROLL THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert')sound.alert();
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
-      else if(ev.type==='enrage'){sound.enrage();toast('THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}
+      else if(ev.type==='enrage'){sound.enrage();toast(c.type==='thornling'?'THE THORNLING IS ENRAGED':'THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}
       else if(ev.type==='rising')debug.note(`${c.type} rights itself`,elapsed);
     }
     if(ev_attack_slam(c)){const cx=c.x+Math.sin(c.heading)*.64,cz=c.z+Math.cos(c.heading)*.64;effects.shockwave(new THREE.Vector3(cx,groundY(cx,cz),cz),SHOCKWAVE.from,SHOCKWAVE.to,SHOCKWAVE.duration);kick(c,.05);}
@@ -565,8 +620,8 @@ function update(rawDt){
     }
     const heading=new THREE.Vector3(-Math.sin(player.cameraYaw),0,-Math.cos(player.cameraYaw));
     const target=new THREE.Vector3(player.x,floor+player.height+(player.emote==='sit'?.85:1.35),player.z);
-    if(lockTarget)target.lerp(new THREE.Vector3(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+.7,lockTarget.z),.3);
-    const zoom=lockTarget?Math.max(player.zoom,5.4):player.zoom;
+    if(lockTarget)target.lerp(new THREE.Vector3(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+(lockTarget.focusHeight??.7),lockTarget.z),.3);
+    const zoom=lockTarget?Math.max(player.zoom,lockTarget===warden?8:5.4):player.zoom;
     const retreat=zoom*Math.cos(player.pitch*.55);
     const desired=target.clone().addScaledVector(heading,-retreat);
     desired.y+=1.1+zoom*.21+Math.sin(player.pitch)*zoom*.7;
@@ -598,12 +653,13 @@ function update(rawDt){
   hands.update(frozen?0:dt,combat,guarded,frozen);
 
   lockMarker.visible=!!lockTarget;
-  if(lockTarget){lockMarker.position.set(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+1.75+Math.sin(elapsed*4)*.05,lockTarget.z);lockMarker.rotation.y+=rawDt*2;}
+  if(lockTarget){lockMarker.position.set(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+(lockTarget.markerHeight??1.75)+Math.sin(elapsed*4)*.05,lockTarget.z);lockMarker.rotation.y+=rawDt*2;}
   const imminent=creatures.find(c=>c.alive&&c.state==='windup'&&Math.hypot(c.x-player.x,c.z-player.z)<6);
   const cueElement=$('combatCue');
-  const threat=imminent&&{lunge:'EVADE THE LUNGE',spin:'GET CLEAR OF THE SPIN',slam:'JUMP OR ROLL THROUGH THE SLAM'}[imminent.attack];
+  const bossThreat=warden?.alive&&warden.winding&&Math.hypot(warden.x-player.x,warden.z-player.z)<14?BOSS_CUES[warden.winding]:null;
+  const threat=bossThreat||imminent&&{lunge:'EVADE THE LUNGE',spin:'GET CLEAR OF THE SPIN',slam:'JUMP OR ROLL THROUGH THE SLAM'}[imminent.attack];
   cueElement.textContent=elapsed<cueUntil?cueText:threat||(combat.state==='attack'?`${combat.phase().toUpperCase()} · ${MOVES[combat.move].label.toUpperCase()}`:'');
-  cueElement.classList.toggle('warning',imminent&&elapsed>=cueUntil);
+  cueElement.classList.toggle('warning',!!(imminent||bossThreat)&&elapsed>=cueUntil);
   $('crosshair').classList.toggle('impact',elapsed<cueUntil&&['SOLID HIT','DRIVEN BACK','WEAK POINT','EXPOSED','ROOT STRIKE','COUNTER','TOPPLED'].includes(cueText));
 
   player.step-=dt;if(planar>.5&&player.grounded&&player.step<=0){player.step=guarded?.38:.45;playTone(74+Math.random()*20,.06,.013,'triangle');}
@@ -631,10 +687,14 @@ shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=tru
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);shell.start();
 if(!params.has('procedural'))for(const [id,def] of Object.entries(NPCS))createNPC(scene,def,groundY).then(npc=>{npcs[id]=npc;if(dialogue?.id===id)npc.setTalking(true);})
   .catch(err=>console.warn(`${id} failed to load.`,err));
+loadWardenAndArena(scene).then(res=>{
+  warden=res.warden;gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
+  warden.setSealed(story.before('gate'));
+  if(story.reached('end')){warden.release(true);if(gateRoots)gateRoots.visible=false;}
+}).catch(err=>console.warn('The Warden or its arena failed to load.',err));
 if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
   scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
-  if(window.__verdant)window.__verdant.avatar=avatar;
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));
 const clock=new THREE.Clock(),capture=params.has('capture');
 let perfSeconds=0,perfFrames=0,foliageReduced=false,pausedRender=0;
@@ -666,5 +726,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},respawn};
 }
