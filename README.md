@@ -11,18 +11,53 @@ This is the shared status file for work on the game from different devices or AI
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
-## Latest shared state — 2026-09-28
+## Latest shared state — 2026-09-28 (evening)
 
-- Latest GitHub game commit inspected here: `ecf0fbbeba481281264b26525dc55db16b82c72c` (`Merge remote first-person polish into the combat overhaul`). The PC's newer work is present on the branch, including charged heavy attacks, Breath/stamina, poise/topples, and three shellback attacks. Earlier first-person camera and combat polish is also included.
-- The previous 3D Site deployment succeeded for its own source commit `4a4f2ebb1fadad80c933028fcb760ff54b414ad7`, before the PC combat overhaul. Check its source and deployment status before claiming it matches GitHub Pages.
-- This checkout was fast-forwarded cleanly to `ecf0fbb` on September 28. No game fixes from the September 28 browser annotations have been committed yet.
+- Latest game commit: `e794592` (`3D fixes: globe texture under a base path, solid world props, boss checkpoint`), on top of `766854e` (boss and arena), `cbe2361` (story) and `709d0d7` (combat round 3). Published by the Pages workflow run for `e794592` (success). Verified live at `https://manandi.github.io/god/verdant/`: the served bundle contains the story and boss code, and `characters/warden/warden.glb`, `arena/warden-hollow.glb`, `art/world-surface-v2.webp` and `characters/explorer/explorer.glb` all return 200 under `/god/verdant/`. The 2D game at `/god/` still returns 200. The ChatGPT Site was **not** updated.
+- **Character design unchanged.** The player's explorer model and first-person hands were not modified.
+- **Combat (`709d0d7`).**
+  - Guard (C) and parry (raise guard ≤0.18 s before contact), which leaves the creature reeling and open to a riposte.
+  - Guard counter.
+  - Sprint (hold Shift) with running attacks, and a falling heel as a jump attack.
+  - Sap Flasks (X, 3 charges, refilled at the trail stone or when you die).
+  - Attack tokens, so creatures take turns.
+  - Leashing.
+- **Story (`cbe2361`, `src/story.js`).** One ordered questline: Wren's trial at camp → the Rootwell (Brannoch) → Mosswatch (Ysolde) → the Canopy Shrine (Pip) → the Canopy Gate.
+  - Every line of NPC dialogue depends on the story stage.
+  - The four keepers are clones of the existing explorer model with their own materials.
+  - Creatures now belong to a chapter and rise at that chapter's site only when the story reaches it. Cleared nests persist.
+  - Save key `verdant-reach-3d-v1` gains `story: {v:2, stage, cleared}`. Old memory-only saves migrate: the story resumes at the first chapter whose memory is missing.
+  - The compass, objective and journal (J) follow the story.
+- **Boss and arena (`766854e`).** Orrun, the Hollow Warden, and the Warden's Hollow before the Canopy Gate.
+  - Both are built by Blender scripts: `first-person-verdant/tools/blender/build_warden.py`, `build_arena.py` and `procedural.py`, with Cycles-baked textures. See `public/characters/warden/README.md` for clips and hit windows.
+  - Boss AI is in `src/boss.js`. Attacks: bite (the only parryable one), stomp with a shockwave, tail sweep, charge, and root eruption from phase 2.
+  - Leg and head damage topples it onto its back. Phase 2 starts at 60% health, enrage at 25%.
+  - Leaving the Hollow resets it. Dying respawns you at a checkpoint below the Hollow.
+  - Defeating it, then pressing E to speak its name, ends the story.
+  - The arena terrain is levelled in `world.js` (`ARENA`).
+  - **Unity was not used.** It needs a licensed, signed-in editor, and the game is Three.js; everything was made in Blender.
+- **Fixes (`e794592`).**
+  - The globe texture uses the Vite base URL.
+  - Colliders added for the Rootwell platform and rocks, the Shrine trunk and ring stones, lantern posts and Mosswatch rune slabs. Boulder colliders now match their size.
+- **Tested headless (Chromium/SwiftShader), no page errors:**
+  - combat smoke test (block, parry, riposte, running and jump attacks, flask, attack tokens)
+  - full story run from a fresh save to the ending
+  - old-save migration
+  - boss fight logic (wake, attacks landing, topple, belly Root Strike, phase 2, parry, eruption, release)
+  - collider probes
+  - new, old and first-person save launches
+  - production build
 
 ## Current feedback and next work
 
-1. The atlas globe appears black on GitHub Pages. `first-person-verdant/src/globe.js` loads `/art/world-surface-v2.webp` from the domain root; the Pages game lives under `/god/verdant/`. Use the Vite base URL and verify the published texture.
-2. Some visible objects can be walked through. Audit the rendered world's collider list and the player's collision/step handling, especially rocks, trees, and structures. Test in both views.
-3. Third-person limbs can look joined or distorted, and the rounded authored arms do not match the square first-person hands. Inspect the actual `explorer.glb` and rig/animation in the deployed build; this sparse local checkout currently excludes that large binary asset.
-4. The player requested a town and NPCs made with Blender and image generation. These are **not built yet**. Keep them in the existing 3D world and record asset sources/licences. Do not describe them as shipped until playable and verified.
+1. Play the boss in a real browser and tune by feel: health (1000), poise (70), attack cadence, eruption spacing. Headless tests run at about 1 fps, so they check logic, not feel.
+2. The town and shop are still **not built**. The story keepers are the first NPCs; the town should reuse `createNPC` in `src/avatarGLB.js`.
+3. Third-person limb distortion was reported earlier. The player asked not to change the character design, so it is untouched; revisit only if they ask.
+4. The ChatGPT Site (`first-person-verdant/.openai/hosting.json`) still serves older source. Merge deliberately before redeploying it.
+
+## Earlier state — 2026-09-28 (morning)
+
+- Game commit `ecf0fbb` merged the PC's combat overhaul (charged heavy attacks, Breath/stamina, poise/topples, three shellback attacks). The previous ChatGPT Site deployment was built from its own source commit `4a4f2eb`, before that overhaul.
 
 ## How to hand off work
 
