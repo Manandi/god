@@ -2,6 +2,52 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Rules for AI assistants: read first
+
+These come from the owner. Follow them on every device and with every model.
+
+### Do not touch
+
+- **Character design, in first and third person.** Do not restyle, remodel, re-rig or re-proportion the player, the first-person hands or the NPCs. The owner expects **Roblox-style box characters**. That design is being pushed from the ChatGPT Site's source (see "Next steps"). Until it arrives, do not "fix", replace or restyle any character, including the current rounded Blender explorer.
+- **The root 2D Phaser game and its save data.** Do not change its behaviour or the localStorage keys it uses. Removing unused files is fine only after checking that nothing references them, including map JSON.
+- **3D save data.** Keep the `verdant-reach-3d-v1` and `hollow-roots-verdant-3d-profile-v1` keys. Any change to the save format must migrate older saves; see `createStory` in `first-person-verdant/src/story.js`.
+- **The ChatGPT Site.** `first-person-verdant/.openai/hosting.json` and its separate source must not be overwritten wholesale with this tree. The root `.openai/hosting.json` belongs to the 2D Site.
+- **Secrets.** Never ask the owner to paste tokens or keys in chat. Never commit a Supabase `service_role` key. The publishable key in the Pages workflow is meant to be public.
+- **Branches and history.** Work only on `claude/practical-babbage-tbonr1`. Never force-push.
+- **Scope.** Don't change things the owner didn't ask for. Adding things is fine.
+- **Intentional duplicates.** `AGENTS.md` and `CLAUDE.md` are identical on purpose. Each game keeps its own `world-surface-v2.webp` on purpose.
+- **Unity.** It is not usable here: it needs a licensed, signed-in editor, and the game is Three.js. Make 3D assets with the Blender scripts in `first-person-verdant/tools/blender/`.
+
+### Next steps, in order
+
+1. **Merge the box-style characters.** The owner will push the ChatGPT Site's source to GitHub, as a branch (for example `box-characters`) or a link.
+   - Diff its character code against this branch. Keep its box player, first-person hands and appearance options exactly as they are.
+   - Bring this branch's combat, story, boss and arena onto it.
+   - Remake the four story NPCs (Wren, Brannoch, Ysolde, Pip) in the same box style. They are currently clones of the rounded explorer; see `createNPC` in `src/avatarGLB.js`.
+   - Do not start this before the source arrives.
+2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`. Headless tests only check logic.
+3. **Build the town and shop** in the existing 3D world, reusing the NPC and dialogue systems. Record asset sources and licences.
+4. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
+
+### Map of the 3D game (`first-person-verdant/src/`)
+
+| File | What it owns |
+|---|---|
+| `main.js` | Input, the game loop, camera, HUD, dialogue, encounter spawning, boss wiring |
+| `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
+| `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
+| `creatures.js` | Shellbacks and thornlings (AI, poise, topple) |
+| `boss.js` | Orrun, the Hollow Warden, and arena loading |
+| `story.js` | Quest stages, NPC positions, all dialogue, the journal, save migration |
+| `world.js` | Terrain (with the arena levelled), sites, colliders |
+| `avatarGLB.js`, `avatar.js`, `humanoid.js` | Player model, NPC clones, first-person hands, procedural fallback |
+| `angles.js` | Shared `angleTo` and `yawOf` helpers |
+
+**Testing:**
+- `?arena` skips the menus; add `&third` for third person, `&debug` or F3 for the combat readout, and `&capture` for stepped frames.
+- `window.__verdant` exposes the game state and its test hooks.
+- The owner prefers to test game feel themselves. Don't run long capture or video pipelines; quick logic checks are fine.
+
 ## Repository and publishing
 
 - Repository: `https://github.com/Manandi/god`
