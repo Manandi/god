@@ -1,0 +1,17 @@
+import * as THREE from 'three';
+const COLORS=[0x6e9d74,0xb17a54,0x657fa0,0x9a6f9c,0xb3a05d];
+function remoteExplorer(scene,index){
+  const root=new THREE.Group(),cloth=new THREE.MeshStandardMaterial({color:COLORS[index%COLORS.length],roughness:1}),skin=new THREE.MeshStandardMaterial({color:0xc89365,roughness:1}),dark=new THREE.MeshStandardMaterial({color:0x29312d,roughness:1});
+  const box=(w,h,d,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;root.add(m);};
+  box(.7,.72,.38,cloth,0,1.12,0);box(.42,.45,.38,skin,0,1.72,0);box(.22,.68,.25,cloth,-.47,1.1,0);box(.22,.68,.25,cloth,.47,1.1,0);box(.27,.68,.3,dark,-.2,.42,0);box(.27,.68,.3,dark,.2,.42,0);scene.add(root);return root;
+}
+export function createMultiplayer(scene,player,{name='Wayfarer',onSharedState=()=>{}}={}){
+  const button=document.getElementById('lobbyButton'),status=document.getElementById('lobbyStatus');
+  const playerId=sessionStorage.getItem('verdant-player-id')||crypto.randomUUID();sessionStorage.setItem('verdant-player-id',playerId);
+  let code=new URLSearchParams(location.search).get('lobby')?.toUpperCase()||'',timer=0,busy=false,index=0;const remotes=new Map();
+  const setStatus=text=>{if(status)status.textContent=text;};
+  async function enter(requested){if(busy)return;busy=true;setStatus('CONNECTING…');try{const response=await fetch('/api/lobby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:requested||'',playerId,name})});if(!response.ok)throw new Error(await response.text());const data=await response.json();code=data.code;const url=new URL(location.href);url.searchParams.set('lobby',code);history.replaceState({},'',url);setStatus(`${code} · 1 HUNTER`);onSharedState(data.state||{});}catch(err){setStatus('CO-OP OFFLINE');console.warn(err);}finally{busy=false;}}
+  async function sync(local){if(!code||busy)return;busy=true;try{const response=await fetch(`/api/lobby/${encodeURIComponent(code)}/sync`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({playerId,name,x:player.x,z:player.z,yaw:player.yaw,state:local})});if(!response.ok)throw new Error(await response.text());const data=await response.json();onSharedState(data.state||{});setStatus(`${code} · ${data.players.length} HUNTER${data.players.length===1?'':'S'}`);const seen=new Set();for(const remote of data.players){if(remote.id===playerId)continue;seen.add(remote.id);let rig=remotes.get(remote.id);if(!rig){rig={root:remoteExplorer(scene,index++),x:remote.x,z:remote.z,yaw:remote.yaw};remotes.set(remote.id,rig);}rig.x=remote.x;rig.z=remote.z;rig.yaw=remote.yaw;}for(const [id,rig] of remotes)if(!seen.has(id)){scene.remove(rig.root);remotes.delete(id);}}catch(err){setStatus(`${code} · RECONNECTING`);console.warn(err);}finally{busy=false;}}
+  button?.addEventListener('click',()=>{if(code){navigator.clipboard?.writeText(code);setStatus(`${code} · CODE COPIED`);return;}const requested=prompt('Enter a 6-character lobby code to join, or leave blank to create a new lobby.','');if(requested!==null)enter(requested.trim().toUpperCase());});if(code)enter(code);
+  return {update(dt,local){timer-=dt;if(timer<=0){timer=.75;sync(local);}for(const rig of remotes.values()){rig.root.position.x=THREE.MathUtils.damp(rig.root.position.x,rig.x,8,dt);rig.root.position.z=THREE.MathUtils.damp(rig.root.position.z,rig.z,8,dt);rig.root.rotation.y=THREE.MathUtils.damp(rig.root.rotation.y,rig.yaw,8,dt);}}};
+}

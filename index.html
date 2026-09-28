@@ -1,195 +1,42 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>The Hollow Roots</title>
-    <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #080b0d; }
-      #app { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-      canvas { image-rendering: pixelated; }
-      .title-root { position: relative; width: 900px; height: 500px; color: #e6f4e9; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-      .title-card { position: absolute; inset: 0 auto auto 0; width: 590px; min-height: 452px; padding: 34px; border: 1px solid rgba(158, 209, 163, .38); border-radius: 5px; background: linear-gradient(145deg, rgba(4, 20, 14, .97), rgba(8, 34, 24, .94)); box-shadow: 0 24px 72px rgba(0,0,0,.62), inset 0 0 50px rgba(93,150,96,.06); }
-      .full-card { width: 900px; height: 500px; padding: 24px 30px; }
-      .title-menu { min-height: 390px; padding-top: 40px; }
-      .eyebrow { margin: 0 0 8px; color: #cbd78e; font-size: 12px; letter-spacing: .2em; font-weight: 800; }
-      .title-root h1, .title-root h2, .title-root h3, .title-root p { margin-top: 0; }
-      .title-root h1 { margin-bottom: 14px; color: #f1f6d7; font: 700 45px/.94 Georgia, serif; letter-spacing: .035em; text-shadow: 0 3px 22px rgba(181,218,128,.2); }
-      .title-root h2 { margin: 0; color: #eff6d2; font: 700 30px/1 Georgia, serif; letter-spacing: .04em; }
-      .title-root h3 { margin: 0 0 9px; color: #bcd1bf; font-size: 12px; letter-spacing: .15em; }
-      .title-copy, .panel-copy { max-width: 510px; color: #b9c9bd; font-size: 14px; line-height: 1.55; }
-      .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-      .panel-tools { display: flex; align-items: center; gap: 5px; }
-      .panel-tools button { padding: 7px 9px; font-size: 10px; }
-      .panel-copy { margin: 10px 0 18px; }
-      .title-root button { padding: 11px 14px; color: #dce9df; background: rgba(15,48,35,.9); border: 1px solid rgba(156,205,164,.38); font: 800 12px/1.1 ui-monospace, monospace; letter-spacing: .07em; cursor: pointer; transition: 120ms ease; }
-      .title-root button:hover:not(:disabled), .title-root button:focus-visible { transform: translateY(-1px); border-color: #d7e9a8; background: rgba(35,85,57,.96); outline: none; }
-      .title-root button.primary { color: #102117; border-color: #eff4ca; background: linear-gradient(90deg,#a9d48d,#d8df8f); }
-      .title-root button.effort { color: #e9f4c5; border-color: #a5c979; background: rgba(34,76,45,.96); }
-      .title-root button.quiet, .title-root button.back { color: #91a699; background: transparent; border-color: transparent; }
-      .title-root button.back { padding: 7px 9px; }
-      .title-actions { display: grid; gap: 9px; max-width: 400px; }
-      .leaderboard-table { margin: 20px 0 16px; border: 1px solid rgba(143,184,145,.24); background: rgba(4,18,12,.54); }
-      .leaderboard-head, .leaderboard-self { display: grid; grid-template-columns: 70px 1fr 90px 80px; align-items: center; gap: 12px; padding: 12px 14px; }
-      .leaderboard-head { color: #7f9788; border-bottom: 1px solid rgba(143,184,145,.18); font-size: 10px; letter-spacing: .12em; }
-      .leaderboard-self { color: #eaf4d3; }
-      .leaderboard-self > b:last-child { color: #dbe78f; font-size: 18px; }
-      .leaderboard-self span { display: grid; gap: 3px; }
-      .leaderboard-self small { color: #82968a; font-size: 10px; font-weight: 400; }
-      .leaderboard-stats { margin: 0 0 18px; }
-      .action-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-      .save-note { margin: 15px 0 0; color: #779080; font-size: 10px; letter-spacing: .06em; }
-      .progress-strip { width: 400px; display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 22px 0 18px; align-items: center; }
-      .progress-strip strong { color: #e7eca9; font-size: 15px; }
-      .progress-strip span { color: #91a99a; font-size: 11px; text-align: right; }
-      .progress-strip i { grid-column: 1 / -1; height: 5px; overflow: hidden; background: #10271b; border: 1px solid #355a40; }
-      .progress-strip i b { display: block; height: 100%; background: linear-gradient(90deg,#72af73,#d2dc89); }
-      .title-character { position: absolute; right: 12px; top: 40px; width: 250px; display: flex; flex-direction: column; align-items: center; text-align: center; color: #dbe7c0; text-shadow: 0 2px 6px #000; pointer-events: none; }
-      .title-character canvas { width: 180px; height: 260px; filter: drop-shadow(0 18px 16px rgba(0,0,0,.55)); }
-      .title-character strong { margin-top: -8px; font-size: 14px; letter-spacing: .12em; }
-      .title-character span { margin-top: 7px; color: #9db29f; font-size: 10px; }
-      .profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; }
-      .profile-grid label { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; padding: 9px 12px; color: #d5e2d8; background: rgba(1,13,9,.42); border: 1px solid rgba(137,180,142,.16); font-size: 13px; }
-      .profile-grid label span { display: flex; flex-direction: column; line-height: 1.25; }
-      .profile-grid small { margin-top: 4px; color: #71897a; font-size: 10px; }
-      .profile-grid input, .effort-grid input { width: 66px; padding: 8px 5px; color: #eff6d2; background: #071710; border: 1px solid #476b50; font: 800 13px ui-monospace, monospace; text-align: center; }
-      .stat-rune-row, .live-stats { display: grid; grid-template-columns: repeat(7,1fr); gap: 7px; margin: 14px auto 11px; }
-      .live-stats { width: 600px; }
-      .stat-rune-row span, .live-stats span { display: flex; padding: 6px 3px; flex-direction: column; align-items: center; border: 1px solid rgba(161,205,145,.2); background: rgba(119,170,113,.08); }
-      .stat-rune-row b, .live-stats b { color: #8faa93; font-size: 10px; letter-spacing: .1em; }
-      .stat-rune-row strong, .live-stats strong { color: #eff4ca; font-size: 17px; }
-      .form-actions { display: flex; justify-content: center; }
-      .form-actions button { min-width: 250px; }
-      .checkin-summary { display: flex; gap: 10px; margin: 16px 0 12px; }
-      .checkin-summary span { flex: 1; padding: 10px; color: #8fa798; background: rgba(4,18,12,.54); border: 1px solid rgba(143,184,145,.18); font-size: 11px; text-align: center; }
-      .checkin-summary b { color: #edf1b7; font-size: 17px; }
-      .feedback { position: absolute; top: 72px; right: 30px; color: #e8efa9; font-size: 11px; }
-      .weekly-label { margin: 4px 0 0; color: #a8bb80; font-size: 9px; letter-spacing: .12em; }
-      .weekly-goals { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; margin: 9px 0; }
-      .weekly-goals > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 7px; padding: 7px 8px; color: #9caf9f; background: rgba(3,18,12,.55); border: 1px solid rgba(144,185,143,.2); }
-      .weekly-goals span { display: flex; flex-direction: column; }
-      .weekly-goals strong { color: #d8e4cf; font-size: 10px; }
-      .weekly-goals small { color: #829687; font-size: 8px; }
-      .weekly-goals i { grid-column: 1 / -1; grid-row: 2; height: 4px; overflow: hidden; background: #10251a; }
-      .weekly-goals i b { display: block; height: 100%; background: #a8d181; }
-      .weekly-goals em { grid-column: 2; grid-row: 1; align-self: center; color: #dfe99b; font-size: 9px; font-style: normal; }
-      .weekly-goals .complete { border-color: rgba(223,233,155,.55); box-shadow: inset 0 2px rgba(223,233,155,.45); }
-      .effort-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
-      .effort-grid > button, .effort-grid > label { min-height: 72px; padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; color: #dce9df; background: rgba(9,37,25,.8); border: 1px solid rgba(129,181,137,.28); }
-      .effort-grid > label strong, .effort-grid > button strong { color: #eaf0bd; font-size: 12px; letter-spacing: .07em; }
-      .effort-grid > label small, .effort-grid > button small { margin-top: 5px; color: #849b8c; font: 10px/1.35 ui-monospace, monospace; letter-spacing: 0; text-align: left; }
-      .effort-grid label span { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #8da393; font-size: 10px; }
-      .effort-grid label button { padding: 8px 10px; font-size: 10px; }
-      .recent-log { margin-top: 9px; }
-      .recent-log h3 { margin-bottom: 6px; }
-      .recent-log > span { display: inline-flex; gap: 7px; margin-right: 8px; padding: 6px 8px; color: #8da494; background: rgba(1,13,9,.38); font-size: 9px; }
-      .recent-log > span b { color: #c7d7c9; }
-      .recent-log > span em { color: #dfe99b; font-style: normal; }
-      .recent-log p { color: #71877a; font-size: 11px; }
-      .character-layout { display: grid; grid-template-columns: .9fr 1.1fr; gap: 22px; margin-top: 20px; }
-      .stat-list { display: grid; gap: 4px; }
-      .stat-list > div { display: grid; grid-template-columns: 38px 1fr 34px; align-items: center; padding: 5px 9px; background: rgba(3,18,12,.5); border: 1px solid rgba(139,181,144,.16); }
-      .stat-list > div > b { color: #a8bb80; font-size: 11px; }
-      .stat-list span { display: flex; flex-direction: column; }
-      .stat-list strong { font-size: 12px; }
-      .stat-list small { margin-top: 2px; color: #6f8777; font-size: 9px; }
-      .stat-list em { color: #eef2b9; font: 800 20px ui-monospace,monospace; font-style: normal; text-align: right; }
-      .unlock-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; align-content: start; }
-      .unlock-list h3 { grid-column: 1 / -1; }
-      .unlock-list > div { min-height: 62px; display: flex; justify-content: space-between; align-items: center; padding: 9px; border: 1px solid rgba(137,180,142,.2); background: rgba(5,25,17,.55); }
-      .unlock-list span { display: flex; flex-direction: column; }
-      .unlock-list strong { font-size: 11px; }
-      .unlock-list small { margin-top: 3px; color: #71877a; font-size: 9px; }
-      .unlock-list > div > b { color: #8ba093; font-size: 9px; }
-      .unlock-list .ready { border-color: rgba(209,224,143,.5); }
-      .unlock-list .ready > b { color: #e0e99e; }
-      .unlock-list .locked { opacity: .55; }
-      .character-note { margin-top: 15px; font-size: 11px; }
-      .customize-card { width: 600px; height: 500px; padding: 24px 28px; }
-      .custom-section { margin-top: 20px; }
-      .choice-row { display: flex; gap: 10px; }
-      .title-root .swatch { width: 42px; height: 42px; padding: 0; background: var(--swatch); border: 4px solid #12291d; outline: 1px solid #608268; }
-      .title-root .swatch.selected { outline: 3px solid #e7eaa4; transform: translateY(-2px); }
-      .option-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; }
-      .custom-option { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
-      .custom-option strong { font-size: 12px; }
-      .custom-option small { margin-top: 4px; color: #7f9687; font-size: 9px; letter-spacing: 0; }
-      .custom-option.selected { border-color: #dfe7a1; box-shadow: inset 3px 0 #dfe7a1; }
-      .custom-option.locked { opacity: .46; cursor: not-allowed; }
-      .custom-preview { right: 20px; top: 55px; }
-      .question-card h2 { font-size: 26px; line-height: 1.12; max-width: 720px; }
-      .question-progress { display: block; height: 3px; margin: 14px 0 16px; overflow: hidden; background: #10271b; }
-      .question-progress b { display: block; height: 100%; background: linear-gradient(90deg,#72af73,#d2dc89); transition: width 180ms ease; }
-      .question-answer { display: flex; align-items: center; gap: 26px; margin: 4px 0 18px; flex-wrap: wrap; }
-      .single-input, .duration-input { display: flex; align-items: baseline; gap: 9px; }
-      .question-card input { width: 132px; padding: 12px 10px; color: #f1f6d7; background: #071710; border: 1px solid #5c8668; font: 800 30px ui-monospace, monospace; text-align: center; }
-      .duration-input input { width: 92px; }
-      .single-input b, .duration-input b { color: #8da393; font-size: 12px; letter-spacing: .08em; }
-      .question-feeds { margin: 0; color: #8da393; font-size: 11px; letter-spacing: .1em; }
-      .question-feeds b { color: #cbd78e; }
-      .question-feeds em { color: #eff4ca; font: 800 22px ui-monospace, monospace; font-style: normal; vertical-align: -2px; }
-      .question-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
-      .question-nav button:disabled { opacity: .35; cursor: default; }
-      .summary-list { grid-template-columns: 1fr 1fr; display: grid; gap: 6px; }
-      .intro-stage { position: relative; width: 900px; height: 500px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
-      .intro-stage canvas { width: 220px; height: 220px; filter: drop-shadow(0 16px 20px rgba(0,0,0,.6)); animation: mycel-float 4.5s ease-in-out infinite; }
-      @keyframes mycel-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-      @media (prefers-reduced-motion: reduce) { .intro-stage canvas { animation: none; } }
-      .intro-box { width: 100%; min-height: 176px; padding: 20px 26px 16px; display: flex; flex-direction: column; cursor: pointer; border: 1px solid rgba(158,209,163,.42); border-radius: 5px; background: linear-gradient(145deg, rgba(4,20,14,.97), rgba(8,34,24,.95)); box-shadow: 0 20px 60px rgba(0,0,0,.6), inset 0 0 50px rgba(93,150,96,.07); }
-      .intro-name { margin: 0 0 9px; color: #cbd78e; font-size: 12px; letter-spacing: .24em; font-weight: 800; }
-      .intro-line { flex: 1; margin: 0; color: #e6f4e9; font-size: 17px; line-height: 1.5; max-width: 780px; min-height: 76px; }
-      .intro-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .quiz-card h2 { font-size: 24px; }
-      .quiz-clock { margin: 0; color: #e7eca9; font: 800 22px ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-      .quiz-prompt { margin: 6px 0 16px; color: #eff6d2; font: 600 17px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
-      .quiz-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
-      .title-root .quiz-option { padding: 14px 16px; font-size: 14px; text-align: left; letter-spacing: .02em; }
-      .title-root .quiz-option.selected { color: #102117; border-color: #eff4ca; background: linear-gradient(90deg,#a9d48d,#d8df8f); }
-      .quiz-note { color: #71877a; font-size: 10px; letter-spacing: .04em; }
-      .title-root button.danger { color: #ffe6e0; border-color: #c9705c; background: rgba(104,42,32,.92); }
-      .weekly-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px 16px; margin: 6px 0 4px; }
-      .weekly-form label { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 62px; padding: 10px 14px; color: #d5e2d8; background: rgba(1,13,9,.45); border: 1px solid rgba(137,180,142,.18); font-size: 13px; }
-      .weekly-form label > span { display: flex; flex-direction: column; line-height: 1.25; }
-      .weekly-form small { margin-top: 4px; color: #71897a; font-size: 10px; }
-      .weekly-form input { width: 78px; padding: 9px 5px; color: #eff6d2; background: #071710; border: 1px solid #5c8668; font: 800 17px ui-monospace, monospace; text-align: center; }
-      .weekly-form label > b { color: #8da393; font-size: 10px; letter-spacing: .08em; min-width: 30px; }
-      .delta-row { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-      .delta-row b { padding: 5px 10px; color: #102117; background: linear-gradient(90deg,#a9d48d,#d8df8f); font-size: 13px; letter-spacing: .06em; }
-      .board-notice { margin: 16px 0 14px; padding: 14px 16px; border: 1px solid rgba(214,196,122,.45); background: rgba(40,34,10,.35); }
-      .board-notice strong { color: #e6cf7d; font-size: 12px; letter-spacing: .14em; }
-      .board-notice p { margin: 8px 0 0; color: #c2cdbc; font-size: 13px; line-height: 1.55; max-width: 720px; }
-      .board-join { display: flex; gap: 10px; margin: 8px 0 12px; }
-      .board-join input, .board-add input { padding: 11px 12px; color: #f1f6d7; background: #071710; border: 1px solid #5c8668; font: 800 15px ui-monospace, monospace; letter-spacing: .06em; }
-      .board-join input { width: 300px; }
-      .title-root .board-status { margin: 12px 0 0; color: #a9bca9; font-size: 12px; min-height: 16px; }
-      .board-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 14px 0 12px; }
-      .board-code { display: grid; gap: 4px; }
-      .board-code small { color: #86a08c; font-size: 10px; letter-spacing: .16em; }
-      .board-code b { color: #f0e7b0; font: 800 26px ui-monospace, monospace; letter-spacing: .28em; }
-      .board-add { display: flex; gap: 8px; }
-      .board-add input { width: 150px; text-transform: uppercase; }
-      .board-table { max-height: 262px; overflow-y: auto; border: 1px solid rgba(143,184,145,.24); background: rgba(4,18,12,.54); }
-      .board-row { display: grid; grid-template-columns: 38px 1fr 48px 62px 70px 52px 62px; align-items: center; gap: 8px; padding: 9px 12px; color: #dfe9d6; font-size: 12px; font-variant-numeric: tabular-nums; border-top: 1px solid rgba(143,184,145,.1); }
-      .board-row span:first-child { color: #8da393; }
-      .board-row small { margin-left: 8px; color: #e6cf7d; font-size: 10px; letter-spacing: .1em; }
-      .board-head { position: sticky; top: 0; color: #7f9788; background: #071a12; font-size: 10px; letter-spacing: .12em; border-top: 0; }
-      .board-me { background: rgba(169,212,141,.1); box-shadow: inset 3px 0 #a9d48d; }
-      .title-root .board-visit { padding: 6px 8px; color: #102117; border-color: #d7e9a8; background: #b9d889; font-size: 9px; }
-      .dev-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999; display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px; background: rgba(5,12,17,.97); border-top: 1px solid #47728f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-      .dev-bar-body { flex: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 16px; }
-      .dev-bar-collapsed .dev-bar-body { display: none; }
-      .dev-collapse { flex: none; padding: 6px 9px; color: #9ed3f2; background: rgba(20,44,62,.96); border: 1px solid #47728f; border-radius: 2px; font: 700 10px ui-monospace, monospace; letter-spacing: .12em; cursor: pointer; }
-      .dev-group { display: grid; gap: 3px; }
-      .dev-group > p { margin: 0; color: #6f9cbb; font-size: 8px; letter-spacing: .18em; }
-      .dev-group-row { display: flex; flex-wrap: wrap; gap: 4px; }
-      .dev-group-row button { padding: 5px 8px; color: #dcecf8; background: rgba(24,52,72,.96); border: 1px solid #3f6a88; border-radius: 2px; font: 700 10px/1.1 ui-monospace, monospace; cursor: pointer; }
-      .dev-group-row button:hover { border-color: #a6dcf8; background: rgba(42,86,114,.99); }
-      .dev-group-row input { width: 52px; padding: 4px 3px; color: #e8f4ff; background: #06131c; border: 1px solid #3f6a88; border-radius: 2px; font: 700 10px ui-monospace, monospace; text-align: center; }
-      .dev-note { margin: 0; align-self: center; color: #e4ec96; font-size: 10px; }
-      .title-root button.danger:hover:not(:disabled), .title-root button.danger:focus-visible { border-color: #f0ac97; background: rgba(146,55,40,.96); }
-      @media (max-width: 760px), (max-height: 500px) { .title-root { transform: scale(.78); transform-origin: center; } }
-    </style>
-  </head>
-  <body><div id="app"></div><script type="module" src="/src/main.ts"></script></body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1b18" />
+  <title>The Hollow Roots · Verdant Reach</title>
+</head>
+<body>
+  <canvas id="game" aria-label="Verdant Reach exploration game"></canvas>
+  <div id="vignette"></div>
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="location"><span class="eyebrow">THE HOLLOW ROOTS · <span id="cameraMode">FIRST PERSON</span></span><strong id="region">VERDANT REACH</strong><small id="objective">Follow the lantern trail</small><small id="emoteStatus"></small></div>
+      <div class="compass"><span id="compass">N</span><div class="compass-rule"></div><small id="distance">THE ROOTWELL · 0 m</small></div>
+      <div class="status"><span>VITALITY</span><div id="hearts"></div><small id="echoCount">MEMORIES 0 / 3</small></div>
+    </div>
+    <div id="crosshair"><span></span><span></span></div>
+    <div id="combatCue" aria-live="off"></div>
+    <div id="bossHud" class="boss-hud hidden"><small>ANCIENT GUARDIAN</small><strong>THE OLD SHELL</strong><div><i id="bossHealth"></i></div><em id="bossPhase">ARMOURED SHELL</em></div>
+    <div id="lobbyHud" class="lobby-hud"><button id="devButton" type="button">DEV · F2</button><button id="lobbyButton" type="button">CO-OP LOBBY</button><small id="lobbyStatus">SOLO HUNT</small></div>
+    <div id="interaction" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+    <div class="hud-bottom"><div class="stamina"><span>BREATH</span><div class="meter"><i id="staminaFill"></i></div></div><div class="controls-hint">WASD MOVE <b>·</b> SPACE JUMP / DOUBLE JUMP <b>·</b> HOLD RIGHT CLICK ROTATE <b>·</b> LEFT CLICK / F COMBO <b>·</b> HOLD + RELEASE R ROOTBREAKER <b>·</b> C GUARD / PARRY <b>·</b> SHIFT EVADE <b>·</b> E TALK / USE <b>·</b> F2 DEV MODE</div></div>
+  </div>
+  <aside id="devPanel" class="dev-panel hidden" aria-label="Developer test mode">
+    <header><div><span>VERDANT TOOLKIT</span><h2>DEV MODE</h2></div><button data-dev="close" aria-label="Close developer mode">✕</button></header>
+    <pre id="devTelemetry">PLAYER TELEMETRY</pre>
+    <section><h3>SAFETY</h3><div class="dev-grid"><button data-dev="reset">UNSTUCK / HOME</button><button data-dev="heal">HEAL + BREATH</button><button data-dev="invulnerable">INVULNERABLE</button><button data-dev="noclip">NO COLLISION</button><button data-dev="colliders">SHOW COLLIDERS</button></div></section>
+    <section><h3>TELEPORT</h3><div class="dev-grid"><button data-teleport="home">HOME BASE</button><button data-teleport="city">MOSSGATE</button><button data-teleport="rootwell">ROOTWELL</button><button data-teleport="ruins">MOSSWATCH</button><button data-teleport="shrine">ELDER CROWN</button><button data-teleport="boss">BOSS ARENA</button></div></section>
+    <section><h3>STATS</h3><div class="dev-grid"><button data-preset="default">DEFAULT</button><button data-preset="athlete">ATHLETE</button><button data-preset="max">MAX TEST</button></div></section>
+    <section><h3>QUEST FLOW</h3><div class="dev-grid"><button data-dev="accept-next">ACCEPT NEXT</button><button data-dev="defeat-nearby">DEFEAT NEARBY</button><button data-dev="unlock-memories">UNLOCK MEMORIES</button><button data-dev="reset-world">RESET QUEST WORLD</button></div></section>
+    <button class="dev-resume" data-dev="close">RESUME TEST</button>
+    <small>F2 toggles this panel. Dev changes stay in this browser until reset.</small>
+  </aside>
+  <div id="entry" class="veil"></div>
+  <div id="journal" class="veil hidden"><div class="journal-card"><button id="closeJournal" class="close">✕</button><span class="eyebrow">FIELD JOURNAL</span><h2>QUESTS &amp; MEMORIES</h2><div id="journalEntries"></div><p class="journal-footer">Return each memory to its storyteller in Mossgate. Your progress saves in this browser.</p></div></div>
+  <div id="dialogue" class="dialogue-layer hidden" aria-live="polite"></div>
+  <div id="ending" class="veil hidden"><div class="entry-card"><span class="eyebrow">THE CANOPY GATE</span><h1>THE FOREST<br>REMEMBERS</h1><p>Beyond this threshold lies the rest of the Hollow Roots. This first-person biome is only the first trail.</p><button id="continueExploring">CONTINUE EXPLORING <span>↗</span></button></div></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
 </html>
