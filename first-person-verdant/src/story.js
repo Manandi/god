@@ -15,6 +15,7 @@ import { SITES, GATE } from './world.js';
 // release the oath.
 
 const site = id => SITES.find(s => s.id === id);
+const titleCase = text => text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
 /** Keepers of the trail. Positions sit beside the lantern trail on the approach to each site. */
 export const NPCS = {
@@ -27,6 +28,9 @@ export const NPCS = {
   pip: { name: 'PIP', title: 'APPRENTICE SCOUT', x: 3, z: -140.5, yaw: .6, scale: .9,
     appearance: { skinIndex: 2, face: 'round', hairStyle: 'swept', hairColor: 'copper', shirt: 'moss', pants: 'olive', outfit: 'ranger' } }
 };
+
+/** A keeper's name as written in sentences: 'Brannoch'. */
+export const keeperName = id => titleCase(NPCS[id].name);
 
 /** Each chapter: its site, its keeper, the hollowed that gather there, and the memory it holds. */
 export const CHAPTERS = [
@@ -54,7 +58,7 @@ export const STAGES = [
   { id: 'trial', objective: 'Drive back the shellback on the slope below camp', target: { x: 1, z: 27, title: 'THE CAMP SLOPE' } },
   { id: 'trial_report', objective: 'Return to Wren', target: 'wren' },
   ...CHAPTERS.flatMap(c => [
-    { id: c.id, chapter: c.id, step: 'find', objective: `Find ${NPCS[c.npc].name[0] + NPCS[c.npc].name.slice(1).toLowerCase()} at ${c.site.title.replace(/\b(\w)(\w*)/g, (_, a, b) => a + b.toLowerCase()).replace(/^The /, 'the ')}`, target: c.npc },
+    { id: c.id, chapter: c.id, step: 'find', objective: `Find ${keeperName(c.npc)} at ${titleCase(c.site.title).replace(/^The /, 'the ')}`, target: c.npc },
     { id: `${c.id}_fight`, chapter: c.id, step: 'fight', objective: c.fight, target: c.id },
     { id: `${c.id}_memory`, chapter: c.id, step: 'memory', objective: c.memory, target: c.id },
     { id: `${c.id}_report`, chapter: c.id, step: 'report', objective: c.report, target: c.npc }
@@ -249,7 +253,7 @@ export function createStory(saved, memories) {
     /** Why a memory crystal will not answer yet, or null when it will. */
     memoryLocked(id) {
       if (stage === `${id}_memory`) return null;
-      const c = chapter(id), keeper = NPCS[c.npc].name[0] + NPCS[c.npc].name.slice(1).toLowerCase();
+      const c = chapter(id), keeper = keeperName(c.npc);
       if (index(stage) < index(id)) return ['THE MEMORY IS SILENT', 'It will not answer until the story reaches it. Follow the lantern trail.'];
       if (!cleared.has(id)) return ['THE HOLLOWED GUARD THIS MEMORY', 'Drive them off before it will answer.'];
       return ['THE MEMORY WAITS', `Speak with ${keeper} first.`];

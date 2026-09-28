@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { groundY, ARENA, ARENA_Y } from './world.js';
+import { angleTo } from './angles.js';
 
 // Orrun, the Hollow Warden (tools/blender/build_warden.py) and its arena
 // (tools/blender/build_arena.py). The Warden speaks the same interface as the
@@ -28,7 +29,6 @@ const ATTACKS = {
 const PART = { head: 1.5, neck: 1.1, shell: .45, leg: 1, tail: .8, belly: 2.2 };
 const POISE = 70, FLINCH = 110, TOPPLE_DOWN = 4.6, REEL = 2.3;
 const lerp = THREE.MathUtils.lerp, damp = THREE.MathUtils.damp;
-const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
 export class Warden {
   constructor(scene, gltf) {

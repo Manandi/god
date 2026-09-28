@@ -415,13 +415,6 @@ function consecutiveDays(active: Set<string>): number {
   return streak;
 }
 
-export function workoutsThisWeek(): number {
-  const start = startOfWeek(new Date());
-  return new Set(PlayerProgress.activities
-    .filter(entry => entry.kind === 'workout' && new Date(`${entry.date}T12:00:00`) >= start)
-    .map(entry => entry.date)).size;
-}
-
 export interface WeeklyGoal {
   id: string;
   label: string;

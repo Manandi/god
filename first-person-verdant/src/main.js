@@ -3,9 +3,10 @@ import { buildWorld, groundY, SITES, GATE } from './world.js';
 import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer,createNPC } from './avatarGLB.js';
-import { createStory,NPCS,CHAPTERS } from './story.js';
+import { createStory,NPCS,CHAPTERS,keeperName } from './story.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
+import { angleTo,yawOf } from './angles.js';
 import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile } from './profile.js';
@@ -66,13 +67,7 @@ lockMarker.renderOrder=12;lockMarker.scale.set(1,1.6,1);scene.add(lockMarker);lo
 const questMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),new THREE.MeshBasicMaterial({color:0xf0c86a}));
 questMarker.scale.set(1,1.7,1);scene.add(questMarker);questMarker.visible=false;
 
-function playTone(freq=140,duration=.1,volume=.04,type='sine'){
-  if(!audio)return;
-  const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);
-  o.frequency.exponentialRampToValueAtTime(Math.max(40,freq*.5),audio.currentTime+duration);
-  g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);
-  o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+duration+.01);
-}
+const playTone=(freq=140,duration=.1,volume=.04,type='sine')=>sound.tone(freq,duration,volume,type);
 function initAudio(){
   if(audio){audio.resume();return;}
   try{audio=new AudioContext();sound.attach(audio);const hum=audio.createOscillator(),gain=audio.createGain();hum.type='sine';hum.frequency.value=73;gain.gain.value=.014;hum.connect(gain).connect(audio.destination);hum.start();
@@ -156,8 +151,6 @@ window.addEventListener('mouseup',e=>{if(e.button===2)heavyPressed(false);});
 window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(pixelRatio);});
 
 // ---------------------------------------------------------------- targeting
-const yawOf=(x,z)=>Math.atan2(-x,-z);
-const angleTo=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 function lockCandidates(){
   return creatures.filter(c=>c.alive&&Math.hypot(c.x-player.x,c.z-player.z)<18);
 }
@@ -313,9 +306,9 @@ function updateEncounters(){
   for(const id of spawned){
     if(creatures.some(c=>c.chapter===id&&c.alive))continue;
     spawned.delete(id);story.clear(id);persist();
-    const c=CHAPTERS.find(c=>c.id===id),keeper=NPCS[c.npc].name;
+    const c=CHAPTERS.find(c=>c.id===id);
     playTone(560,.6,.06,'triangle');playTone(840,.5,.03,'sine');
-    toast(`${c.site.title} IS CLEAR`,story.info.step==='memory'?story.info.objective:`Speak with ${keeper[0]+keeper.slice(1).toLowerCase()}.`);
+    toast(`${c.site.title} IS CLEAR`,story.info.step==='memory'?story.info.objective:`Speak with ${keeperName(c.npc)}.`);
   }
 }
 function resetEncounters(){
@@ -331,8 +324,9 @@ function hurtPlayer(from,kind='light',damage=1){
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
   hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);combo=0;
-  if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+  checkDefeated();
 }
+function checkDefeated(){if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}}
 function respawn(){
   // Once the story reaches the gate, you wake at Pip's lookout below the Hollow instead of the camp.
   const checkpoint=story.reached('gate')&&!story.reached('end');
@@ -430,7 +424,7 @@ function incomingStrike(c,ev){
       spend(cost);combat.onBlocked();sound.block(ev.kind);hitstop=Math.max(hitstop,.06);kick(c,.06);
       const chip=Math.round(ev.damage*GUARD.chip[ev.kind]);if(chip)player.health=Math.max(0,player.health-chip);
       cue(chip?'GUARD · CHIPPED':'BLOCKED',.5);debug.note(`${c.type} ${ev.label} → BLOCKED (-${cost} Breath${chip?`, -${chip} vitality`:''})`,elapsed);
-      if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+      checkDefeated();
       return;
     }
     player.stamina=0;cue('GUARD BROKEN',.7);debug.note(`${c.type} ${ev.label} → GUARD BROKEN (out of Breath)`,elapsed);hurtPlayer(c,'heavy',ev.damage);return;
@@ -439,7 +433,7 @@ function incomingStrike(c,ev){
   if(combat.armored&&ev.kind==='light'){
     player.health=Math.max(0,player.health-ev.damage);sound.bite();hitstop=Math.max(hitstop,.05);
     debug.note(`${c.type} ${ev.label} → absorbed by hyper-armour (-${ev.damage})`,elapsed);
-    if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+    checkDefeated();
     return;
   }
   cue(ev.kind==='heavy'?'KNOCKED DOWN':'STRUCK',.5);cameraKick=Math.max(cameraKick,ev.kind==='heavy'?.1:.08);

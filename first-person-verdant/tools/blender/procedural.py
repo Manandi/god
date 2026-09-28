@@ -95,39 +95,6 @@ class N:
     def out(self, sock, target):
         self.nt.links.new(sock, target)
 
-def shell_nodes(nt, bsdf):
-    n = N(nt)
-    g, ring, crack, plast, moss = (n.attr(a) for a in ('groove', 'ring', 'crack', 'plastron', 'moss'))
-    grain = n.noise(9, 6); fine = n.noise(38, 3)
-    stripes = n.math('SINE', n.math('MULTIPLY', ring, 150, clamp=False), clamp=False)
-    base = n.mix(hexc('#3c4526'), hexc('#5e4c2d'), n.ramp(grain, 0, 1, .35, .7))
-    base = n.mix(base, hexc('#6e5f3b'), n.math('MULTIPLY', n.ramp(stripes, 0, 1, .4, 1), .14))
-    base = n.mix(base, hexc('#b19a63'), plast)
-    mossy = n.math('MULTIPLY', moss, n.ramp(n.noise(5, 5), 0, 1, .42, .62))
-    base = n.mix(base, hexc('#4a6d2a'), mossy)
-    base = n.mix(base, hexc('#1b1a12'), n.math('POWER', g, 1.4))
-    base = n.mix(base, hexc('#2a6b5c'), crack)
-    n.out(base, bsdf.inputs['Base Color'])
-    n.out(n.mix((0, 0, 0), hexc('#63f2c4'), n.math('POWER', crack, 1.5)), bsdf.inputs['Emission Color'])
-    bsdf.inputs['Emission Strength'].default_value = 1.0
-    height = n.math('ADD', n.math('MULTIPLY', g, -1.0), n.math('ADD', n.math('MULTIPLY', fine, .35), n.math('MULTIPLY', n.ramp(stripes, 0, 1, -1, 1), .12)), clamp=False)
-    n.bump(height, .55, bsdf, .06)
-
-def skin_nodes(nt, bsdf, beak=False):
-    n = N(nt)
-    scales = n.voronoi(7.5); grain = n.noise(6, 5)
-    bark, under = (n.attr('bark'), n.attr('under')) if not beak else (None, None)
-    base = n.mix(hexc('#4d5a44'), hexc('#6f7858'), n.ramp(grain, 0, 1, .35, .7))
-    if under is not None: base = n.mix(base, hexc('#9a8b63'), under)
-    stretched = n.noise(3, 6, n.scale(n.coord(), (5, 5, .6)))
-    if bark is not None: base = n.mix(base, n.mix(hexc('#3a2d1f'), hexc('#5a4630'), stretched), bark)
-    if beak:
-        tip = n.attr('beak'); base = n.mix(base, n.mix(hexc('#2a241b'), hexc('#6d5d42'), n.ramp(grain, 0, 1, .3, .8)), tip)
-    base = n.mix(base, hexc('#2c3024'), n.ramp(scales, .55, 0, 0, .06))
-    n.out(base, bsdf.inputs['Base Color'])
-    height = n.math('ADD', n.ramp(scales, 0, 1, 0, .12), n.math('MULTIPLY', stretched if bark is not None else grain, .4), clamp=False)
-    n.bump(height, .6, bsdf, .05)
-
 def root_nodes(nt, bsdf):
     n = N(nt)
     stretched = n.noise(4, 7, n.scale(n.coord(), (7, 7, 1.2)))

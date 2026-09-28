@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { MOVES, FIRST_LIGHT, HEAVY, EVADE, HURT, COUNTER, GUARD, FLASK, phaseOf, travelBetween } from './moves.js';
 import { strikeSegment, sweep, obstacleBetween } from './hits.js';
+import { angleTo, yawOf } from '../angles.js';
 
 const BUFFER = .28;           // how long a press waits for a window to open
-const angleTo = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
-const yawOf = (x, z) => Math.atan2(-x, -z);        // explorer faces -Z at yaw 0
 
 /**
  * The explorer's combat state machine.

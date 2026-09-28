@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { groundY } from './world.js';
 import { canOccupy } from './collision.js';
+import { angleTo } from './angles.js';
 
 const shellMaterial = new THREE.MeshStandardMaterial({ color: 0x556f3b, roughness: .92, flatShading: true });
 const scuteMaterial = new THREE.MeshStandardMaterial({ color: 0x9aaa5c, roughness: .9, flatShading: true });
@@ -13,7 +14,6 @@ function part(parent, geometry, material, x, y, z, sx = 1, sy = 1, sz = 1) {
   const m = new THREE.Mesh(geometry, material); m.position.set(x, y, z); m.scale.set(sx, sy, sz);
   m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
-const angleTo = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 const damp = THREE.MathUtils.damp;
 
 // Behaviour tuning per kind. Times in seconds, distances in metres.

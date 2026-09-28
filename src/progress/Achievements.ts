@@ -24,8 +24,6 @@ export const ACHIEVEMENTS = {
   }
 } as const satisfies Record<string, Achievement>;
 
-export const ACHIEVEMENT_LIST: Achievement[] = Object.values(ACHIEVEMENTS);
-
 export function hasAchievement(id: string): boolean {
   return id in PlayerProgress.achievements;
 }

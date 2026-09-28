@@ -36,17 +36,18 @@ function loadAssets() {
   return pending;
 }
 
-export async function loadExplorer(scene) {
-  const { gltf } = await loadAssets();
-  const root = new THREE.Group(), model = gltf.scene;
-  model.rotation.y = Math.PI;                 // the export faces +Z; gameplay yaw 0 faces -Z
-  model.scale.setScalar(SCALE);
-  root.add(model); scene.add(root);
-
-  const meshes = [], materials = { skin: [], shirt: [], pants: [], hair: [] }, morphMeshes = [];
+/**
+ * The parts of an explorer model the game touches: tintable materials, morph
+ * meshes, named objects and bones. `cloneMaterials` gives a copy its own
+ * materials so an NPC can be dressed without recolouring the player.
+ */
+function collectParts(model, cloneMaterials = false) {
+  const materials = { skin: [], shirt: [], pants: [], hair: [] }, morphMeshes = [], objects = {}, bones = {};
   model.traverse(o => {
+    objects[o.name] = o;
+    if (o.isBone) bones[o.name] = o;
     if (!o.isMesh) return;
-    meshes.push(o);
+    if (cloneMaterials) o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
     o.castShadow = true; o.receiveShadow = true;
     o.frustumCulled = false;                  // skinned bounds come from the bind pose
     for (const m of [].concat(o.material)) {
@@ -58,8 +59,33 @@ export async function loadExplorer(scene) {
     }
     if (o.morphTargetDictionary) morphMeshes.push(o);
   });
-  const byName = {};
-  model.traverse(o => { if (o.isBone) byName[o.name] = o; });
+  const morph = (name, value) => {
+    for (const m of morphMeshes) { const i = m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = value; }
+  };
+  return { materials, objects, bones, morph };
+}
+
+/** Colours, hair, outfit and face from a profile-style appearance. */
+function dress(model, { materials, objects, morph }, a) {
+  const tone = new THREE.Color(SKIN_TONES[a.skinIndex] || SKIN_TONES[2]).multiplyScalar(1.22);
+  materials.skin.forEach(m => m.color.copy(tone));
+  materials.shirt.forEach(m => m.color.set(SHIRTS[a.shirt] || SHIRTS.moss).multiplyScalar(1.12));
+  materials.pants.forEach(m => m.color.set(TROUSERS[a.pants] || TROUSERS.charcoal).multiplyScalar(1.15));
+  materials.hair.forEach(m => m.color.set(HAIR_COLORS[a.hairColor] || HAIR_COLORS.raven).multiplyScalar(1.3));
+  for (const [style, name] of Object.entries(HAIR_MESH)) if (objects[name]) objects[name].visible = style === (HAIR_MESH[a.hairStyle] ? a.hairStyle : 'short');
+  const outfit = a.outfit === 'warden' ? 'Warden_' : 'Ranger_';
+  model.traverse(o => { if (/^(Ranger|Warden)_/.test(o.name)) o.visible = o.name.startsWith(outfit); });
+  morph('Face_Sharp', a.face === 'sharp' ? 1 : 0); morph('Face_Round', a.face === 'round' ? 1 : 0);
+}
+
+export async function loadExplorer(scene) {
+  const { gltf } = await loadAssets();
+  const root = new THREE.Group(), model = gltf.scene;
+  model.rotation.y = Math.PI;                 // the export faces +Z; gameplay yaw 0 faces -Z
+  model.scale.setScalar(SCALE);
+  root.add(model); scene.add(root);
+
+  const parts = collectParts(model), { bones: byName, morph } = parts;
   const bones = new Proxy(byName, { get: (t, k) => t[BONE_ALIASES[k] || k] });
 
   // Clips are renamed to the gameplay names; unknown gameplay names fall back to idle.
@@ -70,15 +96,7 @@ export async function loadExplorer(scene) {
   }
   const animator = new Animator(model, clips);
 
-  function morph(name, value) {
-    for (const m of morphMeshes) {
-      const i = m.morphTargetDictionary[name];
-      if (i !== undefined) m.morphTargetInfluences[i] = value;
-    }
-  }
-  const objects = {};
-  model.traverse(o => { objects[o.name] = o; });
-  let face = 'soft', mood = 'calm', emote = 'idle', blinkTimer = 2, blink = 0, talking = false, time = 0;
+  let mood = 'calm', emote = 'idle', blinkTimer = 2, blink = 0, talking = false, time = 0;
   const expression = { Smile: 0, Exert: 0, Hurt: 0, Talk: 0 };
 
   model.updateMatrixWorld(true);
@@ -86,17 +104,7 @@ export async function loadExplorer(scene) {
 
   return {
     root, bones, animator, isAuthored: true, headRest,
-    setAppearance(a) {
-      const tone = new THREE.Color(SKIN_TONES[a.skinIndex] || SKIN_TONES[2]).multiplyScalar(1.22);
-      materials.skin.forEach(m => m.color.copy(tone));
-      materials.shirt.forEach(m => m.color.set(SHIRTS[a.shirt] || SHIRTS.moss).multiplyScalar(1.12));
-      materials.pants.forEach(m => m.color.set(TROUSERS[a.pants] || TROUSERS.charcoal).multiplyScalar(1.15));
-      materials.hair.forEach(m => m.color.set(HAIR_COLORS[a.hairColor] || HAIR_COLORS.raven).multiplyScalar(1.3));
-      for (const [style, name] of Object.entries(HAIR_MESH)) if (objects[name]) objects[name].visible = style === (HAIR_MESH[a.hairStyle] ? a.hairStyle : 'short');
-      const outfit = a.outfit === 'warden' ? 'Warden_' : 'Ranger_';
-      model.traverse(o => { if (/^(Ranger|Warden)_/.test(o.name)) o.visible = o.name.startsWith(outfit); });
-      face = a.face; morph('Face_Sharp', face === 'sharp' ? 1 : 0); morph('Face_Round', face === 'round' ? 1 : 0);
-    },
+    setAppearance(a) { dress(model, parts, a); },
     emote(name) { emote = name; }, get emoteName() { return emote; },
     /** mood: calm | focus | strain | hurt | cheer */
     setMood(next) { mood = next; },
@@ -143,30 +151,8 @@ export async function createNPC(scene, { x, z, yaw = 0, scale = 1, appearance },
   const model = cloneSkinned(template), root = new THREE.Group();
   model.rotation.y = Math.PI; model.scale.setScalar(SCALE * scale);
   root.add(model); scene.add(root);
-  const mats = { skin: [], shirt: [], pants: [], hair: [] }, morphMeshes = [], objects = {};
-  model.traverse(o => {
-    objects[o.name] = o;
-    if (!o.isMesh) return;
-    o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
-    o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
-    for (const m of [].concat(o.material)) {
-      if (m.name.startsWith('M_Skin')) mats.skin.push(m);
-      else if (m.name.startsWith('M_Shirt')) mats.shirt.push(m);
-      else if (m.name.startsWith('M_Pants')) mats.pants.push(m);
-      else if (m.name.startsWith('M_Hair')) { mats.hair.push(m); m.side = THREE.DoubleSide; }
-    }
-    if (o.morphTargetDictionary) morphMeshes.push(o);
-  });
-  const a = appearance;
-  mats.skin.forEach(m => m.color.set(SKIN_TONES[a.skinIndex] || SKIN_TONES[2]).multiplyScalar(1.22));
-  mats.shirt.forEach(m => m.color.set(SHIRTS[a.shirt] || SHIRTS.moss).multiplyScalar(1.12));
-  mats.pants.forEach(m => m.color.set(TROUSERS[a.pants] || TROUSERS.charcoal).multiplyScalar(1.15));
-  mats.hair.forEach(m => m.color.set(HAIR_COLORS[a.hairColor] || HAIR_COLORS.raven).multiplyScalar(1.3));
-  for (const [style, name] of Object.entries(HAIR_MESH)) if (objects[name]) objects[name].visible = style === a.hairStyle;
-  const outfit = a.outfit === 'warden' ? 'Warden_' : 'Ranger_';
-  model.traverse(o => { if (/^(Ranger|Warden)_/.test(o.name)) o.visible = o.name.startsWith(outfit); });
-  const morph = (name, value) => { for (const m of morphMeshes) { const i = m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = value; } };
-  morph('Face_Sharp', a.face === 'sharp' ? 1 : 0); morph('Face_Round', a.face === 'round' ? 1 : 0);
+  const parts = collectParts(model, true), { morph } = parts;
+  dress(model, parts, appearance);
 
   const mixer = new THREE.AnimationMixer(model), actions = {};
   for (const [key, file] of [['idle', 'Idle'], ['talk', 'Talk'], ['wave', 'Wave']]) {

@@ -5,7 +5,7 @@
 shows the bite, mid-strike.
 
 The arena it fights in, the Warden's Hollow in front of the Canopy Gate, is
-`../../arena/warden-hollow.glb`, built the same way.
+`../../arena/warden-hollow.glb`, built the same way (preview: `../../arena/warden-hollow-preview.png`).
 
 ## Build
 
