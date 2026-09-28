@@ -6,28 +6,51 @@ This is the shared status file for work on the game from different devices or AI
 
 These come from the owner. Follow them on every device and with every model.
 
+### Who owns what (the owner's decision, 2026-09-28)
+
+The 3D game combines two sources. Keep each part with its owner, and don't replace one with the other.
+
+| Part | Source | Where |
+|---|---|---|
+| **Character design**: the Roblox-style block explorer, first-person block hands, character creator (name and look) | ChatGPT Sites version (`box-characters` branch) | `src/avatar.js`, `src/humanoid.js`, `src/shell.js`, `src/profile.js` |
+| **NPC design**: block NPCs with animated faces, turning to face you, markers | ChatGPT Sites version | `src/npcs.js` (the builder); colours and positions in `NPCS` in `src/story.js` |
+| **Town design**: Mossgate, the Rootward Homestead (start), the Rootwell ring, lantern-light pooling | ChatGPT Sites version | `buildCity` and `buildHome` in `src/world.js` |
+| **Combat**: moves, guard and parry, evade, flasks, sprint and jump attacks, creature AI | Claude | `src/combat/*`, `src/creatures.js` |
+| **Story and plot**: stages, all dialogue, journal, quest-point mob spawns, save migration | Claude | `src/story.js`, and the encounter and dialogue code in `src/main.js` |
+| **Boss and arena**: Orrun, the Hollow Warden, and the Warden's Hollow | Claude | `src/boss.js`, `tools/blender/build_warden.py`, `build_arena.py` |
+
+How the story uses the ChatGPT NPCs:
+- In Mossgate, **Sela** (Wayfinder) starts the story, **Orin** (Warden-Captain) reviews the trial and sends you to the Rootwell, and **Mycel** and **Tavi** have story lines for every stage.
+- The site keepers **Brannoch, Ysolde and Pip** are block NPCs in the same style.
+
+**Not taken from the Sites version.** They either belong to its own combat and quest, or can't run on GitHub Pages:
+- its classes and weapons, and the Rootbreaker heavy
+- its double jump
+- its Mossgate quest and the Old Shell boss
+- its dialogue choices
+- the co-op lobby (it needs the Sites D1 worker)
+- the F2 dev panel and F4 FPS readout
+- the KayKit legacy models
+
+They remain on the `box-characters` branch. **Do not merge that branch wholesale:** its last commit moves the Sites project to the repo root and deletes the 2D game.
+
 ### Do not touch
 
-- **Character design, in first and third person.** Do not restyle, remodel, re-rig or re-proportion the player, the first-person hands or the NPCs. The owner expects **Roblox-style box characters**. That design is being pushed from the ChatGPT Site's source (see "Next steps"). Until it arrives, do not "fix", replace or restyle any character, including the current rounded Blender explorer.
+- **Character, NPC and town design.** Do not restyle, remodel, re-rig or re-proportion the block explorer, the first-person hands, the block NPCs, Mossgate or the Homestead. The old rounded Blender explorer is kept only behind `?legacyCharacters`; never make it the default again.
 - **The root 2D Phaser game and its save data.** Do not change its behaviour or the localStorage keys it uses. Removing unused files is fine only after checking that nothing references them, including map JSON.
-- **3D save data.** Keep the `verdant-reach-3d-v1` and `hollow-roots-verdant-3d-profile-v1` keys. Any change to the save format must migrate older saves; see `createStory` in `first-person-verdant/src/story.js`.
+- **3D save data.** Keep the `verdant-reach-3d-v1` and `hollow-roots-verdant-3d-profile-v1` keys. Any change to the save format must migrate older saves; see `createStory` in `first-person-verdant/src/story.js`. It already maps the old `meet_wren` stage to `meet_sela`.
 - **The ChatGPT Site.** `first-person-verdant/.openai/hosting.json` and its separate source must not be overwritten wholesale with this tree. The root `.openai/hosting.json` belongs to the 2D Site.
 - **Secrets.** Never ask the owner to paste tokens or keys in chat. Never commit a Supabase `service_role` key. The publishable key in the Pages workflow is meant to be public.
-- **Branches and history.** Work only on `claude/practical-babbage-tbonr1`. Never force-push.
+- **Branches and history.** Work on `claude/practical-babbage-tbonr1`. Never force-push, and never merge `box-characters` wholesale.
 - **Scope.** Don't change things the owner didn't ask for. Adding things is fine.
 - **Intentional duplicates.** `AGENTS.md` and `CLAUDE.md` are identical on purpose. Each game keeps its own `world-surface-v2.webp` on purpose.
 - **Unity.** It is not usable here: it needs a licensed, signed-in editor, and the game is Three.js. Make 3D assets with the Blender scripts in `first-person-verdant/tools/blender/`.
 
 ### Next steps, in order
 
-1. **Merge the box-style characters.** The owner will push the ChatGPT Site's source to GitHub, as a branch (for example `box-characters`) or a link.
-   - Diff its character code against this branch. Keep its box player, first-person hands and appearance options exactly as they are.
-   - Bring this branch's combat, story, boss and arena onto it.
-   - Remake the four story NPCs (Wren, Brannoch, Ysolde, Pip) in the same box style. They are currently clones of the rounded explorer; see `createNPC` in `src/avatarGLB.js`.
-   - Do not start this before the source arrives.
-2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`. Headless tests only check logic.
-3. **Build the town and shop** in the existing 3D world, reusing the NPC and dialogue systems. Record asset sources and licences.
-4. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
+1. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`. Headless tests only check logic.
+2. **Town features.** A shop and more Mossgate life. Build them in the ChatGPT town, with block NPCs from `src/npcs.js`, and tie any new dialogue to the story stages in `src/story.js`.
+3. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
 
 ### Map of the 3D game (`first-person-verdant/src/`)
 
@@ -39,8 +62,10 @@ These come from the owner. Follow them on every device and with every model.
 | `creatures.js` | Shellbacks and thornlings (AI, poise, topple) |
 | `boss.js` | Orrun, the Hollow Warden, and arena loading |
 | `story.js` | Quest stages, NPC positions, all dialogue, the journal, save migration |
-| `world.js` | Terrain (with the arena levelled), sites, colliders |
-| `avatarGLB.js`, `avatar.js`, `humanoid.js` | Player model, NPC clones, first-person hands, procedural fallback |
+| `world.js` | Terrain (town, homestead and arena levelled), Mossgate and the Homestead, sites, colliders |
+| `avatar.js`, `humanoid.js` | The block explorer and first-person block hands (ChatGPT design) |
+| `npcs.js` | Block NPC builder and animation (ChatGPT design) |
+| `avatarGLB.js` | The old Blender explorer, used only with `?legacyCharacters` |
 | `angles.js` | Shared `angleTo` and `yawOf` helpers |
 
 **Testing:**

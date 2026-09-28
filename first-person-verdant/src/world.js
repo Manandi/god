@@ -6,7 +6,11 @@ export const SITES = [
   { id: 'shrine', title: 'THE CANOPY SHRINE', x: -12, z: -151, story: 'The forest kept one name hidden in the crown of its tallest tree.' }
 ];
 export const GATE = { x: 23, z: -186 };
-// The Warden's Hollow: the boss arena before the Canopy Gate (tools/blender/build_arena.py).
+// Mossgate (the town) and the Rootward Homestead (the starting base) are the
+// ChatGPT Sites design; the Warden's Hollow is the boss arena before the
+// Canopy Gate (tools/blender/build_arena.py).
+export const CITY = { name:'MOSSGATE', x:0, z:53, radius:22 };
+export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
@@ -25,11 +29,14 @@ function terrainY(x,z) {
 }
 export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
 export function groundY(x,z) {
-  // The arena floor is level; the land eases into it.
-  const d=Math.hypot(x-ARENA.x,z-ARENA.z),h=terrainY(x,z);
-  if(d>=34)return h;
-  const k=d<=25?1:(1-(d-25)/9)**2*(3-2*(1-(d-25)/9));
-  return h+(ARENA_Y-h)*k;
+  // The town square, the homestead and the arena are level gameplay spaces;
+  // the land eases into each of them.
+  let height=terrainY(x,z);
+  for(const [cx,cz,r,feather] of [[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9]]){
+    const d=Math.hypot(x-cx,z-cz),blend=1-THREE.MathUtils.smoothstep(d,r,r+feather);
+    if(blend>0)height=THREE.MathUtils.lerp(height,terrainY(cx,cz),blend);
+  }
+  return height;
 }
 function rng(seed=87122){let s=seed>>>0;return()=>{s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
 const color=(value)=>new THREE.Color(value);
@@ -119,6 +126,59 @@ function path(scene,points,width,material){
   const m=mesh(g,material,0,0,0,scene,false);m.receiveShadow=true;
   return curve;
 }
+function buildCity(scene,colliders,animated,stone,moss,cameraObstacles){
+  const timber=new THREE.MeshStandardMaterial({color:0x695b45,roughness:1});
+  const plaster=new THREE.MeshStandardMaterial({color:0xb3ad91,roughness:.98});
+  const roof=new THREE.MeshStandardMaterial({color:0x3f5d4b,roughness:1,flatShading:true});
+  const bronze=new THREE.MeshStandardMaterial({color:0xb89554,emissive:0x6d4a21,emissiveIntensity:.65,roughness:.68});
+  const localBox=(parent,w,h,d,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
+  const proxyMaterial=new THREE.MeshBasicMaterial({visible:false});
+  const addCollider=(x,z,r,h)=>{
+    colliders.push({x,z,r,top:groundY(x,z)+h});
+    const proxy=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,10),proxyMaterial);
+    proxy.position.set(x,groundY(x,z)+h/2,z);scene.add(proxy);cameraObstacles.push(proxy);
+  };
+  const y=groundY(CITY.x,CITY.z);
+  mesh(new THREE.CylinderGeometry(9.8,10.5,.42,24),stone,CITY.x,y-.19,CITY.z,scene);
+  const squareProxy=new THREE.Mesh(new THREE.CylinderGeometry(9.8,10.5,.42,24),proxyMaterial);squareProxy.position.set(CITY.x,y-.19,CITY.z);scene.add(squareProxy);cameraObstacles.push(squareProxy);
+  const compass=mesh(new THREE.RingGeometry(2.3,2.55,8),new THREE.MeshStandardMaterial({color:0xa7b875,roughness:.8,side:THREE.DoubleSide}),CITY.x,y+.29,CITY.z,scene,false);compass.rotation.x=-Math.PI/2;compass.rotation.z=Math.PI/8;
+  for(const [x,z,rot] of [[-11,50,.16],[11,50,-.16],[-10,61,.34],[10,62,-.28],[0,67,.02]]){
+    const home=new THREE.Group();home.position.set(x,groundY(x,z),z);home.rotation.y=rot;scene.add(home);
+    localBox(home,6.2,.7,5.2,stone,0,.35,0);localBox(home,5.6,3.4,4.6,plaster,0,2.35,0);
+    for(const sx of [-1,1])for(const sz of [-1,1])localBox(home,.28,3.55,.28,timber,sx*2.55,2.35,sz*2.05);
+    const cap=new THREE.Mesh(new THREE.ConeGeometry(4.5,2.5,4),roof);cap.position.y=5.22;cap.rotation.y=Math.PI/4;cap.castShadow=true;home.add(cap);
+    localBox(home,1.25,2.15,.18,timber,0,1.42,-2.4);const lamp=localBox(home,.18,.32,.18,bronze,1.55,2.15,-2.52);lamp.rotation.z=Math.PI/4;
+    addCollider(x,z,3.25,5.7);
+  }
+  for(let i=0;i<34;i++){
+    const a=i/34*Math.PI*2,x=CITY.x+Math.cos(a)*19,z=CITY.z+Math.sin(a)*15;if(z<40&&Math.abs(x)<4.2)continue;
+    const h=2.7+(i%3)*.22;const post=cylinder(scene,x,z,.17,.3,h,timber);post.rotation.z=Math.sin(a)*.04;addCollider(x,z,.34,h);
+  }
+  for(const side of [-1,1]){const x=side*4.6,z=39.4;box(scene,x,z,1.3,5.4,1.3,stone);addCollider(x,z,.85,5.4);const banner=mesh(new THREE.PlaneGeometry(1.3,2.4),new THREE.MeshStandardMaterial({color:side<0?0x66815a:0x7e694c,side:THREE.DoubleSide,roughness:1}),x,groundY(x,z)+4,z-.72,scene,false);banner.rotation.y=Math.PI;}
+  const lintel=mesh(new THREE.BoxGeometry(11,1.15,1.2),stone,0,groundY(0,39.4)+5.1,39.4,scene);lintel.rotation.z=.025;
+  mesh(new THREE.CylinderGeometry(.75,.95,.65,8),stone,0,y+.65,CITY.z,scene);
+  const flame=mesh(new THREE.OctahedronGeometry(.72,0),bronze,0,y+1.65,CITY.z,scene,false);animated.push({mesh:flame,type:'cityFlame',baseY:y+1.65,index:0});
+  const cityLight=new THREE.PointLight(0xd8c07d,2.1,17,2);cityLight.position.set(0,y+2,CITY.z);scene.add(cityLight);
+  for(const [x,z,rot] of [[-5.8,54,.14],[5.8,57,-.12]]){box(scene,x,z,3.5,.25,2.1,timber,2.05,rot);box(scene,x,z,3.8,.18,2.5,roof,3.15,rot);for(const sx of [-1,1]){const px=x+sx*1.55*Math.cos(rot),pz=z-sx*1.55*Math.sin(rot);cylinder(scene,px,pz,.1,.13,3.15,timber);}}
+  box(scene,-1.6,61.2,3.2,2.1,.25,timber,0,.05);box(scene,-1.6,61.2,3.5,.2,.4,moss,2.15,.05);
+  return {name:CITY.name,x:CITY.x,z:CITY.z,radius:CITY.radius,rest:{x:0,z:CITY.z}};
+}
+function buildHome(scene,colliders,animated,stone,moss,cameraObstacles){
+  const timber=new THREE.MeshStandardMaterial({color:0x594834,roughness:1}),cloth=new THREE.MeshStandardMaterial({color:0x426b59,roughness:1}),gold=new THREE.MeshStandardMaterial({color:0xe0b96e,emissive:0x6f4b1e,emissiveIntensity:.8});
+  const y=groundY(HOME.x,HOME.z),add=(x,z,r,h)=>{colliders.push({x,z,r,top:groundY(x,z)+h});const p=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,10),new THREE.MeshBasicMaterial({visible:false}));p.position.set(x,groundY(x,z)+h/2,z);scene.add(p);cameraObstacles.push(p);};
+  // A raised rootwood deck marks the player's actual starter base.
+  mesh(new THREE.CylinderGeometry(12.5,14,.7,16),stone,HOME.x,y-.33,HOME.z,scene);
+  const cabin=new THREE.Group();cabin.position.set(-4,y+.3,91);scene.add(cabin);
+  const local=(w,h,d,mat,x0,y0,z0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x0,y0,z0);m.castShadow=m.receiveShadow=true;cabin.add(m);return m;};
+  local(6,.6,5,stone,0,.3,0);local(5.5,3.6,4.5,timber,0,2.35,0);const roof=new THREE.Mesh(new THREE.ConeGeometry(4.5,2.2,4),cloth);roof.position.y=5.15;roof.rotation.y=Math.PI/4;roof.castShadow=true;cabin.add(roof);local(1.35,2.3,.2,cloth,0,1.45,-2.35);add(-4,91,3.2,6);
+  // Forge, storage, bedroll and mission table are readable home-base stations.
+  box(scene,5.2,91,2.8,1.1,1.7,stone,.55);box(scene,5.2,91,2.2,.18,1.25,gold,1.25);
+  box(scene,4.8,85,2.8,.9,1.5,timber,.45);box(scene,4.8,85,2.1,.12,1.1,cloth,1.05);
+  box(scene,-5.1,84.7,3.1,.35,1.5,cloth,.28);box(scene,-6.15,84.7,.85,.5,1.55,moss,.5);
+  for(const [x,z] of [[-10,84],[10,84],[-10,94],[10,94]]){cylinder(scene,x,z,.12,.18,3.2,timber);const lamp=mesh(new THREE.OctahedronGeometry(.32),gold,x,groundY(x,z)+3.55,z,scene,false);animated.push({mesh:lamp,type:'homeLamp',baseY:lamp.position.y,index:x+z});}
+  const hearth=mesh(new THREE.OctahedronGeometry(.6),gold,0,y+1.05,84.5,scene,false);animated.push({mesh:hearth,type:'cityFlame',baseY:y+1.05,index:44});
+  return {...HOME,rest:{x:0,z:84.5},spawn:{x:0,z:82.5}};
+}
 export function buildWorld(scene){
   const random=rng(),colliders=[],animated=[],particles=[];
   scene.background=color('#779d92');scene.fog=new THREE.FogExp2(0x83a79a,.0057);
@@ -153,7 +213,7 @@ export function buildWorld(scene){
   const trunkGeometry=new THREE.CylinderGeometry(.32,.58,1,14),crownGeometry=organicCrown();
   const trees=[];for(let i=0;i<540;i++){
     const x=(random()-.5)*355,z=(random()-.5)*355;
-    if(Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
+    if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+5||Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
     const ridge=Math.hypot(x*.85,z+58)>158;if(ridge&&random()<.45)continue;
     trees.push({x,z,height:5.7+random()*7.2,size:.85+random()*.75,kind:Math.floor(random()*leafMaterials.length)});
   }
@@ -177,11 +237,14 @@ export function buildWorld(scene){
   });
   crowns.forEach((c,i)=>{c.count=counts[i];scene.add(c);});scene.add(trunkInstances);limbs.count=limbCount;limbs.castShadow=true;scene.add(limbs);
   const rockMat=new THREE.MeshStandardMaterial({color:0x747d69,roughness:1}),mossMat=new THREE.MeshStandardMaterial({color:0x52784a,roughness:1});
+  const cameraObstacles=[land];
+  const city=buildCity(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
+  const home=buildHome(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,1),rockMat,700),lichens=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),mossMat,420);let nR=0,nL=0;
-  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
+  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+2||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
   rocks.count=nR;rocks.castShadow=true;lichens.count=nL;scene.add(rocks,lichens);
   const grass=new THREE.InstancedMesh(leafCluster(),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
-  for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if(nearTrail(x,z)&&random()<.85)continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
+  for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius||(nearTrail(x,z)&&random()<.85))continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
   // Curved fern fronds and grass blades soften the path without blocking movement.
   const fernMat=new THREE.MeshStandardMaterial({color:0x3a7853,roughness:1,side:THREE.DoubleSide});
   const fernShape=fernFronds(),ferns=new THREE.InstancedMesh(fernShape,fernMat,1700);let fernCount=0;
@@ -217,15 +280,37 @@ export function buildWorld(scene){
   stalks.count=caps.count=fungusCount;scene.add(stalks,caps);
   // A readable entrance: the woodland trail begins beside a lantern-lit standing stone.
   const runeMat=new THREE.MeshStandardMaterial({color:0xa8b394,roughness:1}),gold=new THREE.MeshStandardMaterial({color:0xe1b96e,emissive:0xa57c32,emissiveIntensity:1.8});
-  for(const [x,z] of [[-7,28],[-19,14],[-35,-9],[-49,-27],[16,-32],[40,-57],[54,-79],[35,-113],[6,-139]]){
+  const lanternSites=[[-7,28],[-19,14],[-35,-9],[-49,-27],[16,-32],[40,-57],[54,-79],[35,-113],[6,-139]];
+  for(const [x,z] of lanternSites){
     cylinder(scene,x,z,.15,.23,2.3,bark);mesh(new THREE.OctahedronGeometry(.37),gold,x,groundY(x,z)+2.62,z,scene,false);colliders.push({x,z,r:.28,top:groundY(x,z)+2.9});
-    const l=new THREE.PointLight(0xffd791,1.6,11,2);l.position.set(x,groundY(x,z)+2.6,z);scene.add(l);
+  }
+  // Keep the nearest lanterns lit. Distant lanterns retain their glowing
+  // crystals, but they no longer add nine lights to every forest shader.
+  const lanternLights=Array.from({length:3},()=>{const light=new THREE.PointLight(0xffd791,1.6,11,2);scene.add(light);return light;});
+  const lanternPositions=lanternSites.map(([x,z])=>({x,z,y:groundY(x,z)+2.6}));
+  let lastLightX=Infinity,lastLightZ=Infinity;
+  function updateLanternLights(x,z){
+    if(Math.hypot(x-lastLightX,z-lastLightZ)<1.5)return;
+    lastLightX=x;lastLightZ=z;
+    const nearest=lanternPositions.map(p=>({p,d:(p.x-x)**2+(p.z-z)**2})).sort((a,b)=>a.d-b.d);
+    lanternLights.forEach((light,i)=>{
+      const {p,d}=nearest[i];light.position.set(p.x,p.y,p.z);
+      light.intensity=d<24*24?1.6:0;
+    });
   }
   // The Rootwell, Mosswatch, and the Canopy Gate have distinct silhouettes.
   const rx=SITES[0].x,rz=SITES[0].z,ry=groundY(rx,rz);
-  mesh(new THREE.CylinderGeometry(7,8,1.5,16),rockMat,rx,ry+.45,rz,scene);colliders.push({x:rx,z:rz,r:7.6,top:ry+1.2});
+  mesh(new THREE.CylinderGeometry(7,8,1.5,16),rockMat,rx,ry+.45,rz,scene);
   const pool=mesh(new THREE.CircleGeometry(5.7,48),new THREE.MeshPhysicalMaterial({color:0x48b3b4,emissive:0x135454,emissiveIntensity:.7,metalness:.22,roughness:.17,transparent:true,opacity:.83}),rx,ry+1.23,rz,scene,false);pool.rotation.x=-Math.PI/2;animated.push({mesh:pool,type:'pool'});
-  for(let i=0;i<12;i++){const a=i*Math.PI/6,x=rx+Math.cos(a)*7,z=rz+Math.sin(a)*7,h=1+random()*1.8;cylinder(scene,x,z,.8,1.2,h,rockMat);colliders.push({x,z,r:1.15,top:groundY(x,z)+h});}
+  // The basin is a ring, not one giant blocker. Leave a clear entrance toward
+  // the lantern road and make every visible rim segment solid.
+  const rootwellEntrance=Math.atan2(CITY.z-rz,CITY.x-rx);
+  for(let i=0;i<16;i++){
+    const a=i*Math.PI/8,x=rx+Math.cos(a)*7,z=rz+Math.sin(a)*7;
+    cylinder(scene,x,z,.8,1.2,1+random()*1.8,rockMat);
+    const gap=Math.abs(Math.atan2(Math.sin(a-rootwellEntrance),Math.cos(a-rootwellEntrance)));
+    if(gap>.34)colliders.push({x,z,r:1.02,top:groundY(x,z)+2.8,kind:'rootwell-rim'});
+  }
   const ux=SITES[1].x,uz=SITES[1].z;
   for(let i=0;i<8;i++){const a=i*Math.PI/4,x=ux+Math.cos(a)*10,z=uz+Math.sin(a)*8;const h=3+random()*4;box(scene,x,z,1.6,h,1.6,rockMat,0,a);box(scene,x,z,2.2,.45,2.2,mossMat,h);colliders.push({x,z,r:1.1,top:groundY(x,z)+h+.45});}
   for(let i=0;i<5;i++){let x=ux-7+i*3,z=uz-6;box(scene,x,z,3,.7,2.4,runeMat,0,.22);colliders.push({x,z,r:1.25,top:groundY(x,z)+.7});}
@@ -249,6 +334,6 @@ export function buildWorld(scene){
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,nearTrail,cameraObstacles:[land],sun,
+  return {colliders,echoes,animated,particles,gateGlow,city,home,nearTrail,cameraObstacles,sun,updateLanternLights,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }

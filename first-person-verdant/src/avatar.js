@@ -23,20 +23,44 @@ export function createAvatar(scene){
   const eyeWhite=new THREE.MeshStandardMaterial({color:0xf4f0e7,roughness:.8});
   const iris=new THREE.MeshStandardMaterial({color:0x283b32,roughness:.65});
   const lip=new THREE.MeshStandardMaterial({color:0x805948,roughness:1});
+  const blockCloth=new THREE.MeshStandardMaterial({color:SHIRTS.moss,roughness:1});
+  const blockLeather=new THREE.MeshStandardMaterial({color:0x524537,roughness:.94});
+  const blockTrim=new THREE.MeshStandardMaterial({color:0x9a8359,roughness:.82});
+  const blockPants=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:1});
+  const bootMat=new THREE.MeshStandardMaterial({color:0x202a27,roughness:1});
+  body.mesh.visible=false;
+  part(body.bones.Hips,new RoundedBoxGeometry(.48,.34,.31,3,.045),blockLeather,0,.17,0);
+  part(body.bones.Spine,new RoundedBoxGeometry(.57,.44,.34,3,.055),blockCloth,0,.2,0);
+  part(body.bones.Chest,new RoundedBoxGeometry(.62,.28,.36,3,.055),blockCloth,0,.12,0);
+  // A two-piece neck/collar closes the visible gap between the block torso and
+  // head while still following the neck bone during attacks and emotes.
+  part(body.bones.Neck,new RoundedBoxGeometry(.21,.22,.2,3,.035),skin,0,.07,0);
+  part(body.bones.Neck,new RoundedBoxGeometry(.34,.11,.29,3,.035),blockCloth,0,-.045,0);
+  const headBlock=part(body.bones.Head,new RoundedBoxGeometry(.38,.43,.35,4,.065),skin,0,.2,0);
+  for(const side of ['Left','Right']){
+    const sign=side==='Left'?-1:1;
+    const upper=part(body.bones[side+'Arm'],new RoundedBoxGeometry(.24,.43,.27,2,.035),blockCloth,sign*.03,-.18,0);upper.rotation.z=sign*.15;
+    const bracer=part(body.bones[side+'ForeArm'],new RoundedBoxGeometry(.23,.3,.25,2,.025),blockLeather,sign*.02,-.12,0);bracer.rotation.z=sign*.19;
+    part(body.bones[side+'Hand'],new RoundedBoxGeometry(.22,.2,.23,2,.035),skin,0,-.05,-.01);
+    const thigh=part(body.bones[side+'UpLeg'],new RoundedBoxGeometry(.29,.53,.31,2,.035),blockPants,0,-.235,0);thigh.rotation.z=-sign*.01;
+    part(body.bones[side+'Leg'],new RoundedBoxGeometry(.27,.48,.29,2,.03),blockPants,0,-.215,0);
+    part(body.bones[side+'Foot'],new RoundedBoxGeometry(.27,.18,.42,2,.035),bootMat,0,-.03,-.12);
+  }
   const face=new THREE.Group();body.head.add(face);
   const eyeParts=[],brows=[],eyelids=[];
   for(const side of [-1,1]){
-    const white=part(face,sphere(.023),eyeWhite,side*.072,.26,-.18);white.scale.set(.98,.84,.44);
-    const pupil=part(face,sphere(.013),iris,side*.072,.26,-.19);pupil.scale.set(.82,.93,.36);eyeParts.push(pupil);
-    const lid=part(face,sphere(.028),skin,side*.072,.284,-.177);lid.scale.set(1.04,.19,.5);eyelids.push(lid);
-    const brow=part(face,sphere(.038),hair,side*.074,.314,-.168);brow.scale.set(1.15,.13,.32);brows.push(brow);
+    part(face,new RoundedBoxGeometry(.095,.064,.025,2,.012),eyeWhite,side*.092,.255,-.184);
+    const pupil=part(face,new RoundedBoxGeometry(.035,.047,.014,2,.007),iris,side*.092,.255,-.202);eyeParts.push(pupil);
+    const lid=part(face,new RoundedBoxGeometry(.104,.02,.029,2,.007),skin,side*.092,.287,-.194);eyelids.push(lid);
+    const brow=part(face,new RoundedBoxGeometry(.115,.026,.022,2,.008),hair,side*.092,.328,-.196);brows.push(brow);
   }
-  const mouth=part(face,sphere(.03),lip,0,.144,-.193);mouth.scale.set(1.2,.12,.26);
+  const nose=part(face,new RoundedBoxGeometry(.045,.06,.035,2,.01),skin,0,.205,-.2);
+  const mouth=part(face,new RoundedBoxGeometry(.105,.025,.018,2,.008),lip,0,.145,-.205);
   const hairGroup=new THREE.Group();hairGroup.position.set(0,.23,-.025);face.add(hairGroup);
   function hairStyle(style){
     hairGroup.clear();
-    const cap=part(hairGroup,new THREE.SphereGeometry(.184,32,16,0,Math.PI*2,0,Math.PI*(style==='swept'?.42:.38)),hair,0,.01,0);
-    cap.scale.set(1.01,1.11,1.04);
+    const cap=part(hairGroup,new RoundedBoxGeometry(.405,.13,.37,3,.045),hair,0,.18,.02);
+    const fringe=part(hairGroup,new RoundedBoxGeometry(.38,.1,.08,3,.025),hair,style==='swept'?-.035:0,.105,-.17);fringe.rotation.z=style==='swept'?-.16:0;
     if(style==='curly')for(let i=0;i<24;i++){
       const a=i*2.399,r=.06+i%4*.031;
       const lock=part(hairGroup,sphere(.036),hair,Math.cos(a)*r,.145+i%3*.012,Math.sin(a)*r-.025);
@@ -44,9 +68,6 @@ export function createAvatar(scene){
     }
     else if(style==='tied'){
       const bun=part(hairGroup,sphere(.063),hair,0,.09,.17);bun.scale.set(1,.82,.83);
-    }else if(style==='swept'){
-      const fringe=part(hairGroup,sphere(.085),hair,-.063,.09,-.12);
-      fringe.scale.set(1.17,.34,.62);fringe.rotation.z=-.3;
     }
   }
   hairStyle('short');let currentEmote='idle';
@@ -56,6 +77,7 @@ export function createAvatar(scene){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
+    blockCloth.color.set(SHIRTS[a.shirt]||SHIRTS.moss);blockLeather.color.set(a.outfit==='warden'?0x414a45:0x524537);blockPants.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
     eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
     brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
   },emote(name){currentEmote=name;},get emoteName(){return currentEmote;},

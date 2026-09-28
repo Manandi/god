@@ -13,7 +13,7 @@ Meet Mycel, enter your real-world baseline, then select Verdant Reach from the s
 
 ## The explorer
 
-The player character is an authored, rigged model built in Blender with MPFB from CC0 MakeHuman assets, animated with retargeted CC0 Quaternius motion plus Hollow Roots strikes, guard and emotes. It lives in `public/characters/explorer/` (see its README for sources, licences and how to regenerate it with `tools/blender/build_explorer.py`). The older procedural body remains as a fallback if the model cannot load; `?procedural` forces it. `/character-lab.html` renders the model, clips, outfits and expressions from several angles.
+The player is the Roblox-style block explorer from the ChatGPT Sites design: square limbs and head over the procedural rig, which also drives the first-person block hands. You start at the Rootward Homestead and walk through Mossgate, whose block NPCs (Sela, Orin, Mycel, Tavi) start and carry the story; Brannoch, Ysolde and Pip keep the sites along the lantern road. The earlier Blender/MPFB explorer is kept in `public/characters/explorer/` (see its README) and loads only with `?legacyCharacters`. `/character-lab.html` renders that model, its clips, outfits and expressions.
 
 ## Combat
 

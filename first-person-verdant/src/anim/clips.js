@@ -9,7 +9,10 @@ import { clip, cycle, merge, mirror } from './pose.js';
 // Relaxed standing, used outside combat.
 export const RELAXED = {
   LeftArm: [2, 0, -4], RightArm: [2, 0, 4], LeftForeArm: [8, 0, 0], RightForeArm: [8, 0, 0],
-  Spine: [0, 0, 0], Chest: [0, 0, 0]
+  Spine: [0, 0, 0], Chest: [0, 0, 0],
+  HipsPos: [0, 0, 0], Hips: [0, 0, 0],
+  LeftUpLeg: [0, 0, -3], LeftLeg: [0, 0, 0], LeftFoot: [0, 0, 0],
+  RightUpLeg: [0, 0, 3], RightLeg: [0, 0, 0], RightFoot: [0, 0, 0]
 };
 
 // Guard: bladed stance, lead (left) foot forward, knees soft, hands up.

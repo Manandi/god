@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE } from './world.js';
 import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
-import { loadExplorer,createNPC } from './avatarGLB.js';
+import { loadExplorer } from './avatarGLB.js';
+import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,keeperName } from './story.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
@@ -27,7 +28,7 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;r
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
 const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene,CHAPTERS);
 // The keepers of the trail are solid, like everything else you can see.
-for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*n.scale,top:groundY(n.x,n.z)+1.85*n.scale});
+for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.scale||1),top:groundY(n.x,n.z)+2.2*(n.scale||1)});
 const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
@@ -35,7 +36,8 @@ const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
-const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0,flasks:FLASK.charges,sprinting:false};
+// A new day starts at the Rootward Homestead, south of Mossgate.
+const player={x:world.home.spawn.x,z:world.home.spawn.z,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0,flasks:FLASK.charges,sprinting:false};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
 let cueText='',cueUntil=0,cameraKick=0;
@@ -43,7 +45,7 @@ let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const story=createStory(save.story,memories);
-const npcs={};let dialogue=null;const spawned=new Set();
+const npcs=createNpcs(scene,NPCS);let dialogue=null;const spawned=new Set();
 // Orrun, the Hollow Warden, and its arena load after the world; until then the gate is just a gate.
 let warden=null,gateRoots=null,bossShown=false,bossTrail=1;
 const SPEAKERS={orrun:{name:'ORRUN',title:'THE WARDEN, REMEMBERED',get x(){return warden?.x??BED.x;},get z(){return warden?.z??BED.z;}}};
@@ -63,9 +65,6 @@ const motes=[];for(let i=0;i<24;i++){
 // A small diamond over the locked creature: enough to read, never in the way.
 const lockMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.12,0),new THREE.MeshBasicMaterial({color:0xf3e6b0,transparent:true,opacity:.9,depthTest:true}));
 lockMarker.renderOrder=12;lockMarker.scale.set(1,1.6,1);scene.add(lockMarker);lockMarker.visible=false;
-// A gold diamond over whoever has the next part of the story to tell.
-const questMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),new THREE.MeshBasicMaterial({color:0xf0c86a}));
-questMarker.scale.set(1,1.7,1);scene.add(questMarker);questMarker.visible=false;
 
 const playTone=(freq=140,duration=.1,volume=.04,type='sine')=>sound.tone(freq,duration,volume,type);
 function initAudio(){
@@ -190,7 +189,8 @@ function nearestInteractable(){
   const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+Math.max(0,stats().intelligence-10)*.18);
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
-  if(Math.hypot(player.x,player.z-39)<5.8&&(player.health<maxHealth()||player.flasks<FLASK.charges))return{type:'rest'};
+  // The brazier in Mossgate's square and the homestead hearth both restore you.
+  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2)&&(player.health<maxHealth()||player.flasks<FLASK.charges))return{type:'rest'};
   return null;
 }
 function interact(){
@@ -207,7 +207,7 @@ function interact(){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY','Sap Flasks refilled.');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
 }
 
 // ----------------------------------------------------------------- dialogue
@@ -216,7 +216,7 @@ function interact(){
 // they finish, and may wake the chapter's hollowed.
 function openDialogue(id,conversation=null){
   const conv=conversation||story.talk(id,profile.name),who=speakerOf(id);
-  dialogue={id,...conv,i:0,chars:0,opened:elapsed};npcs[id]?.setTalking(true);
+  dialogue={id,...conv,i:0,chars:0,opened:elapsed};if(npcs[id])npcs[id].talking=true;
   $('dialogueName').textContent=who.name;$('dialogueTitle').textContent=who.title;
   $('dialogue').classList.remove('hidden');renderDialogue();playTone(520,.12,.025,'triangle');
 }
@@ -234,7 +234,7 @@ function advanceDialogue(){
 }
 function closeDialogue(finished){
   const d=dialogue;if(!d)return;dialogue=null;
-  $('dialogue').classList.add('hidden');npcs[d.id]?.setTalking(false);
+  $('dialogue').classList.add('hidden');if(npcs[d.id])npcs[d.id].talking=false;
   if(finished&&d.id==='orrun'){finishStory();return;}
   if(!finished||!d.then)return;
   const from=story.stage;story.advance(d.then);
@@ -328,10 +328,10 @@ function hurtPlayer(from,kind='light',damage=1){
 }
 function checkDefeated(){if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}}
 function respawn(){
-  // Once the story reaches the gate, you wake at Pip's lookout below the Hollow instead of the camp.
+  // You wake at the homestead; once the story reaches the gate, at Pip's lookout below the Hollow.
   const checkpoint=story.reached('gate')&&!story.reached('end');
   if(warden?.awake&&warden.alive)warden.reset();
-  player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:0;player.z=checkpoint?-147:39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:world.home.spawn.x;player.z=checkpoint?-147:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;
   if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
   toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');
@@ -454,6 +454,8 @@ function updateHUD(){
   $('objective').textContent=story.info.objective;
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
+  if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
+  if(Math.hypot(player.x-world.home.x,player.z-world.home.z)<world.home.radius)region=world.home.name;
   if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';$('region').textContent=region;
   const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
   $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
@@ -550,10 +552,7 @@ function update(rawDt){
   // The story: conversations, the active chapter's hollowed, the keepers.
   updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
-  for(const [id,npc] of Object.entries(npcs))npc.update(dt,player);
-  const speaker=story.speaker&&NPCS[story.speaker];questMarker.visible=!!speaker&&!dialogue;
-  if(speaker){questMarker.position.set(speaker.x,groundY(speaker.x,speaker.z)+2.3*speaker.scale+Math.sin(elapsed*3)*.08,speaker.z);questMarker.rotation.y+=rawDt*1.6;}
-  for(const [id,n] of Object.entries(NPCS))if(Math.hypot(n.x-player.x,n.z-player.z)<7)npcs[id]?.greet();
+  updateNpcs(npcs,elapsed,rawDt,player,story.speaker);world.updateLanternLights(player.x,player.z);
 
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
@@ -667,6 +666,7 @@ function update(rawDt){
     if(type==='ring'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.z+=dt*.7;}
     if(type==='pool')mesh.material.opacity=.78+Math.sin(elapsed*1.6)*.08;
     if(type==='gate')mesh.material.opacity=.13+Math.sin(elapsed*1.8)*.07;
+    if(type==='cityFlame'||type==='homeLamp'){mesh.position.y=baseY+Math.sin(elapsed*4.2+index)*.09;mesh.rotation.y+=dt*1.8;mesh.scale.setScalar(.9+Math.sin(elapsed*7+index)*.08);}
   });
   FX.position.set(player.x,groundY(player.x,player.z),player.z);
   motes.forEach((m,i)=>{m.position.y+=dt*(.1+i%4*.07);if(m.position.y>8)m.position.y=1;m.material.opacity=.28+Math.sin(elapsed*1.4+i)*.22;});
@@ -679,14 +679,14 @@ function update(rawDt){
 }
 shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);shell.start();
-if(!params.has('procedural'))for(const [id,def] of Object.entries(NPCS))createNPC(scene,def,groundY).then(npc=>{npcs[id]=npc;if(dialogue?.id===id)npc.setTalking(true);})
-  .catch(err=>console.warn(`${id} failed to load.`,err));
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
   warden.setSealed(story.before('gate'));
   if(story.reached('end')){warden.release(true);if(gateRoots)gateRoots.visible=false;}
 }).catch(err=>console.warn('The Warden or its arena failed to load.',err));
-if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
+// The block explorer (ChatGPT Sites design) is the player. ?legacyCharacters
+// loads the earlier Blender-authored explorer instead.
+if(params.has('legacyCharacters'))loadExplorer(scene).then(explorer=>{
   const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
   scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
 }).catch(err=>console.warn('Explorer model failed to load; using the procedural body.',err));

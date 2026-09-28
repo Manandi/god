@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Animator, solveLeg } from './anim/animator.js';
 import { SKIN_TONES, SHIRTS, TROUSERS, HAIR_COLORS } from './avatar.js';
 
@@ -28,58 +27,8 @@ const BONE_ALIASES = {
 };
 const HAIR_MESH = { short: 'Hair_short', curly: 'Hair_curly', swept: 'Hair_swept', tied: 'Hair_tied', braid: 'Hair_braid' };
 
-// One download serves the player and every NPC. The untouched template is
-// cloned before the player's copy is dressed and posed.
-let pending = null;
-function loadAssets() {
-  pending ||= new GLTFLoader().loadAsync(URL).then(gltf => ({ gltf, template: cloneSkinned(gltf.scene) }));
-  return pending;
-}
-
-/**
- * The parts of an explorer model the game touches: tintable materials, morph
- * meshes, named objects and bones. `cloneMaterials` gives a copy its own
- * materials so an NPC can be dressed without recolouring the player.
- */
-function collectParts(model, cloneMaterials = false) {
-  const materials = { skin: [], shirt: [], pants: [], hair: [] }, morphMeshes = [], objects = {}, bones = {};
-  model.traverse(o => {
-    objects[o.name] = o;
-    if (o.isBone) bones[o.name] = o;
-    if (!o.isMesh) return;
-    if (cloneMaterials) o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
-    o.castShadow = true; o.receiveShadow = true;
-    o.frustumCulled = false;                  // skinned bounds come from the bind pose
-    for (const m of [].concat(o.material)) {
-      if (m.name.startsWith('M_Skin')) materials.skin.push(m);
-      else if (m.name.startsWith('M_Shirt')) materials.shirt.push(m);
-      else if (m.name.startsWith('M_Pants')) materials.pants.push(m);
-      else if (m.name.startsWith('M_Hair')) { materials.hair.push(m); m.side = THREE.DoubleSide; }
-      if (m.map) m.map.anisotropy = 4;
-    }
-    if (o.morphTargetDictionary) morphMeshes.push(o);
-  });
-  const morph = (name, value) => {
-    for (const m of morphMeshes) { const i = m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = value; }
-  };
-  return { materials, objects, bones, morph };
-}
-
-/** Colours, hair, outfit and face from a profile-style appearance. */
-function dress(model, { materials, objects, morph }, a) {
-  const tone = new THREE.Color(SKIN_TONES[a.skinIndex] || SKIN_TONES[2]).multiplyScalar(1.22);
-  materials.skin.forEach(m => m.color.copy(tone));
-  materials.shirt.forEach(m => m.color.set(SHIRTS[a.shirt] || SHIRTS.moss).multiplyScalar(1.12));
-  materials.pants.forEach(m => m.color.set(TROUSERS[a.pants] || TROUSERS.charcoal).multiplyScalar(1.15));
-  materials.hair.forEach(m => m.color.set(HAIR_COLORS[a.hairColor] || HAIR_COLORS.raven).multiplyScalar(1.3));
-  for (const [style, name] of Object.entries(HAIR_MESH)) if (objects[name]) objects[name].visible = style === (HAIR_MESH[a.hairStyle] ? a.hairStyle : 'short');
-  const outfit = a.outfit === 'warden' ? 'Warden_' : 'Ranger_';
-  model.traverse(o => { if (/^(Ranger|Warden)_/.test(o.name)) o.visible = o.name.startsWith(outfit); });
-  morph('Face_Sharp', a.face === 'sharp' ? 1 : 0); morph('Face_Round', a.face === 'round' ? 1 : 0);
-}
-
 export async function loadExplorer(scene) {
-  const { gltf } = await loadAssets();
+  const gltf = await new GLTFLoader().loadAsync(URL);
   const root = new THREE.Group(), model = gltf.scene;
   model.rotation.y = Math.PI;                 // the export faces +Z; gameplay yaw 0 faces -Z
   model.scale.setScalar(SCALE);
@@ -139,56 +88,4 @@ export async function loadExplorer(scene) {
     }
     ['l', 'r'].forEach((s, i) => solveLeg(byName['thigh_' + s], byName['calf_' + s], byName['foot_' + s], lifts[i] - drop));
   }
-}
-
-/**
- * A story character: the same authored explorer body with its own materials,
- * clothes and colours, playing the idle, talk and wave clips. `appearance`
- * uses the same fields as the player's profile.
- */
-export async function createNPC(scene, { x, z, yaw = 0, scale = 1, appearance }, groundAt) {
-  const { gltf, template } = await loadAssets();
-  const model = cloneSkinned(template), root = new THREE.Group();
-  model.rotation.y = Math.PI; model.scale.setScalar(SCALE * scale);
-  root.add(model); scene.add(root);
-  const parts = collectParts(model, true), { morph } = parts;
-  dress(model, parts, appearance);
-
-  const mixer = new THREE.AnimationMixer(model), actions = {};
-  for (const [key, file] of [['idle', 'Idle'], ['talk', 'Talk'], ['wave', 'Wave']]) {
-    const clip = gltf.animations.find(c => c.name === file);
-    if (clip) actions[key] = mixer.clipAction(clip);
-  }
-  if (actions.wave) { actions.wave.setLoop(THREE.LoopOnce, 1); actions.wave.clampWhenFinished = false; }
-  let current = actions.idle; current?.play();
-  mixer.update(Math.random() * 3);
-  const play = key => {
-    const next = actions[key] || actions.idle;
-    if (!next || next === current) return;
-    next.reset().play(); current?.crossFadeTo(next, .35, false); current = next;
-  };
-  mixer.addEventListener('finished', () => play('idle'));
-  root.position.set(x, groundAt(x, z), z); root.rotation.y = yaw;
-  let heading = yaw, talking = false, greeted = false, blinkTimer = 2, time = 0, mouth = 0;
-  return {
-    root,
-    get talking() { return talking; },
-    setTalking(on) { talking = on; play(on ? 'talk' : 'idle'); },
-    greet() { if (!greeted) { greeted = true; play('wave'); } },
-    update(dt, player) {
-      const d = Math.hypot(player.x - x, player.z - z);
-      root.visible = d < 75;
-      if (!root.visible) return;
-      // Turn to face the explorer when they come close; drift back otherwise.
-      const want = d < 7 || talking ? Math.atan2(-(player.x - x), -(player.z - z)) : yaw;
-      heading += Math.atan2(Math.sin(want - heading), Math.cos(want - heading)) * (1 - Math.exp(-4 * dt));
-      root.rotation.y = heading;
-      if (d > 12) greeted = false;
-      time += dt; mixer.update(dt);
-      blinkTimer -= dt; if (blinkTimer < 0) blinkTimer = 2.4 + Math.random() * 3;
-      morph('Blink', blinkTimer < .11 ? 1 : 0);
-      mouth = THREE.MathUtils.damp(mouth, talking ? .5 + .5 * Math.sin(time * 13) * Math.sin(time * 4.3) : 0, 16, dt);
-      morph('Talk', mouth); morph('Smile', talking ? .25 : 0);
-    }
-  };
 }

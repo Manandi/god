@@ -22,12 +22,12 @@ export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
-export const profile={complete:false,introSeen:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,customized:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
     const raw=JSON.parse(localStorage.getItem(STORAGE)||'{}');
-    profile.complete=raw.complete===true;profile.introSeen=raw.introSeen===true;
+    profile.complete=raw.complete===true;profile.introSeen=raw.introSeen===true;profile.customized=raw.customized===true;
     for(const metric of METRICS){const v=Number(raw.inputs?.[metric.key]);profile.inputs[metric.key]=Number.isFinite(v)?Math.max(metric.min,Math.min(metric.max,v)):metric.value;}
     profile.reasoning=Number.isFinite(raw.reasoning)?Math.max(70,Math.min(135,raw.reasoning)):100;
     profile.reasoningTaken=typeof raw.reasoningTaken==='string'?raw.reasoningTaken:'';
