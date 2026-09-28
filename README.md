@@ -82,6 +82,19 @@ They remain on the `box-characters` branch. **Do not merge that branch wholesale
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-09-28 (late night)
+
+- **Game commit `c1a998a`** combines the ChatGPT Sites **character, NPC and town design** (from `box-characters`) with Claude's **combat, story, mob spawns, boss and arena**; see "Who owns what" above.
+- **Published.** The Pages run for `c1a998a` succeeded. Verified live at `/god/verdant/`: the served bundle contains Mossgate (`WAYFINDER OF MOSSGATE`), the Homestead and Orrun. The 2D game at `/god/` returns 200.
+- **Tested headless, no page errors:**
+  - the full story from a fresh save (Sela → trial → Orin → the three chapters → the gate), plus every town NPC's line at the gate stage
+  - migration of an old memory-only save, and of an out-of-order one
+  - combat smoke test (block, parry, riposte, running and jump attacks, flask, attack tokens)
+  - boss logic (topple, belly Root Strike, phase 2, parry, eruption, release)
+  - mobs spawning free of colliders
+  - screenshots of the block explorer and the block NPCs
+- **Not verified:** the owner playing it in a real browser, and whether the ChatGPT Site itself matches this build.
+
 ## Latest shared state — 2026-09-28 (night)
 
 - Latest commit: `4bd3105` (`Remove unused assets and dead code; share repeated helpers`). The Pages run for it succeeded. Verified live: the 3D bundle at `/god/verdant/` contains the new code, the 2D game at `/god/` returns 200, and a removed v1 asset now returns 404 while its v2 replacement returns 200.
