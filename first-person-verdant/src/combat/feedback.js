@@ -39,6 +39,11 @@ export class CombatSound {
     else this.tone((heavy ? 190 : 260) * up, .06, .05, 'square', .6);
     if (move === 'root') { this.tone(55, .6, .22, 'sine', .5); this.hiss(.4, .1, 1200, 200, .7); }
   }
+  guardUp() { this.hiss(.08, .03, 1200, 600, 2); }
+  block(kind) { this.tone(kind === 'heavy' ? 120 : 180, .14, .12, 'square', .5); this.hiss(.1, .08, 900, 300, 1.5); }
+  parry() { this.tone(1320, .25, .07, 'triangle', 1.25); this.tone(660, .35, .06, 'sine', 1.5, .04); this.hiss(.18, .08, 4000, 1500, 2); }
+  flask() { this.hiss(.5, .025, 400, 700, 4); this.tone(300, .3, .02, 'sine', 1.3, .2); }
+  heal() { this.tone(520, .4, .05, 'sine', 1.5); this.tone(780, .5, .03, 'sine', 1.3, .1); }
   charge(level) { this.tone(220 + level * 110, .22, .06, 'triangle', 1.6); this.hiss(.25, .03, 800, 2400, 2); }
   topple() { this.tone(110, .5, .14, 'triangle', .5); this.hiss(.35, .08, 900, 250, 1); this.tone(520, .3, .04, 'sine', 1.4, .12); }
   enrage() { this.tone(95, .9, .1, 'sawtooth', 1.8); this.hiss(.8, .05, 300, 1500, 2); }

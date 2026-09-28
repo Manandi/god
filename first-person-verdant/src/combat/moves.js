@@ -47,6 +47,14 @@ export const MOVES = {
     damage: 30, poise: 0, stamina: 0, hitstop: .2, push: 1.2, stagger: .6, next: null, armor: [0, .4]
   }
 };
+// Sprinting and airborne variants reuse the same clips, driven harder.
+MOVES.dash_palm = { ...MOVES.palm, label: 'Running Palm', kind: 'light', lunge: { from: 0, to: .14, distance: 1.7 }, damage: 11, poise: 3, stamina: 12, next: 'swing', reach: 1.35 };
+MOVES.dash_heel = { ...MOVES.heel, label: 'Leaping Heel', kind: 'heavy', lunge: { from: .08, to: .3, distance: 2.1 }, damage: 22, poise: 8, stamina: 20, charge: null, armor: [.05, .34] };
+MOVES.air_heel = { ...MOVES.heel, label: 'Falling Heel', kind: 'heavy', lunge: { from: 0, to: .3, distance: .6 }, damage: 18, poise: 9, stamina: 16, charge: null, armor: [0, .34],
+  airborne: true };                    // gravity keeps acting; a jump attack breaks poise hard
+MOVES.guard_heel = { ...MOVES.heel, label: 'Guard Counter', kind: 'heavy', active: [.2, .3], evadeFrom: .42, moveFrom: .58, turnUntil: .18,
+  damage: 24, poise: 10, stamina: 14, charge: null, armor: [0, .3] };
+
 export const FIRST_LIGHT = 'palm';
 export const HEAVY = 'heel';
 
@@ -63,6 +71,12 @@ export const HURT = {
 
 export const STAMINA = { max: 100, delay: .55, regen: 26 };   // regen per second, scaled by Stamina stat
 export const COUNTER = { window: 1.4, damage: 1.3, poise: 1.5 }; // after a perfect evade
+
+// Guard (hold): blocks attacks from the front. Raising it just before a hit
+// lands is a parry: no Breath lost and the attacker reels, open to a riposte.
+export const GUARD = { arc: 1.75, parry: .18, cost: { light: 18, heavy: 40 }, chip: { light: 0, heavy: .5 }, counterWindow: .7, speed: 1.9 };
+export const SPRINT = { hold: .22, speed: 1.55, drain: 13 };        // hold roll to sprint; tap to roll
+export const FLASK = { charges: 3, duration: 1.0, healAt: .6, heal: 2, moveSpeed: .35 };
 
 /** Phase name for a time within a move, for feedback and the debug overlay. */
 export function phaseOf(move, t) {

@@ -7,3 +7,4 @@
 #damageLayer .dmg.armored{color:#aeb7ad;font-size:14px}
 #damageLayer .dmg.crit{color:#ffe07a;font-size:28px;letter-spacing:.04em}
 .meter.flash{outline:1px solid #e6866a}
+#hearts .flasks{font-style:normal;font-size:13px;margin-left:10px;color:#e3c47a;letter-spacing:2px;align-self:center}

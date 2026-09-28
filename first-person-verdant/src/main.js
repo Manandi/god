@@ -8,7 +8,7 @@ import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile } from './profile.js';
 import { PlayerCombat } from './combat/player.js';
-import { MOVES, STAMINA } from './combat/moves.js';
+import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
 import { CombatDebug } from './combat/debug.js';
 import './style.css';
@@ -30,7 +30,7 @@ const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
-const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0};
+const player={x:0,z:39,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0,flasks:FLASK.charges,sprinting:false};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
 let cueText='',cueUntil=0,cameraKick=0;
@@ -81,6 +81,9 @@ function evadePressed(){if(paused)return;endEmote();combat.press('evade');}
 function attackPressed(){if(paused)return;endEmote();combat.press('light');}
 function heavyPressed(down){if(paused)return;combat.heavyHeld=down;if(down){endEmote();combat.press('heavy');}}
 function cue(text,duration=.4){cueText=text;cueUntil=elapsed+duration;}
+function guardPressed(down){if(paused&&down)return;if(down)endEmote();combat.raiseGuard(down);}
+let shiftDownAt=-1;
+const sprintHeld=()=>shiftDownAt>=0&&(performance.now()-shiftDownAt)/1000>=SPRINT.hold;
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
   keyState.add(e.code);
@@ -102,15 +105,19 @@ window.addEventListener('keydown',e=>{
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
   if(e.code==='Space'&&!paused&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
-  if(e.code==='ShiftLeft'||e.code==='ShiftRight')evadePressed();
+  if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!paused)shiftDownAt=performance.now();
+  if(e.code==='KeyC')guardPressed(true);
+  if(e.code==='KeyX'&&!paused){endEmote();combat.press('flask');}
   if(e.code==='KeyF')attackPressed();
   if(e.code==='KeyR')heavyPressed(true);
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
   if(e.code==='KeyE'&&!paused&&!journalOpen&&!combat.busy){if(nearestInteractable())player.interactT=0;interact();}
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
-window.addEventListener('keyup',e=>{keyState.delete(e.code);if(e.code==='KeyR')heavyPressed(false);});
-window.addEventListener('blur',()=>keyState.clear());
+window.addEventListener('keyup',e=>{keyState.delete(e.code);if(e.code==='KeyR')heavyPressed(false);if(e.code==='KeyC')guardPressed(false);
+  // Roll on a tap of Shift; holding it sprints instead (released without rolling).
+  if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&shiftDownAt>=0){if((performance.now()-shiftDownAt)/1000<SPRINT.hold)evadePressed();shiftDownAt=-1;}});
+window.addEventListener('blur',()=>{keyState.clear();shiftDownAt=-1;guardPressed(false);heavyPressed(false);});
 document.addEventListener('mousemove',e=>{
   if(document.pointerLockElement!==canvas||paused)return;
   // While locked on, the camera follows the fight; a hard flick switches target.
@@ -168,7 +175,7 @@ function nearestInteractable(){
   const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<4.9+Math.max(0,stats().intelligence-10)*.18);
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
-  if(Math.hypot(player.x,player.z-39)<5.8&&player.health<maxHealth())return{type:'rest'};
+  if(Math.hypot(player.x,player.z-39)<5.8&&(player.health<maxHealth()||player.flasks<FLASK.charges))return{type:'rest'};
   return null;
 }
 function interact(){
@@ -179,7 +186,7 @@ function interact(){
   }else if(nearby.type==='gate'){
     if(memories.size<3){toast('THE GATE IS SEALED',`${3-memories.size} lost ${memories.size===2?'memory':'memories'} remain.`);return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY','Sap Flasks refilled.');}
 }
 function maxHealth(){return Math.max(3,Math.min(6,3+Math.floor(stats().defense/7)));}
 // Real-world strength scales strike damage; turtles never grant XP.
@@ -216,8 +223,8 @@ function updateNumbers(dt){
 }
 function spend(amount){if(!amount)return;player.stamina=Math.max(0,player.stamina-amount);staminaRest=STAMINA.delay;}
 function critTarget(){
-  // A toppled creature in front and within reach opens the Root Strike.
-  return creatures.find(c=>c.alive&&c.toppled&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
+  // A toppled or parried creature within reach opens the Root Strike.
+  return creatures.find(c=>c.alive&&c.exposed&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
 }
 function handleCombatEvents(){
   for(const ev of combat.events){
@@ -227,6 +234,10 @@ function handleCombatEvents(){
     else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
     else if(ev.type==='charge'){sound.charge(ev.level);cue(`CHARGE ${'I'.repeat(ev.level)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
     else if(ev.type==='release'&&ev.level)debug.note(`Taproot Heel released at charge ${ev.level}`,elapsed);
+    else if(ev.type==='guardUp')sound.guardUp();
+    else if(ev.type==='flask'){sound.flask();cue('SAP FLASK',.6);}
+    else if(ev.type==='noFlask'){sound.tired();cue('NO SAP LEFT · REST AT THE TRAIL STONE',1.2);}
+    else if(ev.type==='heal'){player.flasks--;player.health=Math.min(maxHealth(),player.health+FLASK.heal);sound.heal();cue('RESTORED',.6);}
     else if(ev.type==='tired'){sound.tired();$('staminaFill').parentElement.classList.add('flash');setTimeout(()=>$('staminaFill').parentElement.classList.remove('flash'),300);}
     else if(ev.type==='hit'){
       const m=MOVES[ev.move],dir=ev.point.clone().sub(new THREE.Vector3(player.x,ev.point.y,player.z)).normalize();
@@ -251,6 +262,12 @@ function handleCombatEvents(){
     else if(ev.type==='whiff'){sound.whiff();cue('MISSED',.3);debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
   }
 }
+// Attack tokens: at most one creature commits to an attack at a time (two once
+// any of them is enraged), so a group circles and takes turns instead of swarming.
+function mayAttack(self){
+  const busy=creatures.filter(c=>c!==self&&c.alive&&(c.state==='windup'||c.state==='attack')&&Math.hypot(c.x-player.x,c.z-player.z)<12).length;
+  return busy<(creatures.some(c=>c.alive&&c.enraged)?2:1);
+}
 const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
 /** A creature's attack reached the explorer: evade, absorb with hyper-armour, or take it. */
 function incomingStrike(c,ev){
@@ -259,6 +276,25 @@ function incomingStrike(c,ev){
     if(perfect)combat.perfectEvade();else{sound.evadedAttack();cue('EVADED',.5);}
     debug.note(`${c.type} ${ev.label} → ${perfect?'PERFECT EVADE':'EVADED'} (i-frames)`,elapsed);return;
   }
+  // Guard: only attacks from the front arc are blocked.
+  const facing={x:-Math.sin(combat.facing),z:-Math.cos(combat.facing)},toward={x:c.x-player.x,z:c.z-player.z},tl=Math.hypot(toward.x,toward.z)||1;
+  const inFront=Math.acos(Math.max(-1,Math.min(1,(facing.x*toward.x+facing.z*toward.z)/tl)))<GUARD.arc/2;
+  if(combat.guarding&&inFront&&!ev.ring){
+    if(combat.parrying&&c.deflect()){
+      sound.parry();slowMo(.35,.35);hitstop=Math.max(hitstop,.12);effects.burst(new THREE.Vector3(player.x+toward.x/tl*.6,groundY(player.x,player.z)+1.2,player.z+toward.z/tl*.6),new THREE.Vector3(-toward.x/tl,0,-toward.z/tl),true);
+      cue('PARRY · RIPOSTE',.9);debug.note(`${c.type} ${ev.label} → PARRIED (guard raised ${(combat.clock-combat.guardSince).toFixed(2)} s before)`,elapsed);return;
+    }
+    const cost=GUARD.cost[ev.kind];
+    if(player.stamina>=cost){
+      spend(cost);combat.onBlocked();sound.block(ev.kind);hitstop=Math.max(hitstop,.06);kick(c,.06);
+      const chip=Math.round(ev.damage*GUARD.chip[ev.kind]);if(chip)player.health=Math.max(0,player.health-chip);
+      cue(chip?'GUARD · CHIPPED':'BLOCKED',.5);debug.note(`${c.type} ${ev.label} → BLOCKED (-${cost} Breath${chip?`, -${chip} vitality`:''})`,elapsed);
+      if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+      return;
+    }
+    player.stamina=0;cue('GUARD BROKEN',.7);debug.note(`${c.type} ${ev.label} → GUARD BROKEN (out of Breath)`,elapsed);hurtPlayer(c,'heavy',ev.damage);return;
+  }
+  if(combat.state==='flask'&&!combat.healed)cue('FLASK SPILLED',.6);
   if(combat.armored&&ev.kind==='light'){
     player.health=Math.max(0,player.health-ev.damage);sound.bite();hitstop=Math.max(hitstop,.05);
     debug.note(`${c.type} ${ev.label} → absorbed by hyper-armour (-${ev.damage})`,elapsed);
@@ -271,7 +307,7 @@ function incomingStrike(c,ev){
 
 // -------------------------------------------------------------------- update
 function updateHUD(){
-  $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('');
+  $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(FLASK.charges-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
   const next=SITES.filter(s=>!memories.has(s.id)).sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z))[0]||GATE;
@@ -320,6 +356,7 @@ function update(rawDt){
   const staminaBefore=player.stamina;
   const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
+    sprinting:player.sprinting,airborne:!player.grounded,flasks:player.flasks,
     iframeBonus:THREE.MathUtils.clamp((stats().speed-10)*.006,0,.06)});
   if(!frozen)handleCombatEvents();
   if(combat.events.some(e=>e.type==='swing'||e.type==='evade'))player.engaged=4;
@@ -328,17 +365,19 @@ function update(rawDt){
   const speedStat=stats().speed,staminaStat=stats().stamina;
   // Breath recovers after a short pause; real-world Stamina sets how fast.
   staminaRest=Math.max(0,staminaRest-dt);
+  player.sprinting=sprintHeld()&&hasInput&&combat.state==='move'&&player.grounded&&player.stamina>0;
+  if(player.sprinting){player.stamina=Math.max(0,player.stamina-SPRINT.drain*dt);staminaRest=.3;}
   if(!staminaRest&&!combat.busy)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*(1+(staminaStat-10)*.04)*dt);
   else if(!staminaRest&&combat.state==='attack'&&!combat.charging)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*.35*dt);
   comboTimer-=dt;if(comboTimer<=0)combo=0;
-  const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','attack','recover','stagger','alert','toppled','rising'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
+  const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','attack','recover','stagger','alert','toppled','rising','reeling'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
   const guarded=!!lockTarget||player.engaged>0||nearFight;
   const runSpeed=5.1+(speedStat-10)*.08,guardSpeed=3.2+(speedStat-10)*.04;
   let desiredX=0,desiredZ=0;
-  if(!combat.busy&&hasInput&&!player.defeated){const s=guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
+  if(combat.mobile&&hasInput&&!player.defeated){const s=combat.state==='guard'?GUARD.speed:combat.state==='flask'?runSpeed*FLASK.moveSpeed:player.sprinting?runSpeed*SPRINT.speed:guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
   player.vx=THREE.MathUtils.damp(player.vx,desiredX,hasInput?14:18,dt);
   player.vz=THREE.MathUtils.damp(player.vz,desiredZ,hasInput?14:18,dt);
-  if(combat.busy){player.vx=0;player.vz=0;}
+  if(!combat.mobile){player.vx=0;player.vz=0;}
 
   // Facing: toward the lock in a fight, along the path when roaming, the camera in first person.
   if(!player.thirdPerson)player.yaw=combat.facing;
@@ -371,7 +410,7 @@ function update(rawDt){
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
   for(const c of creatures){
-    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid});
+    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack});
     for(const ev of events){
       if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR ROLL THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
@@ -399,7 +438,7 @@ function update(rawDt){
     ||(player.landT<.35&&player.grounded&&a.has('land')&&!moved?{name:'land',time:player.landT,fade:25}:null)
     ||(player.interactT<.9&&a.has('interact')?{name:'interact',time:player.interactT+.15,fade:14}:null);
   const planar=combat.busy?0:moved;
-  if(action)a.play(action.name,action.time,action.fade);else a.stop();
+  if(action&&a.has(action.name))a.play(action.name,action.time,action.fade);else a.stop();
   if(!player.grounded)a.setLocomotion({air:1},dt/1);
   else if(player.emote!=='idle')a.setLocomotion({[player.emote]:1},dt/a.duration(player.emote));
   else if(guarded){
@@ -525,5 +564,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,get elapsed(){return elapsed;}};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;}};
 }

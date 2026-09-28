@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MOVES, FIRST_LIGHT, HEAVY, EVADE, HURT, COUNTER, phaseOf, travelBetween } from './moves.js';
+import { MOVES, FIRST_LIGHT, HEAVY, EVADE, HURT, COUNTER, GUARD, FLASK, phaseOf, travelBetween } from './moves.js';
 import { strikeSegment, sweep, obstacleBetween } from './hits.js';
 
 const BUFFER = .28;           // how long a press waits for a window to open
@@ -15,6 +15,10 @@ const yawOf = (x, z) => Math.atan2(-x, -z);        // explorer faces -Z at yaw 0
  *     ├─evade─▶ evade roll (i-frames; a hit inside the first frames is a PERFECT evade)
  *     │            └─ attackFrom: a buffered attack starts straight out of the roll
  *     ├─light/heavy near a toppled creature ─▶ root (Root Strike finisher)
+ *     ├─hold guard─▶ guard (blocks from the front; raised just before a hit = PARRY)
+ *     │            └─ heavy soon after a block ─▶ guard_heel (Guard Counter)
+ *     ├─sprinting ─▶ dash_palm / dash_heel · airborne ─▶ air_heel (jump attack)
+ *     ├─flask ─▶ drinking (heals at FLASK.healAt; a hit before then wastes it)
  *     └──── hurt (light flinch / heavy knockdown) unless in i-frames or hyper-armour
  *
  * Inputs are buffered for BUFFER seconds, so a press slightly early still lands
@@ -25,7 +29,8 @@ const yawOf = (x, z) => Math.atan2(-x, -z);        // explorer faces -Z at yaw 0
 export class PlayerCombat {
   constructor() {
     this.state = 'move'; this.t = 0; this.move = null;
-    this.buffer = { light: -1, heavy: -1, evade: -1 };
+    this.buffer = { light: -1, heavy: -1, evade: -1, flask: -1 };
+    this.guardHeld = false; this.guardSince = -9; this.lastBlockAt = -9; this.healed = false;
     this.heavyHeld = false; this.charging = false; this.chargeTime = 0; this.chargeLevel = 0;
     this.clock = 0; this.facing = 0;
     this.evadeDir = { x: 0, z: 1 }; this.evadeClip = 'evadeForward'; this.iframeEnd = EVADE.invulnerable[1];
@@ -51,6 +56,17 @@ export class PlayerCombat {
     return this.charging || (m.armor && this.t >= m.armor[0] && this.t < m.armor[1]);
   }
   get countering() { return this.clock < this.counterUntil; }
+  get guarding() { return this.state === 'guard'; }
+  /** Guard raised within the parry window: the next blocked hit is deflected. */
+  get parrying() { return this.state === 'guard' && this.clock - this.guardSince <= GUARD.parry; }
+  /** States in which the explorer can still walk (slowly). */
+  get mobile() { return this.state === 'move' || this.state === 'guard' || this.state === 'flask'; }
+  raiseGuard(on) {
+    if (on && !this.guardHeld) this.guardSince = this.clock;
+    this.guardHeld = on;
+  }
+  /** A blocked hit: the caller has already charged Breath and chip damage. */
+  onBlocked() { this.lastBlockAt = this.clock; this.t = 0; }
   get busy() { return this.state !== 'move'; }
   phase() { return this.state === 'attack' ? (this.charging ? 'charging' : phaseOf(MOVES[this.move], this.t)) : this.state; }
 
@@ -68,10 +84,20 @@ export class PlayerCombat {
     return true;
   }
   tryAttack(ctx, from) {
-    // Root Strike takes priority when a toppled creature is in reach.
-    if ((this.buffered('light') || this.buffered('heavy')) && ctx.critTarget) {
+    // Root Strike takes priority when a toppled or reeling creature is in reach.
+    if ((this.buffered('light') || this.buffered('heavy')) && ctx.critTarget && !ctx.airborne) {
       this.consume('light'); this.consume('heavy'); return this.startAttack('root', ctx);
     }
+    // Contextual openers: in the air, out of a sprint, or right after a block.
+    if (!from && (this.buffered('light') || this.buffered('heavy'))) {
+      const heavy = this.buffered('heavy');
+      let special = null;
+      if (ctx.airborne) special = 'air_heel';
+      else if (ctx.sprinting) special = heavy ? 'dash_heel' : 'dash_palm';
+      else if (heavy && this.clock - this.lastBlockAt < GUARD.counterWindow) special = 'guard_heel';
+      if (special) { this.consume('light'); this.consume('heavy'); return this.startAttack(special, ctx); }
+    }
+    if (ctx.airborne) return false;
     if (this.buffered('heavy') && (!from || this.t >= from.heavyFrom)) { this.consume('heavy'); return this.startAttack(HEAVY, ctx); }
     if (this.buffered('light') && (!from || (from.next && this.t >= from.chainFrom))) {
       this.consume('light'); return this.startAttack(from?.next || FIRST_LIGHT, ctx);
@@ -115,9 +141,24 @@ export class PlayerCombat {
     const t0 = this.t; this.t += dt;
     const hasInput = !!(ctx.input.x || ctx.input.z);
 
-    if (this.state === 'move') {
-      if (this.buffered('evade')) this.startEvade(ctx);
-      else this.tryAttack(ctx, null);
+    if (this.state === 'move' || this.state === 'guard') {
+      if (this.buffered('evade')) { this.startEvade(ctx); return out; }
+      if (this.tryAttack(ctx, null)) return out;
+      if (this.buffered('flask') && !ctx.airborne) {
+        this.consume('flask');
+        if (ctx.flasks > 0) { this.state = 'flask'; this.t = 0; this.healed = false; this.events.push({ type: 'flask' }); }
+        else this.events.push({ type: 'noFlask' });
+        return out;
+      }
+      if (this.guardHeld && this.state === 'move') { this.state = 'guard'; this.t = 0; this.events.push({ type: 'guardUp' }); }
+      else if (!this.guardHeld && this.state === 'guard') this.state = 'move';
+      return out;
+    }
+
+    if (this.state === 'flask') {
+      if (!this.healed && this.t >= FLASK.healAt) { this.healed = true; this.events.push({ type: 'heal' }); }
+      if (this.t >= FLASK.duration) this.state = 'move';
+      else if (this.healed && this.buffered('evade')) this.startEvade(ctx);
       return out;
     }
 
@@ -211,6 +252,8 @@ export class PlayerCombat {
       return { name: m.clip, time: this.t, fade: this.t < .05 ? 30 : 14 };
     }
     if (this.state === 'evade') return { name: this.evadeClip, time: this.t, fade: 30 };
+    if (this.state === 'guard') return { name: 'guard', time: this.t % 1.4, fade: 22 };
+    if (this.state === 'flask') return { name: 'interact', time: .1 + this.t * .9, fade: 16 };
     if (this.state === 'hurt') return { name: 'hurt', time: this.hurtKind === 'heavy' ? Math.min(this.t * .6, .4) : this.t, fade: 40 };
     return null;
   }

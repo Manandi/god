@@ -145,7 +145,8 @@ export function createFirstPersonHands(camera){
   return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
     update(dt,combat,guarded,frozen){
       const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',hurt:'fp_hurt'};
-      if(clip)animator.play(clip.name.startsWith('evade')?'fp_evade':map[clip.name],clip.time,clip.fade);else animator.stop();
+      const fpName=clip&&(clip.name.startsWith('evade')?'fp_evade':map[clip.name]);
+      if(fpName)animator.play(fpName,clip.time,clip.fade);else animator.stop();
       animator.setLocomotion({fp_guard:1},frozen?0:dt/1.4);
       animator.update(dt);
     }};

@@ -31,7 +31,7 @@ const ATTACKS = {
   slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' }
 };
 const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
-const ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6;
+const ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
 // The slam's shockwave: radius over time. Rolling through it is safe; rolling
 // away works only if you start early.
 export const SHOCKWAVE = { start: .02, duration: .4, from: .5, to: 3.1 };
@@ -100,6 +100,15 @@ export class Creature {
     this.place();
   }
   get toppled() { return this.state === 'toppled'; }
+  /** Open to a Root Strike: on its back, or reeling from a parry. */
+  get exposed() { return this.state === 'toppled' || this.state === 'reeling'; }
+  /** A parried attack: the creature recoils and is open to a riposte. */
+  deflect() {
+    if (!this.alive || this.state !== 'attack') return false;
+    this.attack = null; this.poise = Math.max(1, this.poise - 5); this.poiseDelay = 3;
+    this.setState('reeling'); this.flash = .1; this.lastEvent = 'PARRIED';
+    return true;
+  }
   /** Hurt volumes in world space. Upright: shell (two spheres) and head. On its back: the belly. */
   hurtVolumes() {
     const s = this.kind.size, out = [], f = new THREE.Vector3();
@@ -214,6 +223,7 @@ export class Creature {
     const toPlayer = Math.atan2(dx, dz), rel = angleTo(this.heading, toPlayer);
     let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
+    if (['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
 
     switch (this.state) {
       case 'wander':
@@ -227,11 +237,21 @@ export class Creature {
         wantHeading = toPlayer; turn = 5;
         if (this.t > .5) this.setState('approach');
         break;
+      case 'return':
+        // Dragged too far from home: walk back and recover, as a camp mob does.
+        wantHeading = this.steer(Math.atan2(this.home.x - this.x, this.home.z - this.z), ctx.grid); wantSpeed = k.chase;
+        this.health = Math.min(this.maxHealth, this.health + dt * this.maxHealth * .25); this.poise = k.poise;
+        if (Math.hypot(this.x - this.home.x, this.z - this.home.z) < 2) this.setState('wander');
+        break;
+      case 'reeling':
+        turn = 0;
+        if (this.t >= REEL_TIME) { this.cooldown = .8; this.setState('circle'); }
+        break;
       case 'approach':
         wantHeading = this.steer(toPlayer, ctx.grid); wantSpeed = k.chase * THREE.MathUtils.clamp((dist - k.spacing) / 1.5, .25, 1);
         if (dist < k.spacing + .3) this.setState('circle');
         if (dist > k.notice * 1.6) this.setState('wander');
-        if (this.cooldown <= 0 && dist < 3.4) this.beginAttack(dist, rel, events);
+        if (this.cooldown <= 0 && dist < 3.4) this.beginAttack(dist, rel, events, ctx);
         break;
       case 'circle': {
         // Hold spacing and face the explorer; turn in place when flanked.
@@ -241,7 +261,7 @@ export class Creature {
         else if (dist < k.spacing - .6) { moveYaw = toPlayer + Math.PI; wantSpeed = k.walk * .9; }
         else { moveYaw = toPlayer + side * 1.6; wantSpeed = k.walk * .45; }
         if (dist > k.spacing + 1.4) this.setState('approach');
-        else if (this.cooldown <= 0) this.beginAttack(dist, rel, events);
+        else if (this.cooldown <= 0) this.beginAttack(dist, rel, events, ctx);
         break;
       }
       case 'windup': {
@@ -292,7 +312,9 @@ export class Creature {
     return events;
   }
 
-  beginAttack(dist, rel, events) {
+  beginAttack(dist, rel, events, ctx) {
+    // Attack tokens: creatures take turns instead of swarming the explorer.
+    if (ctx.mayAttack && !ctx.mayAttack(this)) { this.cooldown = .4 + Math.random() * .5; return; }
     const name = this.chooseAttack(dist, rel);
     if (!name) return;
     this.attack = name; this.setState('windup');
@@ -388,6 +410,7 @@ export class Creature {
     }
     if (st === 'recover') { rear = .06; headOut = .1; headLow = -.25 + Math.sin(time * 5) * .03; legRate = .5; }
     if (st === 'stagger') { lean = Math.sin(t * 28) * .12 * Math.max(0, 1 - t / this.staggerTime); rear = .1; headOut = -.2; }
+    if (st === 'reeling') { lean = Math.sin(t * 9) * .18 * Math.max(0, 1 - t / REEL_TIME); rear = -.2 * Math.max(0, 1 - t / .4); headOut = -.3; legRate = .4; }
     if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
     if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
@@ -420,7 +443,7 @@ export class Creature {
     this.root.updateMatrixWorld(true);
   }
   showBar(visible, camera) {
-    this.bar.visible = visible && this.alive && this.state !== 'toppled' && this.state !== 'rising';
+    this.bar.visible = visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
     if (!this.bar.visible) return;
     this.bar.quaternion.copy(this.root.quaternion).invert().multiply(camera.quaternion);
     const f = this.health / this.maxHealth;
