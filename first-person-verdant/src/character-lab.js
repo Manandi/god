@@ -13,7 +13,7 @@ const scene = new THREE.Scene(); scene.background = new THREE.Color('#2a3530');
 scene.add(new THREE.HemisphereLight(0xdfeee8, 0x3b4a33, 2.0));
 const sun = new THREE.DirectionalLight(0xfff2dd, 2.2); sun.position.set(2, 5, 4); scene.add(sun);
 scene.add(new THREE.GridHelper(6, 12, 0x6c7f70, 0x3f4d45));
-const gltf = await new GLTFLoader().loadAsync(q.get('src') || '/characters/explorer/explorer.glb');
+const gltf = await new GLTFLoader().loadAsync(q.get('src') || `${import.meta.env.BASE_URL}characters/explorer/explorer.glb`);
 const model = gltf.scene; scene.add(model);
 const hair = q.get('hair') || 'short';
 model.traverse(o => { if (o.name.startsWith('Hair_')) o.visible = o.name === 'Hair_' + hair; });

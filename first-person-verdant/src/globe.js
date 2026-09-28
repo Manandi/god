@@ -7,7 +7,7 @@ export function createGlobe(){
   const sun=new THREE.DirectionalLight(0xffebc4,2.8);sun.position.set(-4,5,8);scene.add(sun);
   const camera=new THREE.PerspectiveCamera(39,1,.1,70);camera.position.set(0,0,12.7);camera.lookAt(0,0,0);
   const holder=new THREE.Group();scene.add(holder);
-  const surface=new THREE.Mesh(new THREE.SphereGeometry(3,96,64),new THREE.MeshStandardMaterial({color:0xc3e2cc,roughness:.94,map:new THREE.TextureLoader().load('/art/world-surface-v2.webp')}));
+  const surface=new THREE.Mesh(new THREE.SphereGeometry(3,96,64),new THREE.MeshStandardMaterial({color:0xc3e2cc,roughness:.94,map:new THREE.TextureLoader().load(`${import.meta.env?.BASE_URL||'/'}art/world-surface-v2.webp`)}));
   holder.add(surface);
   holder.add(new THREE.Mesh(new THREE.SphereGeometry(3.052,48,32),new THREE.MeshBasicMaterial({color:0xa9d2be,transparent:true,opacity:.085,side:THREE.BackSide,depthWrite:false})));
   const markers=[];

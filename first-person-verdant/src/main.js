@@ -187,8 +187,8 @@ function pickTarget(yaw){
   }).filter(v=>v.d<2.6&&v.a<cone).sort((a,b)=>a.d+a.a-(b.d+b.a))[0]?.c||null;
 }
 
-// The shrine's memory hangs inside the giant tree's crown, so it answers from farther out.
-const ECHO_REACH={rootwell:4.9,ruins:4.9,shrine:7.8};
+// The Rootwell's memory floats over the pool and the Shrine's inside the giant tree, so both answer from their edges.
+const ECHO_REACH={rootwell:9,ruins:4.9,shrine:7.8};
 function nearestInteractable(){
   const d=(p)=>Math.hypot(p.x-player.x,p.z-player.z);
   const npc=Object.entries(NPCS).map(([id,n])=>({id,n,dist:d(n)})).filter(v=>v.dist<3.3).sort((a,b)=>a.dist-b.dist)[0];
@@ -337,7 +337,7 @@ function respawn(){
   // Once the story reaches the gate, you wake at Pip's lookout below the Hollow instead of the camp.
   const checkpoint=story.reached('gate')&&!story.reached('end');
   if(warden?.awake&&warden.alive)warden.reset();
-  player.defeated=0;player.health=maxHealth();player.x=checkpoint?5:0;player.z=checkpoint?-144:39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:0;player.z=checkpoint?-147:39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;
   if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
   toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');

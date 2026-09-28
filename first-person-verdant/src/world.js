@@ -178,7 +178,7 @@ export function buildWorld(scene){
   crowns.forEach((c,i)=>{c.count=counts[i];scene.add(c);});scene.add(trunkInstances);limbs.count=limbCount;limbs.castShadow=true;scene.add(limbs);
   const rockMat=new THREE.MeshStandardMaterial({color:0x747d69,roughness:1}),mossMat=new THREE.MeshStandardMaterial({color:0x52784a,roughness:1});
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,1),rockMat,700),lichens=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),mossMat,420);let nR=0,nL=0;
-  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*.94,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
+  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if(nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
   rocks.count=nR;rocks.castShadow=true;lichens.count=nL;scene.add(rocks,lichens);
   const grass=new THREE.InstancedMesh(leafCluster(),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
   for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if(nearTrail(x,z)&&random()<.85)continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
@@ -218,22 +218,22 @@ export function buildWorld(scene){
   // A readable entrance: the woodland trail begins beside a lantern-lit standing stone.
   const runeMat=new THREE.MeshStandardMaterial({color:0xa8b394,roughness:1}),gold=new THREE.MeshStandardMaterial({color:0xe1b96e,emissive:0xa57c32,emissiveIntensity:1.8});
   for(const [x,z] of [[-7,28],[-19,14],[-35,-9],[-49,-27],[16,-32],[40,-57],[54,-79],[35,-113],[6,-139]]){
-    cylinder(scene,x,z,.15,.23,2.3,bark);mesh(new THREE.OctahedronGeometry(.37),gold,x,groundY(x,z)+2.62,z,scene,false);
+    cylinder(scene,x,z,.15,.23,2.3,bark);mesh(new THREE.OctahedronGeometry(.37),gold,x,groundY(x,z)+2.62,z,scene,false);colliders.push({x,z,r:.28,top:groundY(x,z)+2.9});
     const l=new THREE.PointLight(0xffd791,1.6,11,2);l.position.set(x,groundY(x,z)+2.6,z);scene.add(l);
   }
   // The Rootwell, Mosswatch, and the Canopy Gate have distinct silhouettes.
   const rx=SITES[0].x,rz=SITES[0].z,ry=groundY(rx,rz);
-  mesh(new THREE.CylinderGeometry(7,8,1.5,16),rockMat,rx,ry+.45,rz,scene);
+  mesh(new THREE.CylinderGeometry(7,8,1.5,16),rockMat,rx,ry+.45,rz,scene);colliders.push({x:rx,z:rz,r:7.6,top:ry+1.2});
   const pool=mesh(new THREE.CircleGeometry(5.7,48),new THREE.MeshPhysicalMaterial({color:0x48b3b4,emissive:0x135454,emissiveIntensity:.7,metalness:.22,roughness:.17,transparent:true,opacity:.83}),rx,ry+1.23,rz,scene,false);pool.rotation.x=-Math.PI/2;animated.push({mesh:pool,type:'pool'});
-  for(let i=0;i<12;i++){const a=i*Math.PI/6,x=rx+Math.cos(a)*7,z=rz+Math.sin(a)*7;cylinder(scene,x,z,.8,1.2,1+random()*1.8,rockMat);}
+  for(let i=0;i<12;i++){const a=i*Math.PI/6,x=rx+Math.cos(a)*7,z=rz+Math.sin(a)*7,h=1+random()*1.8;cylinder(scene,x,z,.8,1.2,h,rockMat);colliders.push({x,z,r:1.15,top:groundY(x,z)+h});}
   const ux=SITES[1].x,uz=SITES[1].z;
   for(let i=0;i<8;i++){const a=i*Math.PI/4,x=ux+Math.cos(a)*10,z=uz+Math.sin(a)*8;const h=3+random()*4;box(scene,x,z,1.6,h,1.6,rockMat,0,a);box(scene,x,z,2.2,.45,2.2,mossMat,h);colliders.push({x,z,r:1.1,top:groundY(x,z)+h+.45});}
-  for(let i=0;i<5;i++){let x=ux-7+i*3,z=uz-6;box(scene,x,z,3,.7,2.4,runeMat,0,.22);}
+  for(let i=0;i<5;i++){let x=ux-7+i*3,z=uz-6;box(scene,x,z,3,.7,2.4,runeMat,0,.22);colliders.push({x,z,r:1.25,top:groundY(x,z)+.7});}
   const sx=SITES[2].x,sz=SITES[2].z;const giantH=groundY(sx,sz);
-  mesh(new THREE.CylinderGeometry(2.9,5.6,24,24),bark,sx,giantH+12,sz,scene);
+  mesh(new THREE.CylinderGeometry(2.9,5.6,24,24),bark,sx,giantH+12,sz,scene);colliders.push({x:sx,z:sz,r:5.3,top:giantH+24});
   for(let i=0;i<9;i++){let a=i*2.399,r=5+random()*9;const branch=mesh(new THREE.CylinderGeometry(.4,1.2,r,7),bark,sx+Math.cos(a)*r*.32,giantH+17+random()*8,sz+Math.sin(a)*r*.32,scene);branch.rotation.z=Math.sin(a)*.65;branch.rotation.x=Math.cos(a)*.65;}
   for(let i=0;i<6;i++){const a=i*1.047,m=mesh(crownGeometry,leafMaterials[i%5],sx+Math.cos(a)*6,giantH+24+(i%3)*2,sz+Math.sin(a)*6,scene);m.scale.set(7+i%2*2,6+i%2*1.5,7+i%2*2);}
-  for(let i=0;i<10;i++){let a=i*Math.PI/5,x=sx+Math.cos(a)*10,z=sz+Math.sin(a)*10;cylinder(scene,x,z,.52,.85,1.4,rockMat);}
+  for(let i=0;i<10;i++){let a=i*Math.PI/5,x=sx+Math.cos(a)*10,z=sz+Math.sin(a)*10;cylinder(scene,x,z,.52,.85,1.4,rockMat);colliders.push({x,z,r:.8,top:groundY(x,z)+1.4});}
   const gx=GATE.x,gz=GATE.z,gy=groundY(gx,gz);
   for(let side of [-1,1]){box(scene,gx+side*3.2,gz,2,10,2,rockMat);colliders.push({x:gx+side*3.2,z:gz,r:1.2,top:groundY(gx+side*3.2,gz)+10});}
   const lintel=mesh(new THREE.BoxGeometry(9,2,2),rockMat,gx,gy+10,gz,scene);lintel.rotation.z=-.06;

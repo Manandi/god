@@ -36,7 +36,7 @@ export const CHAPTERS = [
     memoryTitle: 'THE FIRST MEMORY · A HATCHLING IN THE SPRING',
     memoryText: 'In the first spring a shellback hatched in the Rootwell. The Waymakers knelt in the water around it, and it followed them up the trail.' },
   { id: 'ruins', npc: 'ysolde', site: site('ruins'),
-    mobs: [[66, -95, 'thornling'], [68, -86, 'thornling'], [58, -98, 'shellback']],
+    mobs: [[67, -91, 'thornling'], [68, -86, 'thornling'], [58, -99, 'shellback']],
     fight: 'Drive the thornlings from the Mosswatch arches', memory: 'Listen to the oath-stone at Mosswatch', report: 'Tell Ysolde the words of the oath',
     memoryTitle: 'THE OATH · MOSSWATCH',
     memoryText: 'Grown vast, the shellback bowed before the Sentinels on these stones and swore: “I will keep the gate until the forest forgets me.”' },
