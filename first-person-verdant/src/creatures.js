@@ -31,7 +31,7 @@ const ATTACKS = {
   slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' }
 };
 const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
-const ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
+const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
 // The slam's shockwave: radius over time. Rolling through it is safe; rolling
 // away works only if you start early.
 export const SHOCKWAVE = { start: .02, duration: .4, from: .5, to: 3.1 };
@@ -52,6 +52,7 @@ export class Creature {
     this.maxHealth = k.health; this.health = k.health; this.alive = true;
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
+    this.id = options.id || null; this.chapter = options.chapter || null;
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
     this.state = 'wander'; this.t = 0; this.cooldown = 1; this.wanderTurn = 0;
     this.attack = null; this.attackYaw = 0; this.connected = false; this.enraged = false; this.combo = false;
@@ -208,6 +209,7 @@ export class Creature {
     this.flash = Math.max(0, this.flash - dt); this.shake = Math.max(0, this.shake - dt);
     this.jolt.pitch = damp(this.jolt.pitch, 0, 9, dt); this.jolt.roll = damp(this.jolt.roll, 0, 9, dt);
     if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
+    if (this.state === 'dormant') return events;
     if (this.state === 'defeated') {
       this.tell.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
@@ -232,6 +234,11 @@ export class Creature {
         if (Math.hypot(this.x - this.home.x, this.z - this.home.z) > 8) this.wanderHeading = Math.atan2(this.home.x - this.x, this.home.z - this.z);
         wantHeading = this.wanderHeading ?? this.heading; wantSpeed = k.walk; turn = 1.4;
         if (dist < k.notice) { this.setState('alert'); events.push({ type: 'alert' }); }
+        break;
+      case 'emerge':
+        // Clawing up out of the roots: no threat until it is fully out.
+        wantHeading = toPlayer; turn = 2;
+        if (this.t >= EMERGE_TIME) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
       case 'alert':
         wantHeading = toPlayer; turn = 5;
@@ -413,6 +420,7 @@ export class Creature {
     if (st === 'reeling') { lean = Math.sin(t * 9) * .18 * Math.max(0, 1 - t / REEL_TIME); rear = -.2 * Math.max(0, 1 - t / .4); headOut = -.3; legRate = .4; }
     if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
     if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
+    if (st === 'emerge') { const e = Math.min(1, t / EMERGE_TIME); lift = -2.6 * (1 - e) ** 2; rear = -.35 * Math.sin(e * Math.PI); legRate = 2.5; }
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
     this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
@@ -450,6 +458,14 @@ export class Creature {
     this.barFill.scale.x = Math.max(.001, f); this.barFill.position.x = -.76 * (1 - f);
     this.barFill.material.color.set(this.enraged ? 0xe0805a : 0xd6c07a);
   }
+  /** Dormant: out of the world until its chapter of the story calls it. */
+  sleep() {
+    this.alive = false; this.setState('dormant'); this.root.visible = false; this.tell.visible = false; this.bar.visible = false;
+  }
+  /** Rise out of the ground at home, then notice the explorer. */
+  emerge() {
+    this.respawn(); this.setState('emerge'); this.body.position.y = -2.6; this.heading = Math.random() * Math.PI * 2;
+  }
   respawn() {
     this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
     this.x = this.home.x; this.z = this.home.z;
@@ -458,11 +474,14 @@ export class Creature {
   }
 }
 
-export function createCreatures(scene) {
+export function createCreatures(scene, chapters = []) {
   // The first shellback waits on the open slope below the camp so the first
-  // fight happens on readable ground. It returns a few seconds after defeat.
-  const list = [new Creature(scene, 1, 27, 'shellback', { respawn: 6 })];
-  for (const [x, z, type] of [[-17, -1, 'shellback'], [-44, -30, 'thornling'], [-20, -73, 'shellback'], [33, -56, 'shellback'], [52, -106, 'thornling'], [8, -125, 'shellback'], [4, -169, 'thornling']])
-    list.push(new Creature(scene, x, z, type));
+  // fight (Wren's trial) happens on readable ground. It returns after defeat.
+  const list = [new Creature(scene, 1, 27, 'shellback', { respawn: 6, id: 'trial' })];
+  // Every other creature belongs to a chapter of the story and gathers at that
+  // chapter's site; it stays dormant until the story reaches it.
+  for (const c of chapters) for (const [x, z, type] of c.mobs) {
+    const m = new Creature(scene, x, z, type, { chapter: c.id }); m.sleep(); list.push(m);
+  }
   return list;
 }

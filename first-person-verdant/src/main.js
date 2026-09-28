@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE } from './world.js';
 import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
-import { loadExplorer } from './avatarGLB.js';
+import { loadExplorer,createNPC } from './avatarGLB.js';
+import { createStory,NPCS,CHAPTERS } from './story.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
@@ -22,7 +23,9 @@ let pixelRatio=Math.min(devicePixelRatio,1.25);
 renderer.setPixelRatio(pixelRatio);renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
-const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene);
+const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene,CHAPTERS);
+// The keepers of the trail are solid, like everything else you can see.
+for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*n.scale,top:groundY(n.x,n.z)+1.85*n.scale});
 const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
@@ -37,6 +40,8 @@ let cueText='',cueUntil=0,cameraKick=0;
 let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
+const story=createStory(save.story,memories);
+const npcs={};let dialogue=null;const spawned=new Set();
 const hands=createFirstPersonHands(camera);scene.add(camera);
 const FX=new THREE.Group();scene.add(FX);
 const motes=[];for(let i=0;i<24;i++){
@@ -46,6 +51,9 @@ const motes=[];for(let i=0;i<24;i++){
 // A small diamond over the locked creature: enough to read, never in the way.
 const lockMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.12,0),new THREE.MeshBasicMaterial({color:0xf3e6b0,transparent:true,opacity:.9,depthTest:true}));
 lockMarker.renderOrder=12;lockMarker.scale.set(1,1.6,1);scene.add(lockMarker);lockMarker.visible=false;
+// A gold diamond over whoever has the next part of the story to tell.
+const questMarker=new THREE.Mesh(new THREE.OctahedronGeometry(.16,0),new THREE.MeshBasicMaterial({color:0xf0c86a}));
+questMarker.scale.set(1,1.7,1);scene.add(questMarker);questMarker.visible=false;
 
 function playTone(freq=140,duration=.1,volume=.04,type='sine'){
   if(!audio)return;
@@ -61,12 +69,10 @@ function initAudio(){
   }catch{/* Sound is optional on unsupported browsers. */}
 }
 function toast(title,detail=''){$('toast').innerHTML=title+(detail?`<small>${detail}</small>`:'');$('toast').classList.remove('hidden');toastTimer=3.5;}
-function persist(){try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({memories:[...memories]}));}catch{/* No storage available. */}}
+function persist(){try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({memories:[...memories],story:story.serialize()}));}catch{/* No storage available. */}}
 function updateJournal(){
-  $('journalEntries').innerHTML=SITES.map((site,i)=>{
-    const found=memories.has(site.id);
-    return `<article class="${found?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${found?site.title:'UNDISCOVERED'}</strong>${found?site.story:'A memory waits somewhere beyond the old trail.'}</article>`;
-  }).join('');
+  $('journalEntries').innerHTML=story.journal().map((page,i)=>
+    `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('');
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
 function resume(){if(!started)player.health=maxHealth();started=true;paused=false;shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
@@ -77,11 +83,11 @@ document.addEventListener('pointerlockchange',()=>{
   else if(document.pointerLockElement){paused=false;shell?.hide();}
 });
 const endEmote=()=>{if(player.emote!=='idle'){player.emote='idle';avatar.emote('idle');}};
-function evadePressed(){if(paused)return;endEmote();combat.press('evade');}
-function attackPressed(){if(paused)return;endEmote();combat.press('light');}
-function heavyPressed(down){if(paused)return;combat.heavyHeld=down;if(down){endEmote();combat.press('heavy');}}
+function evadePressed(){if(paused||dialogue)return;endEmote();combat.press('evade');}
+function attackPressed(){if(paused)return;if(dialogue){advanceDialogue();return;}endEmote();combat.press('light');}
+function heavyPressed(down){if(paused||(dialogue&&down))return;combat.heavyHeld=down;if(down){endEmote();combat.press('heavy');}}
 function cue(text,duration=.4){cueText=text;cueUntil=elapsed+duration;}
-function guardPressed(down){if(paused&&down)return;if(down)endEmote();combat.raiseGuard(down);}
+function guardPressed(down){if((paused||dialogue)&&down)return;if(down)endEmote();combat.raiseGuard(down);}
 let shiftDownAt=-1;
 const sprintHeld=()=>shiftDownAt>=0&&(performance.now()-shiftDownAt)/1000>=SPRINT.hold;
 window.addEventListener('keydown',e=>{
@@ -104,14 +110,14 @@ window.addEventListener('keydown',e=>{
   if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!combat.busy){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
-  if(e.code==='Space'&&!paused&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
+  if(e.code==='Space'&&!paused&&!dialogue&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
   if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!paused)shiftDownAt=performance.now();
   if(e.code==='KeyC')guardPressed(true);
-  if(e.code==='KeyX'&&!paused){endEmote();combat.press('flask');}
+  if(e.code==='KeyX'&&!paused&&!dialogue){endEmote();combat.press('flask');}
   if(e.code==='KeyF')attackPressed();
   if(e.code==='KeyR')heavyPressed(true);
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
-  if(e.code==='KeyE'&&!paused&&!journalOpen&&!combat.busy){if(nearestInteractable())player.interactT=0;interact();}
+  if(e.code==='KeyE'&&!paused&&!journalOpen){if(dialogue){advanceDialogue();return;}if(combat.busy)return;const n=nearestInteractable();if(n&&n.type!=='npc')player.interactT=0;interact();}
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
 window.addEventListener('keyup',e=>{keyState.delete(e.code);if(e.code==='KeyR')heavyPressed(false);if(e.code==='KeyC')guardPressed(false);
@@ -170,9 +176,13 @@ function pickTarget(yaw){
   }).filter(v=>v.d<2.6&&v.a<cone).sort((a,b)=>a.d+a.a-(b.d+b.a))[0]?.c||null;
 }
 
+// The shrine's memory hangs inside the giant tree's crown, so it answers from farther out.
+const ECHO_REACH={rootwell:4.9,ruins:4.9,shrine:7.8};
 function nearestInteractable(){
   const d=(p)=>Math.hypot(p.x-player.x,p.z-player.z);
-  const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<4.9+Math.max(0,stats().intelligence-10)*.18);
+  const npc=Object.entries(NPCS).map(([id,n])=>({id,n,dist:d(n)})).filter(v=>v.dist<3.3).sort((a,b)=>a.dist-b.dist)[0];
+  if(npc)return{type:'npc',id:npc.id,value:npc.n};
+  const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+Math.max(0,stats().intelligence-10)*.18);
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
   if(Math.hypot(player.x,player.z-39)<5.8&&(player.health<maxHealth()||player.flasks<FLASK.charges))return{type:'rest'};
@@ -180,18 +190,96 @@ function nearestInteractable(){
 }
 function interact(){
   const nearby=nearestInteractable();if(!nearby)return;
-  if(nearby.type==='echo'){
-    const e=nearby.value;memories.add(e.id);e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;persist();playTone(690,.7,.11,'sine');playTone(1040,.6,.05,'triangle');
-    toast(`MEMORY FOUND · ${e.title}`,e.story);
+  if(nearby.type==='npc')openDialogue(nearby.id);
+  else if(nearby.type==='echo'){
+    const e=nearby.value,locked=story.memoryLocked(e.id);
+    if(locked){toast(...locked);playTone(180,.3,.04);return;}
+    const c=CHAPTERS.find(c=>c.id===e.id);
+    memories.add(e.id);story.remember(e.id);e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;persist();playTone(690,.7,.11,'sine');playTone(1040,.6,.05,'triangle');
+    toast(`MEMORY FOUND · ${c.memoryTitle}`,`${c.memoryText}<br><br>${story.info.objective}`);toastTimer=7;
   }else if(nearby.type==='gate'){
-    if(memories.size<3){toast('THE GATE IS SEALED',`${3-memories.size} lost ${memories.size===2?'memory':'memories'} remain.`);return;}
+    if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
+    if(story.stage==='gate'){story.advance('end');persist();}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
   }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast('THE ROOTS RESTORE YOUR VITALITY','Sap Flasks refilled.');}
+}
+
+// ----------------------------------------------------------------- dialogue
+// E (or click) reveals the rest of a line, then moves to the next; walking
+// away ends the conversation. Story conversations advance the quest when
+// they finish, and may wake the chapter's hollowed.
+function openDialogue(id){
+  const conv=story.talk(id,profile.name);
+  dialogue={id,...conv,i:0,chars:0,opened:elapsed};npcs[id]?.setTalking(true);
+  $('dialogueName').textContent=NPCS[id].name;$('dialogueTitle').textContent=NPCS[id].title;
+  $('dialogue').classList.remove('hidden');renderDialogue();playTone(520,.12,.025,'triangle');
+}
+function renderDialogue(){
+  const line=dialogue.lines[dialogue.i],shown=Math.min(line.length,Math.floor(dialogue.chars));
+  $('dialogueText').textContent=line.slice(0,shown);
+  $('dialogueHint').innerHTML=shown<line.length?'<b>E</b> · SKIP':dialogue.i<dialogue.lines.length-1?`<b>E</b> · CONTINUE <em>${dialogue.i+1} / ${dialogue.lines.length}</em>`:'<b>E</b> · FAREWELL';
+}
+function advanceDialogue(){
+  if(!dialogue)return;
+  const line=dialogue.lines[dialogue.i];
+  if(dialogue.chars<line.length){dialogue.chars=line.length;renderDialogue();return;}
+  if(++dialogue.i>=dialogue.lines.length){closeDialogue(true);return;}
+  dialogue.chars=0;renderDialogue();playTone(460,.05,.012,'triangle');
+}
+function closeDialogue(finished){
+  const d=dialogue;if(!d)return;dialogue=null;
+  $('dialogue').classList.add('hidden');npcs[d.id]?.setTalking(false);
+  if(!finished||!d.then)return;
+  const from=story.stage;story.advance(d.then);
+  if(from==='trial_report'){player.flasks=FLASK.charges;player.health=maxHealth();}
+  if(d.spawn)spawnEncounter(d.spawn);
+  persist();toast('NEW OBJECTIVE',story.info.objective);playTone(620,.35,.05,'sine');
+}
+function updateDialogue(dt){
+  if(!dialogue)return;
+  const n=NPCS[dialogue.id];
+  if(Math.hypot(n.x-player.x,n.z-player.z)>5.5){closeDialogue(false);return;}
+  const line=dialogue.lines[dialogue.i];
+  if(dialogue.chars<line.length){dialogue.chars=Math.min(line.length,dialogue.chars+dt*62);renderDialogue();}
+}
+
+// ---------------------------------------------------------------- encounters
+// The hollowed gather only at the site of the chapter being played: they rise
+// out of the roots when its keeper sends you in, or when you walk into the
+// site first. A chapter's nest stays cleared once it is cleared; if you fall,
+// the survivors sink back and rise again when you return.
+function spawnEncounter(id){
+  if(spawned.has(id)||story.cleared.has(id))return;
+  spawned.add(id);
+  const mobs=creatures.filter(c=>c.chapter===id);
+  mobs.forEach(c=>{c.emerge();effects.ring(new THREE.Vector3(c.x,groundY(c.x,c.z),c.z));});
+  sound.attack('slam');sound.enrage();cue('THE HOLLOWED RISE',1.4);
+  debug.note(`encounter ${id}: ${mobs.length} hollowed rise`,elapsed);
+}
+function updateEncounters(){
+  if(story.stage==='trial'&&creatures.some(c=>c.id==='trial'&&c.state==='defeated')){story.advance('trial_report');persist();toast('WREN’S TRIAL PASSED',story.info.objective);playTone(620,.35,.05,'sine');}
+  const ch=story.chapter,step=story.info.step;
+  if(ch&&!story.cleared.has(ch.id)&&!spawned.has(ch.id)&&(step==='find'||step==='fight')){
+    const d=Math.hypot(player.x-ch.site.x,player.z-ch.site.z);
+    if(d<(step==='fight'?24:12))spawnEncounter(ch.id);
+  }
+  for(const id of spawned){
+    if(creatures.some(c=>c.chapter===id&&c.alive))continue;
+    spawned.delete(id);story.clear(id);persist();
+    const c=CHAPTERS.find(c=>c.id===id),keeper=NPCS[c.npc].name;
+    playTone(560,.6,.06,'triangle');playTone(840,.5,.03,'sine');
+    toast(`${c.site.title} IS CLEAR`,story.info.step==='memory'?story.info.objective:`Speak with ${keeper[0]+keeper.slice(1).toLowerCase()}.`);
+  }
+}
+function resetEncounters(){
+  for(const id of spawned)creatures.filter(c=>c.chapter===id).forEach(c=>c.sleep());
+  spawned.clear();
 }
 function maxHealth(){return Math.max(3,Math.min(6,3+Math.floor(stats().defense/7)));}
 // Real-world strength scales strike damage; turtles never grant XP.
 const strikePower=()=>1+Math.max(-.3,Math.min(.5,(stats().strength-10)*.05));
 function hurtPlayer(from,kind='light',damage=1){
+  closeDialogue(false);
   player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
@@ -200,7 +288,7 @@ function hurtPlayer(from,kind='light',damage=1){
 }
 function respawn(){
   player.defeated=0;player.health=maxHealth();player.x=0;player.z=39;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
-  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');
+  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;
   toast('THE ROOTS RETURN YOU TO THE TRAIL','The memories you found remain with you.');
 }
 
@@ -256,7 +344,8 @@ function handleCombatEvents(){
       if(ev.critical){slowMo(.35,.45);}
       debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
       if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
-      if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
+      if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');
+}
     }
     else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);cue('BLOCKED',.45);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
     else if(ev.type==='whiff'){sound.whiff();cue('MISSED',.3);debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
@@ -310,20 +399,21 @@ function updateHUD(){
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(FLASK.charges-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
-  const next=SITES.filter(s=>!memories.has(s.id)).sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z))[0]||GATE;
+  const next=story.target();
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   const bearing=-Math.atan2(next.x-player.x,-(next.z-player.z));
   const diff=Math.atan2(Math.sin(bearing-player.cameraYaw),Math.cos(bearing-player.cameraYaw));
   $('compass').textContent=Math.abs(diff)<.32?'↑':diff>.32&&diff<2.7?'↖':diff<-.32&&diff>-2.7?'↗':'↓';
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${distance} m`;
-  $('objective').textContent=memories.size===3?'Reach the Canopy Gate':`Recover the lost memories · ${memories.size}/3`;
+  $('objective').textContent=story.info.objective;
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';$('region').textContent=region;
   const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
-  $('interaction').classList.toggle('hidden',!nearby&&!crit&&!combat.charging);
+  $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
   if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
   else if(crit)$('interaction').innerHTML='<b>CLICK</b> · ROOT STRIKE';
+  else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
 function updateModeLabel(){$('cameraMode').textContent=player.thirdPerson?(lockTarget?'THIRD PERSON · LOCKED ON':'THIRD PERSON'):'FIRST PERSON';}
@@ -340,6 +430,7 @@ function update(rawDt){
   // Movement intent relative to the camera, in world space.
   let f=Number(keyState.has('KeyW')||keyState.has('ArrowUp'))-Number(keyState.has('KeyS')||keyState.has('ArrowDown'));
   let side=Number(keyState.has('KeyD')||keyState.has('ArrowRight'))-Number(keyState.has('KeyA')||keyState.has('ArrowLeft'));
+  if(dialogue){f=0;side=0;}
   if((f||side)&&player.emote!=='idle')endEmote();
   const len=Math.hypot(f,side)||1;f/=len;side/=len;
   const view=player.cameraYaw;
@@ -383,7 +474,8 @@ function update(rawDt){
   if(!player.thirdPerson)player.yaw=combat.facing;
   else if(!combat.busy){
     let want=null;
-    if(lockTarget)want=yawOf(lockTarget.x-player.x,lockTarget.z-player.z);
+    if(dialogue)want=yawOf(NPCS[dialogue.id].x-player.x,NPCS[dialogue.id].z-player.z);
+    else if(lockTarget)want=yawOf(lockTarget.x-player.x,lockTarget.z-player.z);
     else if(hasInput)want=yawOf(input.x,input.z);
     if(want!==null)combat.facing+=angleTo(combat.facing,want)*(1-Math.exp(-(lockTarget?16:12)*dt));
   }
@@ -406,6 +498,14 @@ function update(rawDt){
   }
   if(player.height<=0){player.height=0;player.velocityY=0;player.grounded=true;}
   else if(player.velocityY!==0)player.grounded=false;
+
+  // The story: conversations, the active chapter's hollowed, the keepers.
+  updateDialogue(rawDt);updateEncounters();
+  if(dialogue&&elapsed-dialogue.opened<.9){const n=NPCS[dialogue.id];player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
+  for(const [id,npc] of Object.entries(npcs))npc.update(dt,player);
+  const speaker=story.speaker&&NPCS[story.speaker];questMarker.visible=!!speaker&&!dialogue;
+  if(speaker){questMarker.position.set(speaker.x,groundY(speaker.x,speaker.z)+2.3*speaker.scale+Math.sin(elapsed*3)*.08,speaker.z);questMarker.rotation.y+=rawDt*1.6;}
+  for(const [id,n] of Object.entries(NPCS))if(Math.hypot(n.x-player.x,n.z-player.z)<7)npcs[id]?.greet();
 
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
@@ -529,6 +629,8 @@ function update(rawDt){
 }
 shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);shell.start();
+if(!params.has('procedural'))for(const [id,def] of Object.entries(NPCS))createNPC(scene,def,groundY).then(npc=>{npcs[id]=npc;if(dialogue?.id===id)npc.setTalking(true);})
+  .catch(err=>console.warn(`${id} failed to load.`,err));
 if(!params.has('procedural'))loadExplorer(scene).then(explorer=>{
   const old=avatar;explorer.root.position.copy(old.root.position);explorer.root.rotation.y=old.root.rotation.y;
   scene.remove(old.root);avatar=explorer;avatar.setAppearance(profile.appearance);avatar.emote(player.emote);
@@ -564,5 +666,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;}};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned};
 }

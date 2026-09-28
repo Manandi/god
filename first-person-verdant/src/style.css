@@ -8,3 +8,9 @@
 #damageLayer .dmg.crit{color:#ffe07a;font-size:28px;letter-spacing:.04em}
 .meter.flash{outline:1px solid #e6866a}
 #hearts .flasks{font-style:normal;font-size:13px;margin-left:10px;color:#e3c47a;letter-spacing:2px;align-self:center}
+
+#dialogue{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);width:min(760px,calc(100vw - 32px));padding:18px 24px 14px;background:#0a1d18ec;border:1px solid #b2d59c88;box-shadow:0 18px 60px #0008;pointer-events:none}
+#dialogue .speaker{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}#dialogue strong{font:600 18px 'Cinzel',serif;letter-spacing:.08em;color:#f0d98f}#dialogue .speaker span{font-size:10px;letter-spacing:.2em;color:#a9c6a2}
+#dialogueText{margin:10px 0 12px;min-height:3.4em;font:16px/1.6 'Cinzel',serif;color:#e8f1df}#dialogueHint{display:block;text-align:right;font-size:11px;letter-spacing:.1em;color:#bcd0b8}#dialogueHint b{color:#ccebab}#dialogueHint em{font-style:normal;opacity:.6;margin-left:8px}
+#interaction small{display:block;font-size:10px;letter-spacing:.16em;color:#a9c6a2;margin-top:3px}
+@media(max-width:700px){#dialogue{bottom:70px;padding:14px 16px 10px}#dialogueText{font-size:14px}}
