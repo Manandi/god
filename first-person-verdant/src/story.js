@@ -94,7 +94,7 @@ const DIALOGUE = {
       ] }
     },
     idle: [
-      ['<trial_report', 'Out the north gate, past the ward posts. Watch the glow in its shell before it moves. Roll into the strike, or hold C and meet it head on.'],
+      ['<trial_report', 'Out the north gate, past the ward posts. Watch the glow in its shell before it moves. Dash into the strike, or hold C and meet it head on.'],
       ['<rootwell', 'Orin watched that from the wall. Go and tell him; he decides where the road starts for you.'],
       ['<ruins', 'Brannoch is as stubborn as bark. If he has gone quiet, it is because he is too busy to talk. I tell myself that, anyway.'],
       ['<shrine', 'Ysolde was a Sentinel of Mosswatch when I was a girl. If anyone still knows the Warden’s oath word for word, it is her.'],
@@ -218,7 +218,7 @@ const DIALOGUE = {
     },
     idle: [
       ['<shrine', 'Shh! Thornlings, everywhere. Come back with somebody who knows what they’re doing. Or be that somebody.'],
-      ['<shrine_memory', 'When a shellback rears up, jump or roll through the ring. Through! I learned that the hard way. My ribs learned it.'],
+      ['<shrine_memory', 'When a shellback rears up, jump or dash through the ring. Through! I learned that the hard way. My ribs learned it.'],
       ['<shrine_report', 'The carving is just above the light. Go on, touch it. I would, but I’m supervising.'],
       ['<end', 'Orrun. Say it like you mean it. Don’t let it be forgotten again.'],
       ['>=end', 'You did it! Sela says I can be a real scout now. On probation. Heavy probation.']

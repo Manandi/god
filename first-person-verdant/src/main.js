@@ -1,13 +1,15 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA } from './world.js';
 import { createCreatures,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
-import { createStory,NPCS,CHAPTERS,keeperName } from './story.js';
+import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
+import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
+import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides } from './mechanics.js';
 import { createGlobe } from './globe.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile } from './profile.js';
@@ -32,12 +34,13 @@ for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.sc
 const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
+const shoulderCam=new ShoulderCamera(camera,{obstacles:world.cameraObstacles,grid:collisionGrid});
 // The procedural body shows until the authored explorer has loaded, and stays
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
 const combat=new PlayerCombat(),sound=new CombatSound(),effects=new ImpactEffects(scene),debug=new CombatDebug(scene);
 // A new day starts at the Rootward Homestead, south of Mossgate.
-const player={x:world.home.spawn.x,z:world.home.spawn.z,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0,flasks:FLASK.charges,sprinting:false};
+const player={x:world.home.spawn.x,z:world.home.spawn.z,yaw:0,cameraYaw:0,pitch:0,health:4,stamina:100,step:0,height:0,velocityY:0,grounded:true,vx:0,vz:0,thirdPerson:params.has('third'),zoom:5.2,camElev:.28,jumpCount:0,winded:false,emote:'idle',engaged:0,jumpT:9,landT:9,interactT:9,airTime:0,defeated:0,flasks:FLASK.charges,sprinting:false};
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
 let cueText='',cueUntil=0,cameraKick=0;
@@ -80,11 +83,11 @@ function updateJournal(){
     `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('');
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
-function resume(){if(!started)player.health=maxHealth();started=true;paused=false;shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+function resume(){if(!started)player.health=maxHealth();started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
-  if(!document.pointerLockElement&&started&&!journalOpen&&!done&&shell?.view==='game'){paused=true;shell.show('menu');$('hud').classList.add('hidden');}
+  if(!document.pointerLockElement&&started&&!journalOpen&&!done&&!dev.open&&!dialogue?.choices&&shell?.view==='game'){paused=true;shell.show('menu');$('hud').classList.add('hidden');}
   else if(document.pointerLockElement){paused=false;shell?.hide();}
 });
 const endEmote=()=>{if(player.emote!=='idle'){player.emote='idle';avatar.emote('idle');}};
@@ -98,6 +101,8 @@ const sprintHeld=()=>shiftDownAt>=0&&(performance.now()-shiftDownAt)/1000>=SPRIN
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
   keyState.add(e.code);
+  if(e.code==='F2'&&!e.repeat){e.preventDefault();toggleDev();return;}
+  if(e.code==='F4'&&!e.repeat){e.preventDefault();togglePerf();return;}
   if(e.code==='F3'){e.preventDefault();debug.toggle();return;}
   if(e.code==='KeyJ'&&started){toggleJournal(!journalOpen);return;}
   if(e.repeat)return;
@@ -115,7 +120,13 @@ window.addEventListener('keydown',e=>{
   if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!combat.busy){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
-  if(e.code==='Space'&&!paused&&!dialogue&&player.grounded&&!combat.busy&&!player.defeated){endEmote();player.velocityY=8.3;player.grounded=false;player.jumpT=0;playTone(260,.13,.04);}
+  if(e.code==='Space'&&!paused&&!dialogue&&!combat.busy&&!player.defeated){
+    // Jump height follows your measured vertical jump; 55 cm or more unlocks a double jump.
+    const second=!player.grounded&&player.jumpCount===1&&mech.doubleJump;
+    if(player.grounded||second){endEmote();player.velocityY=mech.jumpVelocity*(second?.88:1);player.grounded=false;player.jumpCount=second?2:1;player.jumpT=0;
+      if(second){spend(12);cue('DOUBLE JUMP',.35);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z)+player.height,player.z));}playTone(second?390:260,.13,.04);}
+    else if(!player.grounded&&player.jumpCount===1)cue(`DOUBLE JUMP AT 55 CM VERTICAL · YOURS ${profile.inputs.verticalJumpCm} CM`,1.2);
+  }
   if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!paused)shiftDownAt=performance.now();
   if(e.code==='KeyC')guardPressed(true);
   if(e.code==='KeyX'&&!paused&&!dialogue){endEmote();combat.press('flask');}
@@ -126,27 +137,36 @@ window.addEventListener('keydown',e=>{
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
 window.addEventListener('keyup',e=>{keyState.delete(e.code);if(e.code==='KeyR')heavyPressed(false);if(e.code==='KeyC')guardPressed(false);
-  // Roll on a tap of Shift; holding it sprints instead (released without rolling).
+  // Dash on a tap of Shift; holding it sprints instead (released without dashing).
   if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&shiftDownAt>=0){if((performance.now()-shiftDownAt)/1000<SPRINT.hold)evadePressed();shiftDownAt=-1;}});
 window.addEventListener('blur',()=>{keyState.clear();shiftDownAt=-1;guardPressed(false);heavyPressed(false);});
 document.addEventListener('mousemove',e=>{
-  if(document.pointerLockElement!==canvas||paused)return;
-  // While locked on, the camera follows the fight; a hard flick switches target.
-  if(lockTarget&&player.thirdPerson){lockFlick+=e.movementX;if(Math.abs(lockFlick)>140){switchTarget(Math.sign(lockFlick));lockFlick=0;}}
-  else player.cameraYaw-=e.movementX*.0021;
+  if(paused)return;
+  const locked=document.pointerLockElement===canvas,rightDrag=!!(e.buttons&2)&&(locked||e.target===canvas);
+  if(player.thirdPerson){
+    // Third person: hold the right mouse button to orbit (with or without pointer lock).
+    if(!rightDrag)return;
+    // While locked on, the camera follows the fight; a hard flick switches target.
+    if(lockTarget){lockFlick+=e.movementX;if(Math.abs(lockFlick)>140){switchTarget(Math.sign(lockFlick));lockFlick=0;}}
+    else player.cameraYaw-=e.movementX*.0024;
+    player.camElev=THREE.MathUtils.clamp(player.camElev+e.movementY*.0022,MIN_ELEVATION,MAX_ELEVATION);
+    return;
+  }
+  // First person: normal mouse-look (pointer lock), or right-drag without it.
+  if(!locked&&!rightDrag)return;
+  player.cameraYaw-=e.movementX*.0021;
   player.pitch=THREE.MathUtils.clamp(player.pitch-e.movementY*.00185,-1.35,1.35);
 });
 let lockFlick=0;
 canvas.addEventListener('mousedown',e=>{
   if(paused)return;
   if(e.button===1){e.preventDefault();toggleLock();return;}
-  if(e.button===2){heavyPressed(true);return;}
+  if(e.button===2){e.preventDefault();return;}          // right button: camera orbit
   if(e.button!==0)return;
   if(document.pointerLockElement!==canvas)canvas.requestPointerLock?.()?.catch?.(()=>{});
   attackPressed();
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('mouseup',e=>{if(e.button===2)heavyPressed(false);});
 window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(pixelRatio);});
 
 // ---------------------------------------------------------------- targeting
@@ -186,7 +206,7 @@ function nearestInteractable(){
   const npc=Object.entries(NPCS).map(([id,n])=>({id,n,dist:d(n)})).filter(v=>v.dist<3.3).sort((a,b)=>a.dist-b.dist)[0];
   if(npc)return{type:'npc',id:npc.id,value:npc.n};
   if(warden?.state==='released'&&story.stage==='gate'&&d(warden)<8)return{type:'orrun'};
-  const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+Math.max(0,stats().intelligence-10)*.18);
+  const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+mech.echoReach);
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
@@ -281,7 +301,97 @@ function handleBossEvent(c,ev){
   if(ev.type==='attack'){sound.wardenAttack(ev.attack);return true;}
   return false;
 }
-const BOSS_CUES={bite:'BITE · PARRY OR ROLL',stomp:'STOMP · JUMP OR ROLL THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · ROLL ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
+const BOSS_CUES={bite:'BITE · PARRY OR DASH',stomp:'STOMP · JUMP OR DASH THROUGH THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · DASH ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
+
+// ------------------------------------------------------------------ dev mode
+// F2 (or the DEV button): test any part of the map, any weapon, any class and
+// any point in the story without playing up to it. Adapted from the ChatGPT
+// Sites developer panel.
+const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false};
+const devPanel=$('devPanel');
+const perfPanel=document.createElement('pre');perfPanel.id='perfPanel';perfPanel.style.display='none';document.body.appendChild(perfPanel);
+let showPerf=false,fpsFrames=0,fpsTime=0;
+function togglePerf(){showPerf=!showPerf;perfPanel.style.display=showPerf?'block':'none';}
+const collisionViz=new THREE.Group(),collisionVizMeshes=[];
+{const g=new THREE.RingGeometry(.92,1,28),m=new THREE.MeshBasicMaterial({color:0xffc86a,transparent:true,opacity:.72,side:THREE.DoubleSide,depthWrite:false});
+  for(let i=0;i<64;i++){const r=new THREE.Mesh(g,m);r.rotation.x=-Math.PI/2;r.visible=false;collisionViz.add(r);collisionVizMeshes.push(r);}}
+scene.add(collisionViz);
+function updateCollisionViz(){
+  collisionViz.visible=dev.showColliders;if(!dev.showColliders)return;
+  const near=[...new Set([[0,0],[8,0],[-8,0],[0,8],[0,-8]].flatMap(([dx,dz])=>collisionGrid.near(player.x+dx,player.z+dz)))]
+    .sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z));
+  collisionVizMeshes.forEach((r,i)=>{const c=near[i];r.visible=!!c;if(c){r.position.set(c.x,groundY(c.x,c.z)+.06,c.z);r.scale.setScalar(c.r+.43);}});
+}
+$('devStage').innerHTML=STAGES.map(s=>`<option value="${s.id}">${s.id.toUpperCase().replace(/_/g,' ')} · ${s.objective}</option>`).join('');
+function updateDevTelemetry(){
+  const s=stats(),w=equippedWeapon();
+  $('devTelemetry').textContent=`X ${player.x.toFixed(1)}  Z ${player.z.toFixed(1)}  GROUND ${groundY(player.x,player.z).toFixed(2)}\nSTAGE ${story.stage}  ·  ${story.info.objective}\nSTR ${s.strength}  SPD ${s.speed}  STA ${s.stamina}  DEF ${s.defense}  INT ${s.intelligence}  DIS ${s.discipline}\nCLASS ${mech.klass.toUpperCase()}  ·  WEAPON ${w.toUpperCase()}${devOverrides.anyWeapon?' (DEV)':''}\nHP ${player.health}/${maxHealth()}  BREATH ${Math.round(player.stamina)}  JUMP ${mech.doubleJump?'DOUBLE':'SINGLE'}`;
+  devPanel.querySelectorAll('[data-dev]').forEach(b=>b.classList.toggle('active',!!({invulnerable:dev.invulnerable,noclip:dev.noclip,colliders:dev.showColliders,breath:dev.breath,fps:showPerf,debug:debug.enabled})[b.dataset.dev]));
+  devPanel.querySelectorAll('[data-weapon]').forEach(b=>b.classList.toggle('active',b.dataset.weapon==='locks'?!devOverrides.anyWeapon:devOverrides.anyWeapon&&profile.appearance.weapon===b.dataset.weapon));
+  devPanel.querySelectorAll('[data-class]').forEach(b=>b.classList.toggle('active',profile.appearance.discipline===b.dataset.class));
+  $('devStage').value=story.stage;
+}
+function toggleDev(open=!dev.open){
+  if(!started)return;
+  dev.open=open;devPanel.classList.toggle('hidden',!open);keyState.clear();
+  if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();updateDevTelemetry();}
+  else{paused=false;shell?.hide();$('hud').classList.remove('hidden');canvas.requestPointerLock?.()?.catch?.(()=>{});}
+}
+function teleport(x,z,label){
+  player.x=x;player.z=z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.jumpCount=0;player.defeated=0;
+  lockTarget=null;combat.state='move';combat.t=0;cameraKick=0;viewBlend=0;toast(`DEV · ${label}`,'Moved to solid ground.');
+}
+const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
+  ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
+const STAT_PRESETS={
+  weak:{pushups:2,pullups:0,dashSeconds:7.4,verticalJumpCm:12,mileSeconds:880,restingHeartRate:88,plankSeconds:15,benchPressKg:15,sleepHours:5},
+  default:{pushups:15,pullups:5,dashSeconds:5.5,verticalJumpCm:40,mileSeconds:600,restingHeartRate:68,plankSeconds:90,benchPressKg:60,sleepHours:7},
+  athlete:{pushups:40,pullups:12,dashSeconds:4.9,verticalJumpCm:55,mileSeconds:480,restingHeartRate:58,plankSeconds:180,benchPressKg:90,sleepHours:8},
+  max:{pushups:60,pullups:22,dashSeconds:4.4,verticalJumpCm:70,mileSeconds:360,restingHeartRate:45,plankSeconds:300,benchPressKg:130,sleepHours:8.5}};
+/** Jump straight to a story stage: earlier chapters count as done. */
+function devJumpTo(stage){
+  const at=STAGES.findIndex(s=>s.id===stage);
+  for(const c of CHAPTERS)if(STAGES.findIndex(s=>s.id===`${c.id}_report`)<at){memories.add(c.id);story.cleared.add(c.id);const e=world.echoes.find(e=>e.id===c.id);if(e)e.crystal.visible=e.ring.visible=e.light.visible=false;}
+  resetEncounters();story.advance(stage);
+  if(story.reached('end')){warden?.release(true);if(gateRoots)gateRoots.visible=false;}else if(warden&&!warden.alive){warden.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;}
+  persist();toast('DEV · STORY',story.info.objective);
+}
+$('devButton').onclick=e=>{e.stopPropagation();toggleDev(true);};
+devPanel.addEventListener('change',e=>{if(e.target.id==='devStage')devJumpTo(e.target.value);updateDevTelemetry();});
+devPanel.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;e.stopPropagation();
+  if(b.dataset.teleport){const [x,z,label]=DEV_PLACES[b.dataset.teleport];teleport(x,z,label);}
+  else if(b.dataset.weapon){
+    if(b.dataset.weapon==='locks'){devOverrides.anyWeapon=false;toast('DEV · STAT LOCKS ON',`In hand: ${equippedWeapon().toUpperCase()}`);}
+    else{devOverrides.anyWeapon=true;profile.appearance.weapon=b.dataset.weapon;saveProfile();toast('DEV · WEAPON',b.dataset.weapon.toUpperCase());}
+    equipWeapon();
+  }
+  else if(b.dataset.class){profile.appearance.discipline=b.dataset.class;saveProfile();mech=mechanics();player.health=Math.min(player.health,maxHealth());toast('DEV · CLASS',b.dataset.class.toUpperCase());}
+  else if(b.dataset.preset){Object.assign(profile.inputs,STAT_PRESETS[b.dataset.preset]);saveProfile();mech=mechanics();player.health=maxHealth();player.stamina=100;equipWeapon();toast('DEV · STAT PRESET',b.dataset.preset.toUpperCase());}
+  else switch(b.dataset.dev){
+    case 'close':toggleDev(false);return;
+    case 'reset':teleport(world.home.spawn.x,world.home.spawn.z,'UNSTUCK');break;
+    case 'heal':player.health=maxHealth();player.stamina=100;player.winded=false;player.flasks=FLASK.charges;player.defeated=0;toast('DEV · RESTORED');break;
+    case 'invulnerable':dev.invulnerable=!dev.invulnerable;break;
+    case 'breath':dev.breath=!dev.breath;break;
+    case 'noclip':dev.noclip=!dev.noclip;break;
+    case 'colliders':dev.showColliders=!dev.showColliders;updateCollisionViz();break;
+    case 'fps':togglePerf();break;
+    case 'debug':debug.toggle();break;
+    case 'stage':devJumpTo($('devStage').value);break;
+    case 'next':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i<STAGES.length-1)devJumpTo(STAGES[i+1].id);break;}
+    case 'defeat-nearby':{let n=0;for(const c of creatures)if(c.alive&&c!==warden&&Math.hypot(c.x-player.x,c.z-player.z)<30){c.hit({damage:1e6,poise:0,fromX:player.x,fromZ:player.z,push:0,stagger:0,part:'head'});n++;}
+      if(warden?.alive&&warden.awake&&Math.hypot(warden.x-player.x,warden.z-player.z)<30){warden.hit({damage:1e6,poise:0,fromX:player.x,fromZ:player.z,stagger:0,part:'head'});n++;}
+      toast('DEV · CLEARED',`${n} defeated.`);break;}
+    case 'unlock-memories':devJumpTo('gate');break;
+    case 'wake':if(story.before('gate'))devJumpTo('gate');warden?.setSealed(false);warden?.wake();teleport(ARENA.x,ARENA.z+8,"WARDEN'S HOLLOW");break;
+    case 'reset-world':
+      memories.clear();story.cleared.clear();resetEncounters();story.advance('meet_sela');
+      for(const e of world.echoes)e.crystal.visible=e.ring.visible=e.light.visible=true;
+      warden?.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;persist();toast('DEV · STORY RESET');break;
+  }
+  updateDevTelemetry();
+});
 
 // ---------------------------------------------------------------- encounters
 // The hollowed gather only at the site of the chapter being played: they rise
@@ -315,11 +425,16 @@ function resetEncounters(){
   for(const id of spawned)creatures.filter(c=>c.chapter===id).forEach(c=>c.sleep());
   spawned.clear();
 }
-function maxHealth(){return Math.max(3,Math.min(6,3+Math.floor(stats().defense/7)));}
+// Real-life stats and class decide these numbers (mechanics.js); refreshed every frame.
+let mech=mechanics();
+function maxHealth(){return mech.maxHealth;}
+/** Show the weapon actually in hand (stat-gated; dev mode can override). */
+function equipWeapon(){const w=equippedWeapon();avatar.setWeapon?.(w);hands.setWeapon(w);}
 // Real-world strength scales strike damage; turtles never grant XP.
-const strikePower=()=>1+Math.max(-.3,Math.min(.5,(stats().strength-10)*.05));
+const strikePower=()=>mech.damage*weaponPower(equippedWeapon());
 function hurtPlayer(from,kind='light',damage=1){
   closeDialogue(false);
+  if(dev.invulnerable){cue('DEV · NO DAMAGE',.45);return;}
   player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
@@ -354,7 +469,9 @@ function updateNumbers(dt){
     n.el.style.transform=`translate(${(v.x*.5+.5)*innerWidth}px,${(-v.y*.5+.5)*innerHeight}px) translate(-50%,-50%) scale(${.9+Math.max(0,n.life-.7)*1.5})`;
     n.el.style.opacity=show?Math.min(1,n.life*2.5):0;if(n.life<=0){n.el.remove();numbers.splice(i,1);}}
 }
-function spend(amount){if(!amount)return;player.stamina=Math.max(0,player.stamina-amount);staminaRest=STAMINA.delay;}
+function spend(amount){if(!amount)return;player.stamina=Math.max(0,player.stamina-amount*mech.staminaCost);staminaRest=STAMINA.delay;
+  // Emptying Breath leaves you winded: no attacks or dashes until it refills to 30 (after Rotten Souls, MIT).
+  if(player.stamina<=0&&!player.winded){player.winded=true;cue('WINDED',.8);sound.tired();}}
 function critTarget(){
   // A toppled or parried creature within reach opens the Root Strike.
   return creatures.find(c=>c.alive&&c.exposed&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
@@ -363,10 +480,11 @@ function handleCombatEvents(){
   for(const ev of combat.events){
     if(ev.type==='swing'){sound.swing(ev.move);cue(MOVES[ev.move].label.toUpperCase(),.22);}
     else if(ev.type==='spend')spend(ev.amount);
-    else if(ev.type==='evade'){sound.evade();cue('ROLL',.3);}
+    else if(ev.type==='evade'){sound.evade();cue('DASH',.3);}
     else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
-    else if(ev.type==='charge'){sound.charge(ev.level);cue(`CHARGE ${'I'.repeat(ev.level)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
-    else if(ev.type==='release'&&ev.level)debug.note(`Taproot Heel released at charge ${ev.level}`,elapsed);
+    else if(ev.type==='rootbreaker'){cue('ROOTBREAKER · HOLD TO CHARGE',.6);sound.charge(0);}
+    else if(ev.type==='charge'){sound.charge(ev.level);cue(`ROOTBREAKER · CHARGE ${'I'.repeat(ev.level+1)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
+    else if(ev.type==='release'&&ev.level)debug.note(`${MOVES[combat.move]?.label||'Heavy'} released at charge ${ev.level}`,elapsed);
     else if(ev.type==='guardUp')sound.guardUp();
     else if(ev.type==='flask'){sound.flask();cue('SAP FLASK',.6);}
     else if(ev.type==='noFlask'){sound.tired();cue('NO SAP LEFT · REST AT THE TRAIL STONE',1.2);}
@@ -375,13 +493,16 @@ function handleCombatEvents(){
     else if(ev.type==='hit'){
       const m=MOVES[ev.move],dir=ev.point.clone().sub(new THREE.Vector3(player.x,ev.point.y,player.z)).normalize();
       const power=strikePower();
-      const res=ev.target.hit({damage:ev.damage*power,poise:ev.poise*power,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger,part:ev.part});
+      // Mages put Intelligence into charged Rootbreakers; fighters stagger harder.
+      const chargePower=/rootbreaker/.test(ev.move)?mech.chargePower:1;
+      const res=ev.target.hit({damage:ev.damage*power*chargePower,poise:ev.poise*power*chargePower,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger*mech.stagger,part:ev.part,pierce:ev.pierce});
       if(!res)continue;
       combo++;comboTimer=2;
-      const heavy=ev.move==='heel'||ev.critical;
+      const heavy=ev.heavy;
       sound.hit(ev.move,res.effect,combo);
       if(res.effect==='armored')effects.chips(ev.point);else effects.burst(ev.point,dir.clone().negate(),heavy);
       if(heavy)effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
+      if(ev.ring){effects.shockwave(new THREE.Vector3(ev.point.x,groundY(ev.point.x,ev.point.z),ev.point.z),.4,2.2+ev.chargeLevel*.6,.3);shoulderCam.punch(.25+ev.chargeLevel*.12);}
       damageNumber(ev.point,res.damage,ev.critical?'crit':res.effect);
       hitstop=Math.max(hitstop,ev.hitstop*(res.effect==='armored'?.7:1));player.engaged=4;
       kick({x:ev.target.x,z:ev.target.z},heavy?-.12:-.04);cameraKick=Math.max(cameraKick,heavy?.065:.04);
@@ -417,9 +538,10 @@ function incomingStrike(c,ev){
   if(combat.guarding&&inFront&&!ev.ring){
     if(combat.parrying&&c.deflect()){
       sound.parry();slowMo(.35,.35);hitstop=Math.max(hitstop,.12);effects.burst(new THREE.Vector3(player.x+toward.x/tl*.6,groundY(player.x,player.z)+1.2,player.z+toward.z/tl*.6),new THREE.Vector3(-toward.x/tl,0,-toward.z/tl),true);
+      player.stamina=Math.min(STAMINA.max,player.stamina+mech.parryReward);player.winded=false;
       cue('PARRY · RIPOSTE',.9);debug.note(`${c.type} ${ev.label} → PARRIED (guard raised ${(combat.clock-combat.guardSince).toFixed(2)} s before)`,elapsed);return;
     }
-    const cost=GUARD.cost[ev.kind];
+    const cost=GUARD.cost[ev.kind]*mech.guardCost;
     if(player.stamina>=cost){
       spend(cost);combat.onBlocked();sound.block(ev.kind);hitstop=Math.max(hitstop,.06);kick(c,.06);
       const chip=Math.round(ev.damage*GUARD.chip[ev.kind]);if(chip)player.health=Math.max(0,player.health-chip);
@@ -447,10 +569,8 @@ function updateHUD(){
   $('staminaFill').style.width=`${player.stamina}%`;
   const next=story.target();
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
-  const bearing=-Math.atan2(next.x-player.x,-(next.z-player.z));
-  const diff=Math.atan2(Math.sin(bearing-player.cameraYaw),Math.cos(bearing-player.cameraYaw));
-  $('compass').textContent=Math.abs(diff)<.32?'↑':diff>.32&&diff<2.7?'↖':diff<-.32&&diff>-2.7?'↗':'↓';
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${distance} m`;
+  updateWaypoint(next,distance);
   $('objective').textContent=story.info.objective;
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
@@ -464,6 +584,35 @@ function updateHUD(){
   else if(nearby?.type==='orrun')$('interaction').innerHTML='<b>E</b> · SPEAK ITS NAME <small>ORRUN</small>';
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
+}
+// --------------------------------------------------------- quest waypoint
+// A compass strip that turns with the view, a diamond pinned to the objective
+// on screen (clamped to the edge with an arrow when it is behind you), and a
+// pillar of light over the objective that can be seen from anywhere.
+const COMPASS_SPAN=Math.PI*.9,HEADINGS=[['N',0],['NE',-Math.PI/4],['E',-Math.PI/2],['SE',-Math.PI*.75],['S',Math.PI],['SW',Math.PI*.75],['W',Math.PI/2],['NW',Math.PI/4]];
+$('compassTicks').innerHTML=HEADINGS.map(([n])=>`<span class="${n.length>1?'minor':''}">${n}</span>`).join('');
+const beacon=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,70,10,1,true),new THREE.MeshBasicMaterial({color:0xf0c86a,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));
+beacon.renderOrder=3;scene.add(beacon);
+function updateWaypoint(target,distance){
+  const width=$('compassBar').clientWidth||420,view=camera.getWorldDirection(new THREE.Vector3()),viewYaw=yawOf(view.x,view.z);
+  const place=yaw=>{const d=angleTo(viewYaw,yaw);return{d,x:width/2-d/COMPASS_SPAN*width};};
+  [...$('compassTicks').children].forEach((el,i)=>{const {d,x}=place(HEADINGS[i][1]);el.style.left=`${x}px`;el.style.display=Math.abs(d)<COMPASS_SPAN*.55?'':'none';});
+  const {d,x}=place(yawOf(target.x-player.x,target.z-player.z)),edge=Math.abs(d)>COMPASS_SPAN*.46,marker=$('compassMarker');
+  marker.style.left=`${edge?(d>0?10:width-10):x}px`;marker.className=edge?`edge ${d>0?'left':'right'}`:'';
+  // On-screen marker over the objective.
+  const y=groundY(target.x,target.z)+(NPCS[story.info.target]?2.9:3.2),p=new THREE.Vector3(target.x,y,target.z).project(camera),wp=$('waypoint');
+  const behind=p.z>1,margin=48;let sx=(p.x*.5+.5)*innerWidth,sy=(-p.y*.5+.5)*innerHeight;
+  const off=behind||sx<margin||sx>innerWidth-margin||sy<margin||sy>innerHeight-margin;
+  if(off){
+    // Point from the screen centre toward the objective, pinned to the edge.
+    let dx=sx-innerWidth/2,dy=sy-innerHeight/2;if(behind){dx=-dx;dy=-dy;if(Math.abs(dx)<1&&Math.abs(dy)<1)dy=innerHeight;}
+    const k=Math.min((innerWidth/2-margin)/Math.abs(dx||1e-6),(innerHeight/2-margin)/Math.abs(dy||1e-6));
+    sx=innerWidth/2+dx*k;sy=innerHeight/2+dy*k;wp.querySelector('i').style.transform=`rotate(${Math.atan2(dy,dx)+Math.PI/2}rad)`;
+  }else wp.querySelector('i').style.transform='';
+  wp.classList.toggle('edge',off);wp.classList.toggle('hidden',!!dialogue||distance<3);
+  wp.style.transform=`translate(${sx}px,${sy}px) translate(-50%,-50%)`;wp.querySelector('small').textContent=off?'':`${distance} m`;
+  beacon.position.set(target.x,groundY(target.x,target.z)+35,target.z);
+  beacon.material.opacity=THREE.MathUtils.clamp((distance-8)/30,0,1)*.24;beacon.visible=distance>8;
 }
 function updateModeLabel(){$('cameraMode').textContent=player.thirdPerson?(lockTarget?'THIRD PERSON · LOCKED ON':'THIRD PERSON'):'FIRST PERSON';}
 
@@ -496,23 +645,26 @@ function update(rawDt){
   const staminaBefore=player.stamina;
   const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
-    sprinting:player.sprinting,airborne:!player.grounded,flasks:player.flasks,
-    iframeBonus:THREE.MathUtils.clamp((stats().speed-10)*.006,0,.06)});
+    sprinting:player.sprinting,airborne:!player.grounded,flasks:player.flasks,winded:player.winded,
+    moveset:movesetFor(equippedWeapon()),iframeBonus:mech.iframeBonus});
+  // Speed stretches the dash (and rangers go further still).
+  if(combat.state==='evade'){motion.dx*=mech.dash;motion.dz*=mech.dash;}
   if(!frozen)handleCombatEvents();
   if(combat.events.some(e=>e.type==='swing'||e.type==='evade'))player.engaged=4;
   player.engaged=Math.max(0,player.engaged-dt);
 
-  const speedStat=stats().speed,staminaStat=stats().stamina;
+  mech=mechanics();
   // Breath recovers after a short pause; real-world Stamina sets how fast.
   staminaRest=Math.max(0,staminaRest-dt);
   player.sprinting=sprintHeld()&&hasInput&&combat.state==='move'&&player.grounded&&player.stamina>0;
   if(player.sprinting){player.stamina=Math.max(0,player.stamina-SPRINT.drain*dt);staminaRest=.3;}
-  if(!staminaRest&&!combat.busy)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*(1+(staminaStat-10)*.04)*dt);
+  if(!staminaRest&&!combat.busy)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*mech.regen*dt);
+  if(player.winded&&player.stamina>=STAMINA.winded)player.winded=false;
   else if(!staminaRest&&combat.state==='attack'&&!combat.charging)player.stamina=Math.min(STAMINA.max,player.stamina+STAMINA.regen*.35*dt);
   comboTimer-=dt;if(comboTimer<=0)combo=0;
   const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','attack','recover','stagger','alert','toppled','rising','reeling'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
   const guarded=!!lockTarget||player.engaged>0||nearFight;
-  const runSpeed=5.1+(speedStat-10)*.08,guardSpeed=3.2+(speedStat-10)*.04;
+  const runSpeed=mech.runSpeed,guardSpeed=mech.guardSpeed;
   let desiredX=0,desiredZ=0;
   if(combat.mobile&&hasInput&&!player.defeated){const s=combat.state==='guard'?GUARD.speed:combat.state==='flask'?runSpeed*FLASK.moveSpeed:player.sprinting?runSpeed*SPRINT.speed:guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
   player.vx=THREE.MathUtils.damp(player.vx,desiredX,hasInput?14:18,dt);
@@ -531,10 +683,10 @@ function update(rawDt){
   player.yaw=combat.facing;
 
   const oldX=player.x,oldZ=player.z;
-  const impact=moveWithCollision(player,player.vx*dt+motion.dx,player.vz*dt+motion.dz,collisionGrid,groundY);
+  const impact=dev.noclip?(player.x+=player.vx*dt+motion.dx,player.z+=player.vz*dt+motion.dz,{hitX:false,hitZ:false}):moveWithCollision(player,player.vx*dt+motion.dx,player.vz*dt+motion.dz,collisionGrid,groundY);
   if(impact.hitX)player.vx=0;if(impact.hitZ)player.vz=0;
   // Creatures are solid: slide around them rather than through.
-  for(const c of creatures){if(!c.alive&&c!==warden)continue;
+  for(const c of creatures){if((!c.alive&&c!==warden)||dev.noclip)continue;
     for(const b of c.bodyCircles?.()||[{x:c.x,z:c.z,r:c.radius}]){const dx=player.x-b.x,dz=player.z-b.z,d=Math.hypot(dx,dz),min=b.r+.36;
     if(d<min&&d>1e-4){const push=(min-d);const nx=player.x+dx/d*push,nz=player.z+dz/d*push;moveWithCollision(player,nx-player.x,nz-player.z,collisionGrid,groundY);}}}
   const moved=Math.hypot(player.x-oldX,player.z-oldZ)/Math.max(dt,1e-4);
@@ -544,13 +696,14 @@ function update(rawDt){
   const terrain=groundY(player.x,player.z);
   if(player.velocityY<=0){
     const support=collisionGrid.near(player.x,player.z).filter(o=>o.top-terrain<1.95&&o.top>terrain+.17&&Math.hypot(player.x-o.x,player.z-o.z)<o.r-.05&&oldFeet>=o.top-.07&&terrain+player.height<=o.top).sort((a,b)=>b.top-a.top)[0];
-    if(support){player.height=support.top-terrain;player.velocityY=0;player.grounded=true;}
+    if(support){player.height=support.top-terrain;player.velocityY=0;player.grounded=true;player.jumpCount=0;}
   }
-  if(player.height<=0){player.height=0;player.velocityY=0;player.grounded=true;}
+  if(player.height<=0){player.height=0;player.velocityY=0;player.grounded=true;player.jumpCount=0;}
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
   updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);
+  if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
   updateNpcs(npcs,elapsed,rawDt,player,story.speaker);world.updateLanternLights(player.x,player.z);
 
@@ -560,7 +713,7 @@ function update(rawDt){
     const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
     for(const ev of events){
       if(c===warden&&handleBossEvent(c,ev))continue;
-      if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR ROLL THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert')sound.alert();
       else if(ev.type==='strike')incomingStrike(c,ev);
@@ -605,24 +758,11 @@ function update(rawDt){
   // --------------------------------------------------------------- camera
   const eyeBase=floor+player.height+(player.emote==='sit'?.98:1.65);
   if(player.thirdPerson){
-    if(lockTarget){
-      // Keep both fighters in view: swing behind the explorer, look between them.
-      const want=yawOf(lockTarget.x-player.x,lockTarget.z-player.z);
-      player.cameraYaw+=angleTo(player.cameraYaw,want)*(1-Math.exp(-5*rawDt));
-      player.pitch=THREE.MathUtils.damp(player.pitch,-.06,3,rawDt);
-    }
-    const heading=new THREE.Vector3(-Math.sin(player.cameraYaw),0,-Math.cos(player.cameraYaw));
-    const target=new THREE.Vector3(player.x,floor+player.height+(player.emote==='sit'?.85:1.35),player.z);
-    if(lockTarget)target.lerp(new THREE.Vector3(lockTarget.x,groundY(lockTarget.x,lockTarget.z)+(lockTarget.focusHeight??.7),lockTarget.z),.3);
-    const zoom=lockTarget?Math.max(player.zoom,lockTarget===warden?8:5.4):player.zoom;
-    const retreat=zoom*Math.cos(player.pitch*.55);
-    const desired=target.clone().addScaledVector(heading,-retreat);
-    desired.y+=1.1+zoom*.21+Math.sin(player.pitch)*zoom*.7;
-    const obstruction=desired.clone().sub(target),distance=obstruction.length();
-    raycaster.set(target,obstruction.normalize());raycaster.far=distance;
-    const hit=raycaster.intersectObjects(world.cameraObstacles,false)[0];
-    if(hit)desired.copy(target).addScaledVector(obstruction,Math.max(.55,hit.distance-.35));
-    camera.position.lerp(desired,1-Math.exp(-9*rawDt));camera.lookAt(target);camera.position.add(camKick);
+    // The shoulder camera (camera.js): right-drag orbit, lock-on framing, world collision.
+    const view={yaw:player.cameraYaw,elevation:player.camElev,zoom:player.zoom};
+    const focus=lockTarget&&{x:lockTarget.x,y:groundY(lockTarget.x,lockTarget.z),z:lockTarget.z,focus:lockTarget.focusHeight??.7,big:lockTarget===warden||!!lockTarget.isBoss};
+    shoulderCam.update(rawDt,{x:player.x,y:floor+player.height-(player.emote==='sit'?.6:0),z:player.z},view,focus);
+    player.cameraYaw=view.yaw;player.camElev=view.elevation;camera.position.add(camKick);
   }else{
     // First person rides the body: lunges, evades and flinches move the view a little.
     const head=avatar.bones.Head.getWorldPosition(new THREE.Vector3());
@@ -650,7 +790,7 @@ function update(rawDt){
   const imminent=creatures.find(c=>c.alive&&c.state==='windup'&&Math.hypot(c.x-player.x,c.z-player.z)<6);
   const cueElement=$('combatCue');
   const bossThreat=warden?.alive&&warden.winding&&Math.hypot(warden.x-player.x,warden.z-player.z)<14?BOSS_CUES[warden.winding]:null;
-  const threat=bossThreat||imminent&&{lunge:'EVADE THE LUNGE',spin:'GET CLEAR OF THE SPIN',slam:'JUMP OR ROLL THROUGH THE SLAM'}[imminent.attack];
+  const threat=bossThreat||imminent&&{lunge:'EVADE THE LUNGE',spin:'GET CLEAR OF THE SPIN',slam:'JUMP OR DASH THROUGH THE SLAM'}[imminent.attack];
   cueElement.textContent=elapsed<cueUntil?cueText:threat||(combat.state==='attack'?`${combat.phase().toUpperCase()} · ${MOVES[combat.move].label.toUpperCase()}`:'');
   cueElement.classList.toggle('warning',!!(imminent||bossThreat)&&elapsed>=cueUntil);
   $('crosshair').classList.toggle('impact',elapsed<cueUntil&&['SOLID HIT','DRIVEN BACK','WEAK POINT','EXPOSED','ROOT STRIKE','COUNTER','TOPPLED'].includes(cueText));
@@ -677,8 +817,8 @@ function update(rawDt){
   updateNumbers(rawDt);
   updateHUD();
 }
-shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);}});
-avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);shell.start();
+shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
+avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
   warden.setSealed(story.before('gate'));
@@ -695,6 +835,7 @@ let perfSeconds=0,perfFrames=0,foliageReduced=false,pausedRender=0;
 function frame(){
   requestAnimationFrame(frame);
   const rawDt=clock.getDelta(),dt=Math.min(rawDt,.045);
+  if(showPerf){fpsFrames++;fpsTime+=rawDt;if(fpsTime>=.5){const info=renderer.info.render;perfPanel.textContent=`FPS ${Math.round(fpsFrames/fpsTime)}  ·  ${(fpsTime/fpsFrames*1000).toFixed(1)} ms\nDRAW CALLS ${info.calls}  ·  TRIANGLES ${(info.triangles/1000).toFixed(0)}k\nPIXEL RATIO ${pixelRatio.toFixed(2)}`;fpsFrames=0;fpsTime=0;}}
   if(capture)return;
   if(!paused&&shell.view==='game'){
     perfSeconds+=rawDt;perfFrames++;
@@ -720,5 +861,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},respawn};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }

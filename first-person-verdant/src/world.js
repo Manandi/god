@@ -12,6 +12,8 @@ export const GATE = { x: 23, z: -186 };
 export const CITY = { name:'MOSSGATE', x:0, z:53, radius:22 };
 export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
+// The Scorched Hollow: where the Old Shell (the ChatGPT Sites hunt) has nested.
+export const HUNT = { name: 'THE SCORCHED HOLLOW', x: 60, z: -18, r: 14 };
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -32,7 +34,7 @@ export function groundY(x,z) {
   // The town square, the homestead and the arena are level gameplay spaces;
   // the land eases into each of them.
   let height=terrainY(x,z);
-  for(const [cx,cz,r,feather] of [[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9]]){
+  for(const [cx,cz,r,feather] of [[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8]]){
     const d=Math.hypot(x-cx,z-cz),blend=1-THREE.MathUtils.smoothstep(d,r,r+feather);
     if(blend>0)height=THREE.MathUtils.lerp(height,terrainY(cx,cz),blend);
   }
@@ -213,7 +215,7 @@ export function buildWorld(scene){
   const trunkGeometry=new THREE.CylinderGeometry(.32,.58,1,14),crownGeometry=organicCrown();
   const trees=[];for(let i=0;i<540;i++){
     const x=(random()-.5)*355,z=(random()-.5)*355;
-    if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+5||Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
+    if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+5||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+6||Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
     const ridge=Math.hypot(x*.85,z+58)>158;if(ridge&&random()<.45)continue;
     trees.push({x,z,height:5.7+random()*7.2,size:.85+random()*.75,kind:Math.floor(random()*leafMaterials.length)});
   }
@@ -241,7 +243,7 @@ export function buildWorld(scene){
   const city=buildCity(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
   const home=buildHome(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,1),rockMat,700),lichens=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),mossMat,420);let nR=0,nL=0;
-  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+2||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
+  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+2||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+3||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
   rocks.count=nR;rocks.castShadow=true;lichens.count=nL;scene.add(rocks,lichens);
   const grass=new THREE.InstancedMesh(leafCluster(),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
   for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius||(nearTrail(x,z)&&random()<.85))continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);

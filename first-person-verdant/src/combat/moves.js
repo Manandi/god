@@ -55,13 +55,85 @@ MOVES.air_heel = { ...MOVES.heel, label: 'Falling Heel', kind: 'heavy', lunge: {
 MOVES.guard_heel = { ...MOVES.heel, label: 'Guard Counter', kind: 'heavy', active: [.2, .3], evadeFrom: .42, moveFrom: .58, turnUntil: .18,
   damage: 24, poise: 10, stamina: 14, charge: null, armor: [0, .3] };
 
+// Holding heavy past its chamber turns any heavy into a Rootbreaker: the
+// ChatGPT Sites two-handed blow, charged through three levels.
+const ROOT_CHARGE = { at: .3, levels: [.35, .8], max: 1.3, damage: [1, 1.35, 1.75], poise: [1, 1.7, 2.6], stamina: 7 };
+MOVES.heel.charge = { ...MOVES.heel.charge, into: 'rootbreaker' };
+MOVES.rootbreaker = {
+  label: 'Rootbreaker', clip: 'rootbreaker', duration: 1.02, kind: 'heavy', fp: 'fp_heavy',
+  active: [.38, .5], chainFrom: 99, heavyFrom: 99, evadeFrom: .62, moveFrom: .8, turnUntil: .3,
+  lunge: { from: .3, to: .46, distance: .82 }, reach: 1.55,
+  hitbox: { from: 'RightForeArm', to: 'RightHand', extend: .28, radius: .27 },
+  damage: 30, poise: 11, stamina: 28, hitstop: .16, push: 2.4, stagger: 1.1, next: null, armor: [.1, .5], charge: ROOT_CHARGE, ring: true
+};
+
+// --- Groveblade: a quick sword. The blade continues the forearm (hits.js). ---
+const BLADE = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .14 };
+MOVES.blade1 = { label: 'Grove Cut', clip: 'blade1', fp: 'fp_swing', duration: .52, kind: 'light',
+  active: [.13, .22], chainFrom: .22, heavyFrom: .22, evadeFrom: .2, moveFrom: .36, turnUntil: .1,
+  lunge: { from: .02, to: .13, distance: .55 }, reach: 1.9, hitbox: BLADE,
+  damage: 12, poise: 3, stamina: 10, hitstop: .065, push: .35, stagger: .3, next: 'blade2' };
+MOVES.blade2 = { label: 'Return Cut', clip: 'blade2', fp: 'fp_swing', duration: .55, kind: 'light',
+  active: [.14, .23], chainFrom: .23, heavyFrom: .23, evadeFrom: .21, moveFrom: .38, turnUntil: .11,
+  lunge: { from: .03, to: .14, distance: .5 }, reach: 1.9, hitbox: BLADE,
+  damage: 13, poise: 3, stamina: 11, hitstop: .07, push: .4, stagger: .32, next: 'blade3' };
+MOVES.blade3 = { label: 'Heartwood Thrust', clip: 'blade3', fp: 'fp_palm', duration: .7, kind: 'light',
+  active: [.22, .32], chainFrom: .34, heavyFrom: .3, evadeFrom: .3, moveFrom: .48, turnUntil: .16,
+  lunge: { from: .12, to: .26, distance: .95 }, reach: 2.1, hitbox: { ...BLADE, radius: .16 },
+  damage: 17, poise: 5, stamina: 14, hitstop: .09, push: .8, stagger: .5, next: 'blade1' };
+MOVES.blade_heavy = { label: 'Canopy Split', clip: 'blade_heavy', fp: 'fp_heavy', duration: .9, kind: 'heavy',
+  active: [.34, .44], chainFrom: 99, heavyFrom: 99, evadeFrom: .52, moveFrom: .68, turnUntil: .26,
+  lunge: { from: .28, to: .4, distance: .7 }, reach: 2.1, hitbox: { ...BLADE, radius: .18 },
+  damage: 24, poise: 7, stamina: 18, hitstop: .12, push: 1.4, stagger: .8, next: null, armor: [.12, .44],
+  charge: { at: .2, levels: [.35, .75], max: 1.1, damage: [1, 1.3, 1.65], poise: [1, 1.6, 2.4], stamina: 6, into: 'blade_rootbreaker' } };
+MOVES.blade_rootbreaker = { ...MOVES.rootbreaker, label: 'Rootbreaker · Blade', hitbox: { ...BLADE, radius: .2 }, reach: 2.2, damage: 36 };
+MOVES.blade_dash = { ...MOVES.blade3, label: 'Running Thrust', lunge: { from: 0, to: .26, distance: 2.2 }, damage: 18, poise: 5, stamina: 14, next: 'blade1' };
+MOVES.blade_dash_heavy = { ...MOVES.blade_heavy, label: 'Leaping Split', lunge: { from: .1, to: .38, distance: 2.3 }, damage: 26, charge: null };
+MOVES.blade_air = { ...MOVES.blade_heavy, label: 'Falling Split', lunge: { from: 0, to: .36, distance: .6 }, damage: 22, poise: 10, charge: null, armor: [0, .44], airborne: true };
+MOVES.blade_counter = { ...MOVES.blade3, label: 'Guard Counter', active: [.18, .28], damage: 24, poise: 10, charge: null, armor: [0, .28], next: null };
+MOVES.blade_root = { ...MOVES.blade3, label: 'Root Strike', kind: 'critical', damage: 34, poise: 0, stamina: 0, hitstop: .2, armor: [0, .4], next: null, lunge: { from: .1, to: .26, distance: .9 } };
+
+// --- Stonebreaker: a slow hammer that breaks shells (armour pierce). --------
+const HAMMER = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .3 };
+MOVES.hammer1 = { label: 'Stone Sweep', clip: 'hammer1', fp: 'fp_swing', duration: .85, kind: 'light',
+  active: [.3, .42], chainFrom: .44, heavyFrom: .42, evadeFrom: .46, moveFrom: .62, turnUntil: .22,
+  lunge: { from: .18, to: .34, distance: .6 }, reach: 2.0, hitbox: HAMMER,
+  damage: 21, poise: 8, stamina: 18, hitstop: .11, push: 1.2, stagger: .7, next: 'hammer2', armor: [.14, .42], pierce: 1 };
+MOVES.hammer2 = { label: 'Stonefall', clip: 'hammer2', fp: 'fp_heavy', duration: 1.0, kind: 'heavy',
+  active: [.4, .52], chainFrom: 99, heavyFrom: 99, evadeFrom: .6, moveFrom: .8, turnUntil: .3,
+  lunge: { from: .3, to: .44, distance: .7 }, reach: 2.0, hitbox: { ...HAMMER, radius: .34 },
+  damage: 28, poise: 12, stamina: 22, hitstop: .15, push: 2, stagger: 1, next: null, armor: [.1, .52], pierce: 1, ring: true };
+MOVES.hammer_heavy = { ...MOVES.hammer2, charge: { at: .3, levels: [.35, .8], max: 1.3, damage: [1, 1.35, 1.75], poise: [1, 1.7, 2.6], stamina: 7, into: 'hammer_rootbreaker' } };
+MOVES.hammer_rootbreaker = { ...MOVES.rootbreaker, label: 'Rootbreaker · Stone', hitbox: { ...HAMMER, radius: .36 }, reach: 2.1, damage: 40, poise: 16, pierce: 1 };
+MOVES.hammer_dash = { ...MOVES.hammer1, label: 'Charging Sweep', lunge: { from: .05, to: .34, distance: 2.0 }, damage: 22 };
+MOVES.hammer_dash_heavy = { ...MOVES.hammer2, label: 'Leaping Stonefall', lunge: { from: .1, to: .42, distance: 2.2 } };
+MOVES.hammer_air = { ...MOVES.hammer2, label: 'Meteor Fall', lunge: { from: 0, to: .4, distance: .5 }, damage: 26, poise: 14, armor: [0, .52], airborne: true };
+MOVES.hammer_counter = { ...MOVES.hammer1, label: 'Guard Counter', active: [.24, .36], damage: 28, poise: 14, next: null, armor: [0, .36] };
+MOVES.hammer_root = { ...MOVES.hammer2, label: 'Root Strike', kind: 'critical', damage: 42, poise: 0, stamina: 0, hitstop: .22, armor: [0, .52] };
+
+// Which move each input opens with, per weapon. Rootbound fists are the
+// unarmed style; unarmed (a weapon you are not yet strong enough for) uses the
+// same moves at lower power.
+export const MOVESETS = {
+  unarmed:      { first: 'palm', heavy: 'heel', dash_light: 'dash_palm', dash_heavy: 'dash_heel', air: 'air_heel', counter: 'guard_heel', root: 'root' },
+  rootbound:    { first: 'palm', heavy: 'heel', dash_light: 'dash_palm', dash_heavy: 'dash_heel', air: 'air_heel', counter: 'guard_heel', root: 'root' },
+  groveblade:   { first: 'blade1', heavy: 'blade_heavy', dash_light: 'blade_dash', dash_heavy: 'blade_dash_heavy', air: 'blade_air', counter: 'blade_counter', root: 'blade_root' },
+  stonebreaker: { first: 'hammer1', heavy: 'hammer_heavy', dash_light: 'hammer_dash', dash_heavy: 'hammer_dash_heavy', air: 'hammer_air', counter: 'hammer_counter', root: 'hammer_root' }
+};
+export const WEAPONS = {
+  rootbound: { label: 'ROOTBOUND FISTS', power: 1, note: 'Fast palm, swing and heel string.' },
+  groveblade: { label: 'GROVEBLADE', power: 1, note: 'Quick three-cut chain ending in a thrust; a rising heavy.' },
+  stonebreaker: { label: 'STONEBREAKER', power: 1, note: 'Slow, heavy two-hit chain; cracks shells and armour.' },
+  unarmed: { label: 'BARE HANDS', power: .85, note: 'Your chosen weapon is still locked by your stats.' }
+};
+
 export const FIRST_LIGHT = 'palm';
 export const HEAVY = 'heel';
 
 export const EVADE = {
   duration: .6, invulnerable: [.04, .3], travel: { from: .03, to: .42, distance: 3.4 },
   attackFrom: .4, evadeFrom: .5, moveFrom: .46, stamina: 18,
-  perfect: .16        // an attack that lands within this long of the roll starting is a perfect evade
+  perfect: .16        // an attack that lands within this long of the dash starting is a perfect evade
 };
 
 export const HURT = {
@@ -69,13 +141,13 @@ export const HURT = {
   heavy: { duration: .95, push: 1.5, evadeFrom: .55, attackFrom: .7, moveFrom: .8, invulnerable: 1.0 }
 };
 
-export const STAMINA = { max: 100, delay: .55, regen: 26 };   // regen per second, scaled by Stamina stat
+export const STAMINA = { max: 100, delay: .55, regen: 26, winded: 30 };   // at 0 Breath you are winded until it refills to 30   // regen per second, scaled by Stamina stat
 export const COUNTER = { window: 1.4, damage: 1.3, poise: 1.5 }; // after a perfect evade
 
 // Guard (hold): blocks attacks from the front. Raising it just before a hit
 // lands is a parry: no Breath lost and the attacker reels, open to a riposte.
 export const GUARD = { arc: 1.75, parry: .18, cost: { light: 18, heavy: 40 }, chip: { light: 0, heavy: .5 }, counterWindow: .7, speed: 1.9 };
-export const SPRINT = { hold: .22, speed: 1.55, drain: 13 };        // hold roll to sprint; tap to roll
+export const SPRINT = { hold: .22, speed: 1.55, drain: 13 };        // hold Shift to sprint; tap to dash
 export const FLASK = { charges: 3, duration: 1.0, healAt: .6, heal: 2, moveSpeed: .35 };
 
 /** Phase name for a time within a move, for feedback and the debug overlay. */

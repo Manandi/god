@@ -21,3 +21,34 @@
 #bossBar.phase2 #bossFill{background:linear-gradient(90deg,#2c8f76,#63f2c4)}
 @media(max-width:700px){#bossBar{bottom:48px}}
 .name-input{width:min(360px,100%);box-sizing:border-box;border:1px solid #7f9b75;background:#13231ed9;color:#f1ebd1;padding:12px 14px;font:700 14px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+
+/* Quest compass: a strip that turns with the view; the gold diamond sits at the objective's exact bearing. */
+#compassBar{position:relative;width:min(420px,46vw);height:26px;margin:0 auto 6px;overflow:hidden;border-bottom:1px solid #d3e5c299;-webkit-mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent)}
+#compassTicks span{position:absolute;top:3px;transform:translateX(-50%);font:600 12px 'Cinzel',serif;color:#dbe8cf;letter-spacing:.05em}#compassTicks span.minor{font:10px 'DM Mono',monospace;color:#9fb79a;top:6px}
+#compassMarker{position:absolute;top:2px;width:14px;height:14px;transform:translateX(-50%) rotate(45deg);background:#f0c86a;box-shadow:0 0 8px #f0c86aaa;border:1px solid #fff3c4}
+#compassMarker.edge{background:none;transform:translateX(-50%);width:0;height:0;border:7px solid transparent;box-shadow:none}
+#compassMarker.edge.left{border-right:10px solid #f0c86a;border-left:0}#compassMarker.edge.right{border-left:10px solid #f0c86a;border-right:0}
+#waypoint{position:fixed;left:0;top:0;pointer-events:none;text-align:center;will-change:transform;z-index:5}
+#waypoint i{display:block;width:16px;height:16px;margin:0 auto;transform:rotate(45deg);background:#f0c86a;border:2px solid #fff3c4;box-shadow:0 0 12px #f0c86acc}
+#waypoint small{display:block;margin-top:5px;font:600 11px 'DM Mono',monospace;color:#fff3c4;text-shadow:0 1px 4px #000;white-space:nowrap}
+#waypoint.edge i{transform:none;width:0;height:0;background:none;border:10px solid transparent;border-bottom:16px solid #f0c86a;box-shadow:none}
+
+/* Dev mode and co-op HUD (ChatGPT Sites design). */
+.lobby-hud{position:fixed;right:18px;bottom:58px;z-index:9;display:flex;align-items:center;gap:10px}
+.lobby-hud button{border:1px solid #9fbe91;background:#10251fe6;color:#e7ead5;padding:8px 12px;font:700 10px 'DM Mono',monospace;letter-spacing:.12em;cursor:pointer}
+.lobby-hud small{color:#d1dfc4;font:700 9px 'DM Mono',monospace;letter-spacing:.1em;text-shadow:0 2px 5px #000}
+.dev-panel{position:fixed;right:18px;top:18px;bottom:18px;width:min(390px,calc(100vw - 36px));z-index:40;overflow:auto;padding:18px;background:linear-gradient(155deg,#071713f7,#102a22f5);border:1px solid #9abb89;box-shadow:0 24px 80px #000c;color:#dcebd3;backdrop-filter:blur(15px)}
+.dev-panel header{display:flex;align-items:start;justify-content:space-between;border-bottom:1px solid #526f5d;padding-bottom:11px}
+.dev-panel header span,.dev-panel h3{font-size:9px;letter-spacing:.2em;color:#9fc397}
+.dev-panel h2{font-size:25px;margin:3px 0 0}
+.dev-panel header button{border:0;background:transparent;color:#e8efd9;font-size:20px;cursor:pointer}
+.dev-panel pre{white-space:pre-wrap;padding:10px 12px;background:#06110ed9;border-left:3px solid #c8dc86;color:#cfe2c5;font:11px/1.55 'DM Mono',monospace}
+.dev-panel section{margin:17px 0}
+.dev-panel h3{margin:0 0 8px}
+.dev-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.dev-panel button{padding:9px 8px;border:1px solid #5d7f67;background:#18372d;color:#e5edda;font:700 10px/1.2 'DM Mono',monospace;letter-spacing:.06em;cursor:pointer}
+.dev-panel button:hover,.dev-panel button.active{background:#bdd794;color:#142018;border-color:#e1efba}
+.dev-panel .dev-resume{width:100%;margin-top:4px;padding:13px;background:#d1e3a8;color:#122018}
+.dev-panel>small{display:block;margin-top:10px;color:#8fa99a;font-size:9px;line-height:1.5}
+.dev-select{width:100%;margin-bottom:8px;padding:8px;background:#06110e;color:#e5edda;border:1px solid #5d7f67;font:11px 'DM Mono',monospace}
+#perfPanel{position:fixed;right:16px;bottom:96px;padding:9px 12px;margin:0;z-index:12;pointer-events:none;color:#d5edd5;background:#091b19e8;font:11px/1.5 monospace;border:1px solid #72997a}

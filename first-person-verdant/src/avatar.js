@@ -73,7 +73,13 @@ export function createAvatar(scene){
   hairStyle('short');let currentEmote='idle';
   const animator=new Animator(figure,buildClips()),bones=body.bones;
   let blinkTimer=2,mood='calm';
-  return {root,bones,animator,setAppearance(a){
+  // Weapons (ChatGPT Sites models) ride in the right hand; the equipped one shows.
+  const weaponMat=new THREE.MeshStandardMaterial({color:0x9a8359,metalness:.25,roughness:.7}),weaponDark=new THREE.MeshStandardMaterial({color:0x3a3128,roughness:1});
+  const groveblade=new THREE.Group(),stonebreaker=new THREE.Group();body.bones.RightHand.add(groveblade,stonebreaker);
+  groveblade.rotation.set(0,0,-.12);part(groveblade,new THREE.BoxGeometry(.07,.72,.08),weaponDark,0,-.28,0);const blade=part(groveblade,new THREE.BoxGeometry(.11,.78,.055),weaponMat,0,-.96,0);blade.rotation.z=-.08;
+  stonebreaker.rotation.set(0,0,-.08);part(stonebreaker,new THREE.BoxGeometry(.09,.88,.1),weaponDark,0,-.38,0);part(stonebreaker,new RoundedBoxGeometry(.43,.25,.25,2,.04),weaponMat,0,-.88,0);
+  groveblade.visible=stonebreaker.visible=false;
+  return {root,bones,animator,setWeapon(w){groveblade.visible=w==='groveblade';stonebreaker.visible=w==='stonebreaker';},setAppearance(a){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
@@ -118,6 +124,10 @@ export function createAvatar(scene){
 const FP_GUARD={L:[-.3,-.28,-.62,.45,-.2,-.16],R:[.32,-.3,-.58,.48,.2,.16],Leg:[.12,-1.6,-.4,-.4,0,0]};
 const fp=(o)=>({...FP_GUARD,...o});
 const FP_CLIPS={
+  fp_heavy:[[0,FP_GUARD],[.16,fp({L:[-.34,-.18,-.38,-.35,-.45,-.18],R:[.35,-.18,-.38,-.35,.45,.18]})],
+    [.3,fp({L:[-.2,.02,-.35,-1.05,-.25,-.12],R:[.2,.02,-.35,-1.05,.25,.12]})],
+    [.42,fp({L:[-.08,-.27,-1.08,.28,-.08,-.08],R:[.09,-.28,-1.05,.3,.08,.08]})],
+    [.52,fp({L:[-.08,-.3,-1.02,.34,-.08,-.08],R:[.09,-.31,-1,.36,.08,.08]})],[.78,FP_GUARD],[1.02,FP_GUARD]],
   fp_palm:[[0,FP_GUARD],[.07,fp({L:[-.3,-.38,-.4,.7,-.3,-.25]})],[.12,fp({L:[-.06,-.24,-.98,.08,-.05,-.1],R:[.34,-.44,-.42,1.1,.35,.3]})],
     [.19,fp({L:[-.07,-.25,-.95,.1,-.05,-.1]})],[.32,fp({L:[-.2,-.32,-.62,.6,-.2,-.2]})],[.46,FP_GUARD]],
   fp_swing:[[0,FP_GUARD],[.12,fp({R:[.62,-.3,-.3,.35,-.55,.2],L:[-.3,-.36,-.5,1,-.3,-.25]})],[.2,fp({R:[.08,-.2,-.78,.25,1.25,-.15]})],
@@ -158,16 +168,22 @@ export function createFirstPersonHands(camera){
     part(g,new THREE.BoxGeometry(.23,.012,.015),seam,0,.118,-.14);
     return g;
   }
-  arm('fpL');arm('fpR');
+  arm('fpL');const fpR=arm('fpR');
+  // First-person weapons extend forward from the right fist.
+  const metal=new THREE.MeshStandardMaterial({color:0x9a8359,metalness:.25,roughness:.7}),grip=new THREE.MeshStandardMaterial({color:0x3a3128,roughness:1});
+  const fpBlade=new THREE.Group(),fpHammer=new THREE.Group();fpR.add(fpBlade,fpHammer);
+  part(fpBlade,new THREE.BoxGeometry(.07,.07,.3),grip,0,0,-.38);part(fpBlade,new THREE.BoxGeometry(.05,.11,.9),metal,0,0,-.98);
+  part(fpHammer,new THREE.BoxGeometry(.08,.08,.8),grip,0,0,-.66);part(fpHammer,new THREE.BoxGeometry(.28,.26,.42),metal,0,0,-1.1);
+  fpBlade.visible=fpHammer.visible=false;
   const leg=new THREE.Group();leg.name='fpLeg';group.add(leg);
   part(leg,new THREE.BoxGeometry(.2,.2,.53),trousers,0,0,.2);
   part(leg,new THREE.BoxGeometry(.22,.17,.29),boot,0,-.01,-.18);
   group.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
   const animator=new Animator(group,Object.entries(FP_CLIPS).map(([n,k])=>fpClip(n,k)));
-  return {group,setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
+  return {group,setWeapon(w){fpBlade.visible=w==='groveblade';fpHammer.visible=w==='stonebreaker';},setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
     update(dt,combat,guarded,frozen){
-      const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',hurt:'fp_hurt'};
-      const fpName=clip&&(clip.name.startsWith('evade')?'fp_evade':map[clip.name]);
+      const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',rootbreaker:'fp_heavy',hurt:'fp_hurt'};
+      const fpName=clip&&(clip.name.startsWith('evade')?'fp_evade':clip.fp||map[clip.name]);
       if(fpName)animator.play(fpName,clip.time,clip.fade);else animator.stop();
       animator.setLocomotion({fp_guard:1},frozen?0:dt/1.4);
       animator.update(dt);

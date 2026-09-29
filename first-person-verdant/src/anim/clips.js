@@ -177,6 +177,118 @@ const AIR = merge(GUARD, { HipsPos: [0, 0, 0], LeftUpLeg: [40, 10, -6], LeftLeg:
 
 const oneShot = move => clip(move.name, move.keys);
 
+// --- Rootbreaker (ChatGPT Sites design) --------------------------------------
+// A planted, two-handed blow. The hips stay at standing height so the attack
+// reads as weight and commitment. Every weapon's charged heavy ends in it.
+const ROOTBREAKER_LOAD = merge(GUARD, {
+  HipsPos: [0, -.045, .03], Hips: [0, -4, 0], Spine: [5, 0, 0], Chest: [4, 0, 0],
+  LeftArm: [-58, -10, -38], LeftForeArm: [34, 0, 0], LeftHand: [-18, 0, 0],
+  RightArm: [-58, 10, 38], RightForeArm: [34, 0, 0], RightHand: [-18, 0, 0],
+  LeftUpLeg: [10, 8, -3], LeftLeg: [-12, 0, 0], RightUpLeg: [-6, 12, 3], RightLeg: [-14, 0, 0]
+});
+const ROOTBREAKER_HIT = merge(GUARD, {
+  HipsPos: [0, -.07, -.08], Hips: [0, 8, 0], Spine: [-20, 0, 0], Chest: [-16, 0, 0], Neck: [12, 0, 0], Head: [8, 0, 0],
+  LeftArm: [78, -12, -20], LeftForeArm: [18, 0, 0], LeftHand: [-28, 0, 0],
+  RightArm: [78, 12, 20], RightForeArm: [18, 0, 0], RightHand: [-28, 0, 0],
+  LeftUpLeg: [16, 8, -3], LeftLeg: [-20, 0, 0], RightUpLeg: [-10, 12, 3], RightLeg: [-18, 0, 0]
+});
+export const ROOTBREAKER = { name: 'rootbreaker', keys: [
+  { t: 0, pose: GUARD }, { t: .18, pose: ROOTBREAKER_LOAD }, { t: .3, pose: ROOTBREAKER_LOAD },
+  { t: .42, pose: ROOTBREAKER_HIT }, { t: .52, pose: ROOTBREAKER_HIT },
+  { t: .78, pose: merge(GUARD, { HipsPos: [0, -.06, -.03] }) }, { t: 1.02, pose: GUARD }
+] };
+
+// --- Groveblade (sword) ---------------------------------------------------
+// The blade continues the forearm, so a slash is the whole arm sweeping flat.
+const BLADE_READY = merge(GUARD, { RightArm: [40, 10, 40], RightForeArm: [60, 0, 0], RightHand: [0, 0, 0] });
+const BLADE1_WIND = merge(BLADE_READY, {
+  HipsPos: [0, -.07, .04], Hips: [0, -38, 0], Spine: [-4, -14, 0], Chest: [-2, -18, 0], Neck: [0, 26, 0], Head: [0, 18, 0],
+  RightArm: [18, -62, 84], RightForeArm: [26, 0, 0], LeftArm: [52, -30, -16], LeftForeArm: [110, 0, 0]
+});
+const BLADE1_HIT = merge(BLADE_READY, {
+  HipsPos: [0, -.1, -.06], Hips: [0, 26, 0], Spine: [-10, 18, 0], Chest: [-8, 24, 0], Neck: [6, -24, 0], Head: [4, -20, 0],
+  RightArm: [16, 48, 84], RightForeArm: [10, 0, 0], LeftArm: [40, -20, -30], LeftForeArm: [100, 0, 0],
+  LeftUpLeg: [32, 8, -6], LeftLeg: [-30, 0, 0], RightUpLeg: [-24, -8, 4], RightLeg: [-10, 0, 0]
+});
+const BLADE1_FOLLOW = merge(BLADE1_HIT, { Hips: [0, 34, 0], Chest: [-6, 30, 0], RightArm: [22, 82, 72], RightForeArm: [24, 0, 0] });
+export const BLADE1 = { name: 'blade1', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .1, pose: BLADE1_WIND }, { t: .17, pose: BLADE1_HIT }, { t: .24, pose: BLADE1_FOLLOW },
+  { t: .38, pose: merge(BLADE_READY, { Hips: [0, 10, 0] }) }, { t: .52, pose: BLADE_READY }
+] };
+const BLADE2_WIND = merge(BLADE_READY, {
+  HipsPos: [0, -.08, .02], Hips: [0, 30, 0], Spine: [-6, 16, 0], Chest: [-4, 22, 0], Neck: [0, -20, 0],
+  RightArm: [26, 86, 64], RightForeArm: [40, 0, 0]
+});
+const BLADE2_HIT = merge(BLADE_READY, {
+  HipsPos: [0, -.1, -.06], Hips: [0, -28, 0], Spine: [-10, -14, 0], Chest: [-8, -20, 0], Neck: [4, 22, 0], Head: [2, 16, 0],
+  RightArm: [18, -34, 86], RightForeArm: [8, 0, 0], RightUpLeg: [-4, 26, 5], RightLeg: [-28, 0, 0], LeftUpLeg: [28, 12, -4], LeftLeg: [-24, 0, 0]
+});
+const BLADE2_FOLLOW = merge(BLADE2_HIT, { Hips: [0, -36, 0], RightArm: [20, -58, 80], RightForeArm: [22, 0, 0] });
+export const BLADE2 = { name: 'blade2', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .11, pose: BLADE2_WIND }, { t: .18, pose: BLADE2_HIT }, { t: .25, pose: BLADE2_FOLLOW },
+  { t: .4, pose: merge(BLADE_READY, { Hips: [0, -10, 0] }) }, { t: .55, pose: BLADE_READY }
+] };
+const BLADE3_LOAD = merge(BLADE_READY, {
+  HipsPos: [0, -.08, .08], Hips: [0, -30, 0], Spine: [2, -8, 0], RightArm: [58, 22, 24], RightForeArm: [96, 0, 0], RightHand: [-20, 0, 0],
+  LeftUpLeg: [26, 14, -4], LeftLeg: [-30, 0, 0]
+});
+const BLADE3_HIT = merge(BLADE_READY, {
+  HipsPos: [0, -.14, -.16], Hips: [0, -6, 0], Spine: [-18, 6, 0], Chest: [-12, 8, 0], Neck: [14, 0, 0], Head: [10, -4, 0],
+  RightArm: [88, 4, 6], RightForeArm: [0, 0, 0], RightHand: [0, 0, 0], LeftArm: [30, -30, -40], LeftForeArm: [70, 0, 0],
+  LeftUpLeg: [48, 8, -4], LeftLeg: [-40, 0, 0], RightUpLeg: [-28, 18, 5], RightLeg: [-6, 0, 0], RightFoot: [30, 0, 0]
+});
+export const BLADE3 = { name: 'blade3', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .16, pose: BLADE3_LOAD }, { t: .24, pose: BLADE3_HIT }, { t: .33, pose: BLADE3_HIT },
+  { t: .5, pose: merge(BLADE_READY, { HipsPos: [0, -.09, -.05] }) }, { t: .7, pose: BLADE_READY }
+] };
+const BLADE_HEAVY_LOAD = merge(BLADE_READY, {
+  HipsPos: [0, -.1, .06], Hips: [0, -14, 0], Spine: [12, -4, 0], Chest: [8, -4, 0], Neck: [-10, 0, 0],
+  RightArm: [164, 14, 16], RightForeArm: [34, 0, 0], LeftArm: [150, -10, -20], LeftForeArm: [40, 0, 0],
+  LeftUpLeg: [24, 10, -4], LeftLeg: [-30, 0, 0]
+});
+const BLADE_HEAVY_HIT = merge(BLADE_READY, {
+  HipsPos: [0, -.16, -.12], Hips: [0, 2, 0], Spine: [-26, 0, 0], Chest: [-18, 0, 0], Neck: [16, 0, 0], Head: [10, 0, 0],
+  RightArm: [58, 4, 8], RightForeArm: [2, 0, 0], LeftArm: [52, -6, -12], LeftForeArm: [14, 0, 0],
+  LeftUpLeg: [44, 8, -4], LeftLeg: [-44, 0, 0], RightUpLeg: [-24, 16, 5], RightLeg: [-10, 0, 0]
+});
+export const BLADE_HEAVY = { name: 'blade_heavy', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .18, pose: BLADE_HEAVY_LOAD }, { t: .3, pose: BLADE_HEAVY_LOAD }, { t: .38, pose: BLADE_HEAVY_HIT },
+  { t: .46, pose: BLADE_HEAVY_HIT }, { t: .68, pose: merge(BLADE_READY, { HipsPos: [0, -.1, -.06] }) }, { t: .9, pose: BLADE_READY }
+] };
+
+// --- Stonebreaker (hammer) ------------------------------------------------
+// Two hands on the haft, slow and planted; the whole body carries each swing.
+const HAMMER_READY = merge(GUARD, {
+  HipsPos: [0, -.08, 0], RightArm: [46, 24, 20], RightForeArm: [70, 0, 0], LeftArm: [52, -4, 30], LeftForeArm: [80, 0, 0]
+});
+const HAMMER1_WIND = merge(HAMMER_READY, {
+  HipsPos: [0, -.1, .06], Hips: [0, -52, 0], Spine: [-2, -20, 0], Chest: [0, -24, 0], Neck: [0, 34, 0], Head: [0, 22, 0],
+  RightArm: [30, -70, 80], RightForeArm: [20, 0, 0], LeftArm: [40, -50, 40], LeftForeArm: [40, 0, 0],
+  RightUpLeg: [-6, 28, 5], RightLeg: [-34, 0, 0]
+});
+const HAMMER1_HIT = merge(HAMMER_READY, {
+  HipsPos: [0, -.14, -.08], Hips: [0, 32, 0], Spine: [-12, 22, 0], Chest: [-10, 28, 0], Neck: [6, -26, 0],
+  RightArm: [22, 52, 82], RightForeArm: [6, 0, 0], LeftArm: [30, 60, 30], LeftForeArm: [20, 0, 0],
+  LeftUpLeg: [36, 8, -6], LeftLeg: [-34, 0, 0], RightUpLeg: [-28, -10, 4], RightLeg: [-12, 0, 0]
+});
+export const HAMMER1 = { name: 'hammer1', keys: [
+  { t: 0, pose: HAMMER_READY }, { t: .22, pose: HAMMER1_WIND }, { t: .34, pose: HAMMER1_HIT }, { t: .44, pose: merge(HAMMER1_HIT, { Hips: [0, 40, 0] }) },
+  { t: .64, pose: merge(HAMMER_READY, { Hips: [0, 14, 0] }) }, { t: .85, pose: HAMMER_READY }
+] };
+const HAMMER2_LOAD = merge(HAMMER_READY, {
+  HipsPos: [0, -.06, .08], Spine: [16, 0, 0], Chest: [10, 0, 0], Neck: [-12, 0, 0],
+  RightArm: [170, 10, 14], RightForeArm: [30, 0, 0], LeftArm: [168, -10, -14], LeftForeArm: [30, 0, 0]
+});
+const HAMMER2_HIT = merge(HAMMER_READY, {
+  HipsPos: [0, -.22, -.14], Spine: [-32, 0, 0], Chest: [-22, 0, 0], Neck: [18, 0, 0], Head: [10, 0, 0],
+  RightArm: [44, 6, 10], RightForeArm: [4, 0, 0], LeftArm: [44, -6, -10], LeftForeArm: [4, 0, 0],
+  LeftUpLeg: [50, 10, -4], LeftLeg: [-52, 0, 0], RightUpLeg: [-20, 16, 5], RightLeg: [-34, 0, 0]
+});
+export const HAMMER2 = { name: 'hammer2', keys: [
+  { t: 0, pose: HAMMER_READY }, { t: .26, pose: HAMMER2_LOAD }, { t: .36, pose: HAMMER2_LOAD }, { t: .44, pose: HAMMER2_HIT },
+  { t: .56, pose: HAMMER2_HIT }, { t: .8, pose: merge(HAMMER_READY, { HipsPos: [0, -.14, -.08] }) }, { t: 1.0, pose: HAMMER_READY }
+] };
+
 export function buildClips() {
   return [
     // locomotion loops (all share one phase)
@@ -191,6 +303,7 @@ export function buildClips() {
     cycle('wave', .8, [WAVE_UP, WAVE_OUT]),
     cycle('cheer', 1, [CHEER, merge(CHEER, { HipsPos: [0, .04, 0] })]),
     // one-shots
-    oneShot(PALM), oneShot(SWING), oneShot(HEEL), ...EVADES.map(oneShot), oneShot(HURT)
+    oneShot(PALM), oneShot(SWING), oneShot(HEEL), oneShot(ROOTBREAKER), ...EVADES.map(oneShot), oneShot(HURT),
+    oneShot(BLADE1), oneShot(BLADE2), oneShot(BLADE3), oneShot(BLADE_HEAVY), oneShot(HAMMER1), oneShot(HAMMER2)
   ];
 }

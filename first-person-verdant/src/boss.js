@@ -131,10 +131,12 @@ export class Warden {
   get clipTime() { return this.t / this.pace; }
 
   // --------------------------------------------------------- being hit
-  hit({ damage, poise, fromX, fromZ, stagger, part }) {
+  hit({ damage, poise, fromX, fromZ, stagger, part, pierce = 0 }) {
     if (!this.alive) return null;
     if (!this.awake) { this.wake(); }
-    const mult = PART[part] ?? 1, dealt = damage * mult;
+    let mult = PART[part] ?? 1;
+    if (mult < 1 && pierce) mult = Math.min(1, mult * (1 + pierce));
+    const dealt = damage * mult;
     this.health = Math.max(0, this.health - dealt); this.flash = .12;
     const out = { damage: dealt, effect: part === 'belly' ? 'belly' : mult > 1 ? 'weak' : mult < 1 ? 'armored' : 'normal', toppled: false, defeated: false, staggered: false };
     if (this.health <= 0) { this.alive = false; this.attack = null; this.setState('defeated'); this.lastEvent = 'released'; out.defeated = true; this.clearSpots(); return out; }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MOVES, FIRST_LIGHT, HEAVY, EVADE, HURT, COUNTER, GUARD, FLASK, phaseOf, travelBetween } from './moves.js';
+import { MOVES, MOVESETS, EVADE, HURT, COUNTER, GUARD, FLASK, phaseOf, travelBetween } from './moves.js';
 import { strikeSegment, sweep, obstacleBetween } from './hits.js';
 import { angleTo, yawOf } from '../angles.js';
 
@@ -11,8 +11,8 @@ const BUFFER = .28;           // how long a press waits for a window to open
  *   move ─light─▶ palm ─light─▶ swing ─light─▶ palm …      (chain windows)
  *     │             └──── heavy ────▶ heel (finisher) ◀── heavy ── move
  *     │                                 hold heavy: charges at the chamber pose
- *     ├─evade─▶ evade roll (i-frames; a hit inside the first frames is a PERFECT evade)
- *     │            └─ attackFrom: a buffered attack starts straight out of the roll
+ *     ├─evade─▶ evade dash (i-frames; a hit inside the first frames is a PERFECT evade)
+ *     │            └─ attackFrom: a buffered attack starts straight out of the dash
  *     ├─light/heavy near a toppled creature ─▶ root (Root Strike finisher)
  *     ├─hold guard─▶ guard (blocks from the front; raised just before a hit = PARRY)
  *     │            └─ heavy soon after a block ─▶ guard_heel (Guard Counter)
@@ -46,7 +46,7 @@ export class PlayerCombat {
   get invulnerable() {
     return (this.state === 'evade' && this.t >= EVADE.invulnerable[0] && this.t < this.iframeEnd) || this.clock < this.invulnerableUntil;
   }
-  /** Inside the opening frames of a roll: a hit here counts as a perfect evade. */
+  /** Inside the opening frames of a dash: a hit here counts as a perfect evade. */
   get perfectWindow() { return this.state === 'evade' && this.t < EVADE.perfect + EVADE.invulnerable[0]; }
   /** Hyper-armour: hits still hurt but do not interrupt a heavy strike. */
   get armored() {
@@ -71,7 +71,7 @@ export class PlayerCombat {
 
   startAttack(name, ctx) {
     const m = MOVES[name];
-    if (m.stamina && ctx.stamina <= 0) { this.events.push({ type: 'tired' }); return false; }
+    if (m.stamina && (ctx.stamina <= 0 || ctx.winded)) { this.events.push({ type: 'tired' }); return false; }
     this.state = 'attack'; this.move = name; this.t = 0;
     this.charging = false; this.chargeTime = 0; this.chargeLevel = 0;
     this.hitThisSwing.clear(); this.prevSegment = null; this.nearest = Infinity; this.blocked = null;
@@ -84,37 +84,38 @@ export class PlayerCombat {
   }
   tryAttack(ctx, from) {
     // Root Strike takes priority when a toppled or reeling creature is in reach.
+    const set = ctx.moveset || MOVESETS.unarmed;
     if ((this.buffered('light') || this.buffered('heavy')) && ctx.critTarget && !ctx.airborne) {
-      this.consume('light'); this.consume('heavy'); return this.startAttack('root', ctx);
+      this.consume('light'); this.consume('heavy'); return this.startAttack(set.root, ctx);
     }
     // Contextual openers: in the air, out of a sprint, or right after a block.
     if (!from && (this.buffered('light') || this.buffered('heavy'))) {
       const heavy = this.buffered('heavy');
       let special = null;
-      if (ctx.airborne) special = 'air_heel';
-      else if (ctx.sprinting) special = heavy ? 'dash_heel' : 'dash_palm';
-      else if (heavy && this.clock - this.lastBlockAt < GUARD.counterWindow) special = 'guard_heel';
+      if (ctx.airborne) special = set.air;
+      else if (ctx.sprinting) special = heavy ? set.dash_heavy : set.dash_light;
+      else if (heavy && this.clock - this.lastBlockAt < GUARD.counterWindow) special = set.counter;
       if (special) { this.consume('light'); this.consume('heavy'); return this.startAttack(special, ctx); }
     }
     if (ctx.airborne) return false;
-    if (this.buffered('heavy') && (!from || this.t >= from.heavyFrom)) { this.consume('heavy'); return this.startAttack(HEAVY, ctx); }
+    if (this.buffered('heavy') && (!from || this.t >= from.heavyFrom)) { this.consume('heavy'); return this.startAttack(set.heavy, ctx); }
     if (this.buffered('light') && (!from || (from.next && this.t >= from.chainFrom))) {
-      this.consume('light'); return this.startAttack(from?.next || FIRST_LIGHT, ctx);
+      this.consume('light'); return this.startAttack(from?.next || set.first, ctx);
     }
     return false;
   }
   startEvade(ctx) {
     this.consume('evade');
-    if (ctx.stamina <= 0) { this.events.push({ type: 'tired' }); return false; }
+    if (ctx.stamina <= 0 || ctx.winded) { this.events.push({ type: 'tired' }); return false; }
     this.state = 'evade'; this.t = 0; this.move = null; this.charging = false;
     this.iframeEnd = EVADE.invulnerable[1] + (ctx.iframeBonus || 0);
     let { x, z } = ctx.input;
-    if (!x && !z) { x = Math.sin(this.facing); z = Math.cos(this.facing); }      // roll back
+    if (!x && !z) { x = Math.sin(this.facing); z = Math.cos(this.facing); }      // dash back
     const len = Math.hypot(x, z); this.evadeDir = { x: x / len, z: z / len };
     const forwardX = -Math.sin(this.facing), forwardZ = -Math.cos(this.facing);
     this.evadeClip = this.evadeDir.x * forwardX + this.evadeDir.z * forwardZ < -.45 ? 'evadeBack' : 'evadeForward';
     // Keep the upper body facing the threat for a retreat or side step while
-    // locked on; otherwise the roll turns the body toward where it travels.
+    // locked on; otherwise the dash turns the body toward where it travels.
     if (!ctx.lockTarget) this.facing = yawOf(x, z);
     this.events.push({ type: 'evade' }, { type: 'spend', amount: EVADE.stamina });
     return true;
@@ -162,9 +163,14 @@ export class PlayerCombat {
     }
 
     if (this.state === 'attack') {
-      const m = MOVES[this.move];
+      let m = MOVES[this.move];
       // Charging: hold at the chamber pose while the heavy input is held.
       if (m.charge && t0 < m.charge.at + 1e-6 && this.t >= m.charge.at && (this.heavyHeld || this.charging)) {
+        // Still holding at the chamber: the heavy becomes this weapon's Rootbreaker.
+        if (this.heavyHeld && m.charge.into && !this.charging) {
+          const from = m; this.move = m.charge.into; m = MOVES[this.move]; this.t = m.charge.at;
+          this.events.push({ type: 'rootbreaker', move: this.move }, { type: 'spend', amount: Math.max(0, m.stamina - from.stamina) });
+        }
         if (this.heavyHeld && this.chargeTime < m.charge.max) {
           this.charging = true; this.chargeTime += dt; this.t = m.charge.at;
           const level = m.charge.levels.filter(l => this.chargeTime >= l).length;
@@ -206,7 +212,7 @@ export class PlayerCombat {
             this.events.push({ type: 'hit', move: this.move, target: c.target, part: c.part, point: c.point, t: this.t,
               damage: m.damage * charge.damage * (counter ? COUNTER.damage : 1), poise: m.poise * charge.poise * (counter ? COUNTER.poise : 1),
               push: m.push * (1 + this.chargeLevel * .25), stagger: m.stagger, hitstop: m.hitstop * (1 + this.chargeLevel * .3),
-              chargeLevel: this.chargeLevel, counter, critical: m.kind === 'critical' });
+              chargeLevel: this.chargeLevel, counter, critical: m.kind === 'critical', heavy: m.kind !== 'light', pierce: m.pierce || 0, ring: !!m.ring });
           }
           if (!this.blocked && obstacle && !result.contacts.length) {
             this.blocked = obstacle; this.events.push({ type: 'blocked', move: this.move, point: obstacle.point });
@@ -248,7 +254,7 @@ export class PlayerCombat {
   clip() {
     if (this.state === 'attack') {
       const m = MOVES[this.move];
-      return { name: m.clip, time: this.t, fade: this.t < .05 ? 30 : 14 };
+      return { name: m.clip, fp: m.fp, move: this.move, time: this.t, fade: this.t < .05 ? 30 : 14 };
     }
     if (this.state === 'evade') return { name: this.evadeClip, time: this.t, fade: 30 };
     if (this.state === 'guard') return { name: 'guard', time: this.t % 1.4, fade: 22 };

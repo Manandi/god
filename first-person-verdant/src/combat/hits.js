@@ -7,6 +7,10 @@ export function strikeSegment(bones, hitbox, out = { a: new THREE.Vector3(), b: 
   bones[hitbox.from].getWorldPosition(a);
   bones[hitbox.to].getWorldPosition(b);
   d.copy(b).sub(a).normalize();
+  if (hitbox.blade) {                            // a held weapon: from the hand out along the forearm line
+    out.a.copy(b).addScaledVector(d, .1); out.b.copy(b).addScaledVector(d, hitbox.blade);
+    return out;
+  }
   out.a.copy(a).lerp(b, .35);                    // the striking half of the limb
   out.b.copy(b).addScaledVector(d, hitbox.extend);
   return out;

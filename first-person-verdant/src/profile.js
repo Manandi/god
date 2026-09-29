@@ -22,7 +22,15 @@ export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
-export const profile={complete:false,introSeen:false,customized:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger'},lastWeek:'',name:''};
+// Combat classes and stat-gated weapons are the ChatGPT Sites design.
+export const CLASS_INFO={
+  fighter:{label:'FIGHTER',description:'Strength becomes direct damage and combo pressure.',bonus:'Damage + stronger stagger'},
+  tank:{label:'TANK',description:'Defense and stamina become vitality and cheaper guards.',bonus:'Extra vitality + guard efficiency'},
+  ranger:{label:'RANGER',description:'Speed and conditioning extend movement and Leaf Step.',bonus:'Longer dash + faster movement'},
+  mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
+  support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
+};
+export const profile={complete:false,introSeen:false,customized:false,inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -39,6 +47,8 @@ export function loadProfile(){
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
     profile.appearance.hairStyle=['short','curly','swept','tied','braid'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
     profile.appearance.outfit=['ranger','warden'].includes(appearance.outfit)?appearance.outfit:'ranger';
+    profile.appearance.weapon=['rootbound','groveblade','stonebreaker'].includes(appearance.weapon)?appearance.weapon:'rootbound';
+    profile.appearance.discipline=Object.hasOwn(CLASS_INFO,appearance.discipline)?appearance.discipline:'fighter';
     profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
     profile.appearance.shirt=['moss','ochre','slate','clay','ivory','violet','navy'].includes(appearance.shirt)?appearance.shirt:({sunroot:'ochre',moonfern:'slate',guardian:'violet'}[appearance.cloak]||'moss');
     profile.appearance.pants=['charcoal','umber','olive','indigo'].includes(appearance.pants)?appearance.pants:'charcoal';
@@ -88,4 +98,22 @@ export function logActivity(kind,amount){
   const completed=[];
   for(const g of weeklyGoals())if(!g.claimed&&g.value>=g.target){profile.claimed.push(`${weekKey()}:${g.id}`);profile.xp+=g.xp;completed.push(g.label);}
   saveProfile();return `+${xp} XP${completed.length?` · Weekly quest complete: ${completed.join(', ')}`:''}`;
+}
+export function recommendedClass(){
+  const s=stats(),scores={
+    fighter:s.strength*.55+s.speed*.2+s.discipline*.25,
+    tank:s.defense*.48+s.stamina*.27+s.strength*.25,
+    ranger:s.speed*.5+s.stamina*.3+s.discipline*.2,
+    mage:s.intelligence*.58+s.discipline*.27+s.stamina*.15,
+    support:s.discipline*.42+s.intelligence*.32+s.stamina*.26
+  };
+  return Object.entries(scores).sort((a,b)=>b[1]-a[1])[0][0];
+}
+export function weaponEligibility(weapon){
+  const s=stats(),rules={
+    rootbound:{ok:s.intelligence>=8||s.discipline>=8,requirement:'INT 8 or DIS 8'},
+    groveblade:{ok:s.strength>=8&&s.speed>=8,requirement:'STR 8 and SPD 8'},
+    stonebreaker:{ok:s.strength>=12&&s.defense>=12,requirement:'STR 12 and DEF 12'}
+  };
+  return rules[weapon]||{ok:false,requirement:'Unknown discipline'};
 }

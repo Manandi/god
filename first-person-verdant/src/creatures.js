@@ -139,10 +139,12 @@ export class Creature {
    * A strike from the explorer. Returns what happened so the game can show it:
    * { damage, effect: 'weak'|'armored'|'belly'|'normal', toppled, defeated, staggered }
    */
-  hit({ damage, poise, fromX, fromZ, push, stagger, part }) {
+  hit({ damage, poise, fromX, fromZ, push, stagger, part, pierce = 0 }) {
     if (!this.alive) return null;
     const onBack = this.state === 'toppled' || this.state === 'rising';
-    const mult = PART_DAMAGE[part] ?? 1;
+    // Armour-piercing weapons (the Stonebreaker) turn shell hits into full hits.
+    let mult = PART_DAMAGE[part] ?? 1;
+    if (mult < 1 && pierce) mult = Math.min(1, mult * (1 + pierce));
     const dealt = damage * mult;
     this.health = Math.max(0, this.health - dealt);
     const d = Math.hypot(this.x - fromX, this.z - fromZ) || 1, dx = (this.x - fromX) / d, dz = (this.z - fromZ) / d;
