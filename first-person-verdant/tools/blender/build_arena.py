@@ -22,7 +22,7 @@ import bpy, bmesh, math, os, sys, random
 import numpy as np
 from mathutils import Vector, Matrix, noise
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from procedural import link, activate, apply_all, smooth, sstep, mesh_obj, join, tube, material, hexc, N, bake, root_nodes
+from procedural import link, activate, apply_all, smooth, sstep, mesh_obj, join, tube, material, hexc, N, bake, root_nodes, stone_nodes, arch
 
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 def arg(name, default): return ARGS[ARGS.index(name) + 1] if name in ARGS else default
@@ -111,17 +111,6 @@ def build_menhirs():
     return mesh_obj('Menhirs', bm), mesh_obj('Runes', runes)
 
 # ------------------------------------------------------------------- roots
-def arch(p0, p1, height, r0, r1, name, wobble=.8, seed=0):
-    pts, rad = [], []
-    for t in np.linspace(0, 1, 16):
-        p = p0.lerp(p1, t); p.z += math.sin(t * math.pi) * height
-        k = Vector((t * 2.2, seed, 0))
-        p += Vector((noise.noise(k), noise.noise(k + Vector((0, 0, 3))), .5 * noise.noise(k + Vector((0, 0, 6))))) * wobble
-        p += Vector((noise.noise(k * 3.1), noise.noise(k * 3.1 + Vector((0, 0, 9))), 0)) * wobble * .35
-        flare = 1 + .7 * (sstep(.18, 0, t) + sstep(.82, 1, t))          # buttressed feet
-        rad.append((r0 + (r1 - r0) * t) * (1 - .45 * math.sin(t * math.pi)) * flare); pts.append(p)
-    return tube(pts, rad, name)
-
 def build_roots():
     out = []
     for i, (a0, a1, hgt) in enumerate([(-2.2, 1.25, 15), (-1.0, 1.95, 13), (2.6, .7, 12), (-.2, 2.35, 11), (3.6, 1.6, 14)]):
@@ -164,18 +153,6 @@ def build_lanterns():
     return mesh_obj('LanternPosts', posts), mesh_obj('Lanterns', lights)
 
 # --------------------------------------------------------------- materials
-def stone_nodes(nt, bsdf):
-    n = N(nt)
-    big = n.noise(1.3, 5); grain = n.noise(14, 6); cracks = n.voronoi(3.2)
-    up = n.node('ShaderNodeSeparateXYZ'); nt.links.new(n.node('ShaderNodeNewGeometry').outputs['Normal'], up.inputs[0])
-    base = n.mix(hexc('#59604f'), hexc('#8a8c78'), n.ramp(big, 0, 1, .35, .7))
-    base = n.mix(base, hexc('#3e4535'), n.ramp(grain, 0, .5, .4, .8))
-    moss = n.math('MULTIPLY', n.ramp(up.outputs['Z'], 0, 1, .45, .9), n.ramp(n.noise(2.5, 4), 0, 1, .45, .62))
-    base = n.mix(base, hexc('#4d6e2e'), moss)
-    base = n.mix(base, hexc('#23271e'), n.ramp(cracks, .8, 0, 0, .05))
-    n.out(base, bsdf.inputs['Base Color'])
-    n.bump(n.math('ADD', grain, n.ramp(cracks, -1, 0, 0, .05), clamp=False), .7, bsdf, .08)
-
 stone = material('M_Stone', stone_nodes, rough=.95)
 plaza = build_plaza(); plaza.data.materials.append(stone)
 menhirs, runes = build_menhirs(); menhirs.data.materials.append(stone)

@@ -101,7 +101,9 @@ SKEL = [
     ('B0', (0, 2.7, 1.8), (1.0, .5), None), ('B1', (0, 1.25, 1.95), (1.7, .6), 'B0'), ('B2', (0, -.35, 2.0), (1.8, .62), 'B1'),
     ('B3', (0, -1.9, 2.0), (1.45, .6), 'B2'), ('B4', (0, -2.75, 2.08), (.8, .6), 'B3'),
     ('N1', (0, -3.4, 2.22), (.58, .54), 'B4'), ('N2', (0, -3.95, 2.36), (.52, .5), 'N1'),
-    ('T1', (0, 3.35, 1.55), (.46, .38), 'B0'), ('T2', (0, 4.05, 1.28), (.3, .25), 'T1'), ('T3', (0, 4.65, 1.02), (.1, .09), 'T2'),
+    # A long tail ending in a root club (build_club): its tail attacks need the reach.
+    ('T1', (0, 3.5, 1.5), (.54, .44), 'B0'), ('T2', (0, 4.6, 1.2), (.42, .34), 'T1'), ('T3', (0, 5.7, .96), (.31, .26), 'T2'),
+    ('T4', (0, 6.7, .82), (.22, .19), 'T3'), ('T5', (0, 7.25, .76), (.12, .1), 'T4'),
 ] + legs(L) + legs(R)
 P = {n: Vector(co) for n, co, _, _ in SKEL}
 
@@ -248,6 +250,33 @@ def build_claws():
         objs[key] = mesh_obj('Claws_' + key, bm)
     return objs
 
+def build_club():
+    """The root club at the tail's end: a gnarled knot of wood studded with thorns.
+    It can be broken in the fight (the game hides it), so it is its own mesh."""
+    bm = bmesh.new(); c = Vector((0, 7.05, .8))
+    g = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1)
+    for v in g['verts']:
+        d = v.co.copy(); k = 1 + .22 * noise.noise(d * 2.3 + Vector((4, 0, 0))) + .08 * noise.noise(d * 6)
+        v.co = c + Vector((d.x * .62, d.y * .78, d.z * .55)) * k
+    for i in range(14):   # thorns
+        a = i * 2.399; z = 1 - 2 * (i + .5) / 14; r = math.sqrt(1 - z * z)
+        d = Vector((math.cos(a) * r, math.sin(a) * r * 1.2, z * .9)).normalized()
+        if d.y < -.6: continue                              # none pointing back into the tail
+        base = c + Vector((d.x * .55, d.y * .7, d.z * .5)); length = .38 + .22 * random.random()
+        t = bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=.13, radius2=.01, depth=length)
+        bmesh.ops.transform(bm, matrix=Matrix.Translation(base + d * length * .45) @ d.to_track_quat('Z', 'Y').to_matrix().to_4x4(), verts=t['verts'])
+    return mesh_obj('TailClub', bm)
+
+def build_tail_thorns():
+    """A ridge of thorns down the tail, bound to the tail bones."""
+    bm = bmesh.new()
+    for i, y in enumerate(np.linspace(3.7, 6.5, 7)):
+        z = 1.5 - (y - 3.5) * .24 + (.44 - (y - 3.5) * .08); h = .5 - i * .045
+        t = bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=.16 - i * .012, radius2=.01, depth=h)
+        lean = Vector((0, .55, 1)).normalized()
+        bmesh.ops.transform(bm, matrix=Matrix.Translation((0, y, z + h * .35)) @ lean.to_track_quat('Z', 'Y').to_matrix().to_4x4(), verts=t['verts'])
+    return mesh_obj('TailThorns', bm)
+
 def build_fungi():
     bm = bmesh.new()
     for i in range(9):
@@ -301,8 +330,9 @@ BONES = [  # name, head, tail, parent
     ('neck_02', (0, -3.4, 2.22), (0, -3.95, 2.36), 'neck_01'),
     ('head', (0, -3.95, 2.36), (0, -5.2, 2.36), 'neck_02'),
     ('jaw', tuple(HINGE), (0, -5.2, 2.02), 'head'),
-    ('tail_01', (0, 2.9, 1.62), (0, 3.9, 1.34), 'body'),
-    ('tail_02', (0, 3.9, 1.34), (0, 4.7, 1.0), 'tail_01'),
+    ('tail_01', (0, 2.9, 1.62), (0, 4.3, 1.3), 'body'),
+    ('tail_02', (0, 4.3, 1.3), (0, 5.7, .96), 'tail_01'),
+    ('tail_03', (0, 5.7, .96), (0, 7.4, .76), 'tail_02'),
 ]
 for side, s in (('l', 1), ('r', -1)):
     k = str(s)
@@ -340,7 +370,8 @@ def rigid(obj, rig, bone): bind(obj, rig, {bone: np.ones(len(obj.data.vertices))
 def skin_weights(obj):
     V = np.array([v.co for v in obj.data.vertices])
     segs = {'body': ((0, 3.0, 1.75), (0, -2.55, 2.0), 1.35), 'neck_01': ((0, -2.6, 2.05), (0, -3.4, 2.22), .55),
-            'neck_02': ((0, -3.4, 2.22), (0, -4.1, 2.4), .5), 'tail_01': ((0, 3.0, 1.6), (0, 3.9, 1.34), .42), 'tail_02': ((0, 3.9, 1.34), (0, 4.8, .98), .26)}
+            'neck_02': ((0, -3.4, 2.22), (0, -4.1, 2.4), .5), 'tail_01': ((0, 3.0, 1.6), (0, 4.3, 1.3), .5), 'tail_02': ((0, 4.3, 1.3), (0, 5.7, .96), .36),
+            'tail_03': ((0, 5.7, .96), (0, 7.5, .74), .26)}
     for name, h, t, parent in BONES:
         if name.startswith(('thigh', 'shin', 'foot')):
             segs[name] = (h, t, {'thigh': .62, 'shin': .52, 'foot': .5}[name.split('_')[0]])
@@ -377,13 +408,13 @@ def gait(t, period, amp, stance, lift, offsets=None):
 def clip_idle(t):
     p = t / 3 * TAU
     return {'body': ((0, 0, 0), (0, 0, .035 * S(p))), 'shell': (.6 * S(p), 0, 0), 'neck_01': (2 * S(p + 1), 0, 4 * S(p)), 'neck_02': (1.5 * S(p + 2), 0, 2 * S(p + .5)),
-            'head': (-2 * S(2 * p), 0, 0), 'jaw': (2 + 2 * S(p), 0, 0), 'tail_01': (0, 0, 6 * S(p)), 'tail_02': (0, 0, 8 * S(p - .8))}
+            'head': (-2 * S(2 * p), 0, 0), 'jaw': (2 + 2 * S(p), 0, 0), 'tail_01': (0, 0, 6 * S(p)), 'tail_02': (0, 0, 8 * S(p - .8)), 'tail_03': (0, 0, 10 * S(p - 1.6))}
 
 def clip_walk(t, period=1.6, amp=20, stance=.62, lift=32, head=0, bob=.05):
     p = t / period * TAU
     pose = gait(t, period, amp, stance, lift)
     pose.update({'body': ((head * .3, 2 * S(p), 1.5 * S(p)), (0, 0, bob * math.cos(2 * p))), 'neck_01': (head, 0, -3 * S(p)), 'neck_02': (head * .5, 0, -2 * S(p)),
-                 'head': (2 * S(2 * p) + head * .3, 0, 0), 'jaw': (3, 0, 0), 'tail_01': (0, 0, 7 * S(p + math.pi)), 'tail_02': (0, 0, 9 * S(p + 2.4))})
+                 'head': (2 * S(2 * p) + head * .3, 0, 0), 'jaw': (3, 0, 0), 'tail_01': (0, 0, 7 * S(p + math.pi)), 'tail_02': (0, 0, 9 * S(p + 2.4)), 'tail_03': (0, 0, 11 * S(p + 1.6))})
     return pose
 
 def clip_charge(t): return clip_walk(t, .8, 34, .5, 48, head=12, bob=.12)
@@ -424,7 +455,7 @@ def clip_sweep(t):
     # Wind-up turn 0–.7, sweep .7–1.0 (the tail swings across the rear), unwind to 2.2.
     turn = keys(t, [(0, 0), (.7, 30), (1.0, -95), (1.35, -95), (2.2, 0)])
     lag = keys(t, [(0, 0), (.7, -18), (.85, 30), (1.05, 40), (1.4, 0), (2.2, 0)])
-    return {'body': ((0, -4 * S(min(1, t / 1.2) * math.pi), turn), (0, 0, 0)), 'tail_01': (0, 0, lag), 'tail_02': (0, 0, lag * .8), 'neck_01': (0, 0, -turn * .15),
+    return {'body': ((0, -4 * S(min(1, t / 1.2) * math.pi), turn), (0, 0, 0)), 'tail_01': (0, 0, lag), 'tail_02': (0, 0, lag * .8), 'tail_03': (0, 0, lag * .7), 'neck_01': (0, 0, -turn * .15),
             'head': (0, 0, -turn * .1), 'jaw': (keys(t, [(0, 2), (.6, 20), (1.2, 20), (1.8, 2)]), 0, 0)}
 
 def clip_erupt(t):
@@ -434,6 +465,39 @@ def clip_erupt(t):
     pose = {'body': ((8 * max(0, slam) + tr, 0, 0), (0, 0, -.28 * brace)), 'neck_01': (30 * slam, 0, 0), 'neck_02': (18 * slam, 0, 0), 'head': (12 * slam, 0, 0),
             'jaw': (keys(t, [(0, 2), (.8, 26), (.98, 0), (2.4, 2)]), 0, 0)}
     for leg, s in (('fl', -1), ('bl', -1), ('fr', 1), ('br', 1)): pose[f'thigh_{leg}'] = (0, s * 12 * brace, 0)
+    return pose
+
+def clip_tailspin(t):
+    # Coil 0–.8 (turns away, tail drawn in), spin a full turn .8–1.5 with the tail
+    # held out flat (it hits all around), settle by 2.6. Ends facing where it began.
+    turn = keys(t, [(0, 0), (.8, 45), (1.5, -315), (1.85, -360), (2.6, -360)])
+    lag = keys(t, [(0, 0), (.8, -28), (.95, 32), (1.45, 30), (1.85, -12), (2.6, 0)])
+    lift = keys(t, [(0, 0), (.8, .12), (1.5, .12), (2.0, 0)])
+    return {'body': ((0, -5 * S(min(1, t / 1.9) * math.pi), turn), (0, 0, lift)), 'tail_01': (14 * sstep(.5, .85, t) * (1 - sstep(1.6, 2.2, t)), 0, lag),
+            'tail_02': (8, 0, lag * .9), 'tail_03': (4, 0, lag * .8), 'neck_01': (10 * sstep(.4, .8, t) * (1 - sstep(1.7, 2.4, t)), 0, -lag * .3), 'head': (0, 0, -lag * .2),
+            'jaw': (keys(t, [(0, 2), (.7, 24), (1.6, 24), (2.2, 2)]), 0, 0)}
+
+def clip_tailslam(t):
+    # Turns its back 0–.9 while the tail rises over the shell, hammers it down at
+    # 1.1 (the ground cracks where the tip lands), holds, and turns back by 2.8.
+    turn = keys(t, [(0, 0), (.9, 165), (1.7, 165), (2.8, 0)])
+    raise_ = keys(t, [(0, 0), (.85, 62), (.98, 66), (1.1, -24), (1.5, -20), (2.3, 0)])
+    pitch = keys(t, [(0, 0), (.9, -6), (1.1, 7), (1.5, 4), (2.8, 0)])
+    return {'body': ((pitch, 0, turn), (0, 0, keys(t, [(0, 0), (1.1, -.12), (1.6, 0)]))), 'tail_01': (raise_, 0, 0), 'tail_02': (raise_ * .55, 0, 0), 'tail_03': (raise_ * .35, 0, 0),
+            'neck_01': (-8 * sstep(.3, .9, t) * (1 - sstep(1.7, 2.5, t)), 0, 20 * sstep(.2, .9, t) * (1 - sstep(1.6, 2.6, t))),
+            'head': (0, 0, 14 * sstep(.2, .9, t) * (1 - sstep(1.6, 2.6, t))), 'jaw': (keys(t, [(0, 2), (.8, 18), (1.2, 30), (1.8, 2)]), 0, 0)}
+
+def clip_pounce(t):
+    # Crouch 0–.75, leap .75–1.2 (the game moves it forward), land shell-first
+    # at 1.2 with a shockwave, recover by 2.6.
+    height = keys(t, [(0, 0), (.72, -.38), (.97, 1.7), (1.18, .35), (1.26, -.28), (1.7, -.08), (2.6, 0)])
+    pitch = keys(t, [(0, 0), (.72, 7), (.92, -18), (1.15, 8), (1.3, 5), (2.6, 0)])
+    air = sstep(.72, .9, t) * (1 - sstep(1.12, 1.25, t)); crouch = sstep(0, .72, t) * (1 - sstep(.72, .85, t))
+    tr = shake(t, 1.4, 15) * (1 if 1.2 < t < 1.55 else 0)
+    pose = {'body': ((pitch + tr, 0, 0), (0, 0, height)), 'neck_01': (-12 * air + 10 * crouch, 0, 0), 'neck_02': (-8 * air, 0, 0), 'head': (-6 * air, 0, 0),
+            'jaw': (keys(t, [(0, 2), (.7, 10), (.9, 40), (1.2, 40), (1.35, 4), (2.6, 2)]), 0, 0), 'tail_01': (-14 * air + 8 * crouch, 0, 0)}
+    for leg in ('fl', 'fr'): pose[f'thigh_{leg}'] = (-34 * air + 18 * crouch, 0, 0); pose[f'shin_{leg}'] = (20 * air - 30 * crouch, 0, 0)
+    for leg in ('bl', 'br'): pose[f'thigh_{leg}'] = (36 * air - 14 * crouch, 0, 0); pose[f'shin_{leg}'] = (-10 * air + 28 * crouch, 0, 0)
     return pose
 
 def clip_stagger(t):
@@ -480,6 +544,7 @@ def clip_sleep(t):
 
 CLIPS = [('Idle', 3.0, clip_idle), ('Walk', 1.6, clip_walk), ('Charge', .8, clip_charge), ('Roar', 2.6, clip_roar), ('Bite', 2.8, clip_bite),
          ('Stomp', 2.6, clip_stomp), ('Sweep', 2.2, clip_sweep), ('Erupt', 2.4, clip_erupt), ('Stagger', 1.2, clip_stagger), ('Topple', 1.2, clip_topple),
+         ('TailSpin', 2.6, clip_tailspin), ('TailSlam', 2.8, clip_tailslam), ('Pounce', 2.6, clip_pounce),
          ('Down', 2.0, clip_down), ('GetUp', 1.4, clip_getup), ('Death', 3.5, clip_death), ('Sleep', 4.0, clip_sleep)]
 
 def animate(rig):
@@ -521,9 +586,11 @@ eyes = build_eyes(); eyes.data.materials.append(material('M_Eye', color=hexc('#b
 claws = build_claws(); claw_mat = material('M_Claw', color=hexc('#2a241c'), rough=.45)
 for o in claws.values(): o.data.materials.append(claw_mat)
 fungi = build_fungi(); fungi.data.materials.append(material('M_Fungus', color=hexc('#d9cfab'), rough=.9))
+club = build_club(); club.data.materials.append(material('M_Club', root_nodes, rough=.9))
+thorns = build_tail_thorns(); thorns.data.materials.append(claw_mat)
 
 print('BAKING…')
-bake(shell, TEX, emission=True); bake(skin, TEX); bake(head, TEX // 2); bake(jaw, TEX // 2); bake(roots, TEX // 2)
+bake(shell, TEX, emission=True); bake(skin, TEX); bake(club, TEX // 4); bake(head, TEX // 2); bake(jaw, TEX // 2); bake(roots, TEX // 2)
 beard.data.materials[0] = roots.data.materials[0]
 bpy.ops.object.select_all(action='DESELECT')
 for o in (beard,):  # the beard shares the roots' baked bark
@@ -537,6 +604,8 @@ rig = build_rig()
 bind(skin, rig, skin_weights(skin))
 for o, bone in ((shell, 'shell'), (roots, 'shell'), (crystals, 'shell'), (fungi, 'shell'), (head, 'head'), (eyes, 'head'), (jaw, 'jaw'), (beard, 'jaw')): rigid(o, rig, bone)
 for key, o in claws.items(): rigid(o, rig, f'foot_{key}')
+rigid(club, rig, 'tail_03')
+tw = skin_weights(thorns); bind(thorns, rig, {k: tw[k] for k in ('tail_01', 'tail_02', 'tail_03')})
 animate(rig)
 
 tris = sum(len(p.vertices) - 2 for o in bpy.data.objects if o.type == 'MESH' for p in o.data.polygons)

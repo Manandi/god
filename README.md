@@ -14,10 +14,12 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 |---|---|---|
 | **Character design**: the Roblox-style block explorer, first-person block hands, character creator (name and look) | ChatGPT Sites version (`box-characters` branch) | `src/avatar.js`, `src/humanoid.js`, `src/shell.js`, `src/profile.js` |
 | **NPC design**: block NPCs with animated faces, turning to face you, markers | ChatGPT Sites version | `src/npcs.js` (the builder); colours and positions in `NPCS` in `src/story.js` |
-| **Town design**: Mossgate, the Rootward Homestead (start), the Rootwell ring, lantern-light pooling | ChatGPT Sites version | `buildCity` and `buildHome` in `src/world.js` |
+| **Town design**: Mossgate, the Rootward Homestead (start), lantern-light pooling | ChatGPT Sites version | `buildCity` and `buildHome` in `src/world.js`; house positions in `CITY_HOUSES` |
+| **Town dressing** (added 2026-09-29 at the owner's request): Blender props that add to Mossgate without changing it | Claude | `tools/blender/build_mossgate.py` → `public/sites/mossgate-props.glb`, placed by `src/sites.js` |
+| **Memory sites**: the Rootwell (its ring was the ChatGPT design; the owner asked for it to be rebuilt in Blender), Mosswatch Ruins, the Canopy Shrine | Claude (Blender) | `tools/blender/build_sites.py` → `public/sites/memory-sites.glb`, placed by `src/sites.js` |
 | **Combat**: moves, guard and parry, evade, flasks, sprint and jump attacks, creature AI | Claude | `src/combat/*`, `src/creatures.js` |
 | **Story and plot**: stages, all dialogue, journal, quest-point mob spawns, save migration | Claude | `src/story.js`, and the encounter and dialogue code in `src/main.js` |
-| **Boss and arena**: Orrun, the Hollow Warden, and the Warden's Hollow | Claude | `src/boss.js`, `tools/blender/build_warden.py`, `build_arena.py` |
+| **Boss and arena**: Orrun, the Hollow Warden (moveset, tail club), and the Warden's Hollow | Claude | `src/boss.js`, `tools/blender/build_warden.py`, `build_arena.py` |
 | **Camera and quest waypoint**: shoulder camera (hold right click to orbit), compass strip, on-screen waypoint | Claude; camera adapted from [Rotten Souls](https://github.com/igorjohn/rotten-souls) (MIT) | `src/camera.js`, `updateWaypoint` in `src/main.js` |
 | **Stats → mechanics**: what each real-life stat does in play | Claude | `src/mechanics.js` (the stats screen shows the same table) |
 | **Classes, weapons, Rootbreaker, double jump**: rules and weapon models from ChatGPT; movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
@@ -34,7 +36,7 @@ How the story uses the ChatGPT NPCs:
 
 ### Do not touch
 
-- **Character, NPC and town design.** Do not restyle, remodel, re-rig or re-proportion the block explorer, the first-person hands, the block NPCs, Mossgate or the Homestead. The old rounded Blender explorer is kept only behind `?legacyCharacters`; never make it the default again.
+- **Character, NPC and town design.** Do not restyle, remodel, re-rig or re-proportion the block explorer, the first-person hands, the block NPCs, Mossgate or the Homestead. Town props may be added (`src/sites.js`); the ChatGPT houses, square, stalls and palisade stay as they are. The old rounded Blender explorer is kept only behind `?legacyCharacters`; never make it the default again.
 - **The root 2D Phaser game and its save data.** Do not change its behaviour or the localStorage keys it uses. Removing unused files is fine only after checking that nothing references them, including map JSON.
 - **3D save data.** Keep the `verdant-reach-3d-v1` and `hollow-roots-verdant-3d-profile-v1` keys. Any change to the save format must migrate older saves; see `createStory` in `first-person-verdant/src/story.js`. It already maps the old `meet_wren` stage to `meet_sela`.
 - **The ChatGPT Site.** `first-person-verdant/.openai/hosting.json` and its separate source must not be overwritten wholesale with this tree. The root `.openai/hosting.json` belongs to the 2D Site.
@@ -63,7 +65,8 @@ How the story uses the ChatGPT NPCs:
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks, thornlings and the Old Shell (AI, poise, topple, shell armour, quake) |
-| `boss.js` | Orrun, the Hollow Warden, and arena loading |
+| `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
+| `sites.js` | Loads the Blender memory sites and Mossgate's props, their colliders, and the shrine tree's leaf crowns |
 | `profile.js`, `shell.js` | Real-life profile, stats, classes and weapon eligibility; the menus, stats screen and character creator |
 | `story.js` | Quest stages, NPC positions, all dialogue, the journal, save migration |
 | `world.js` | Terrain (town, homestead and arena levelled), Mossgate and the Homestead, sites, colliders |
@@ -87,7 +90,43 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
-## Latest shared state — 2026-09-29
+## Latest shared state — 2026-09-29 (evening)
+
+The owner asked for a more distinctive boss moveset (it charged too often and had no tail attacks), easier level 1 mobs, and Blender work on the memory areas and the town.
+
+- **Orrun's moveset (`src/boss.js`, `tools/blender/build_warden.py`):**
+  - New Blender clips, each with its own hit windows:
+    - **Tail spin:** a full turn with the tail held out flat.
+    - **Tail hammer:** it turns its back and slams the tail club down; the ground cracks where it lands.
+    - **Pounce:** a leap that lands shell-first with a shockwave.
+  - The model now has a long tail with a thorn ridge and a root club.
+  - **The club breaks, Monster Hunter style,** after 150 damage to it. Tail attacks then become shorter and lighter, and the hammer no longer makes a shockwave.
+  - **Follow-ups:** some attacks chain straight into another. Bite goes into tail spin, stomp into bite, tail hammer into pounce, and pounce into bite; they chain more often in phase 2.
+  - **Charge:** now only beyond 12 m, and at most once every 12 s. The pounce closes most gaps instead.
+  - In a 160 s test, all seven attacks appeared and the charge fired once.
+- **Mob balance (`src/creatures.js`):**
+  - At level 1, the shellback's health drops from 160 to 72 and the thornling's from 110 to 50. The shell now takes 80% damage instead of 70%.
+  - A shellback falls to about three light strings.
+  - Each explorer level adds 15% health; bosses are not scaled.
+- **Memory sites (`tools/blender/build_sites.py`):** the Rootwell, Mosswatch Ruins and the Canopy Shrine are Blender set pieces now, replacing the primitive shapes.
+  - Each opens toward its road.
+  - The ground under each one is levelled, via `LEVELLED` in `src/world.js`.
+  - The Rootwell's pool now sits at ground level, so you wade in instead of standing inside rock.
+  - See `first-person-verdant/public/sites/README.md`.
+- **Mossgate props (`tools/blender/build_mossgate.py`):** a well, market counters with produce, a cart, lantern posts, a signpost, benches, planters, barrels, crates, sacks, firewood, a window box on three walls and a chimney on every house, and bunting at the gate and across the square.
+  - They are additions only: the ChatGPT houses, square, stalls, palisade and NPC positions are unchanged, and no prop blocks an NPC.
+- **Tested headless, no page errors:**
+  - the full story and old-save migration
+  - the combat smoke test and the boss logic
+  - the boss moveset and the club break
+  - the Chronicles and the Old Shell
+  - weapons and double jump
+  - save launches
+  - in-game screenshots of all three sites and the town
+  - no mob spawns inside a new collider
+- **Not verified:** how the new attacks feel in a real browser.
+
+## Latest shared state — 2026-09-29 (morning)
 
 The owner asked for a better camera and quest marker, a dev mode, Monster Hunter / Elden Ring combat feel, "dash" instead of "roll", real-life stats that drive the mechanics, and everything left behind from the ChatGPT Sites version.
 

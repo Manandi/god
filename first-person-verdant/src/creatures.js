@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { groundY } from './world.js';
 import { canOccupy } from './collision.js';
 import { angleTo } from './angles.js';
+import { level } from './profile.js';
 
 const shellMaterial = new THREE.MeshStandardMaterial({ color: 0x556f3b, roughness: .92, flatShading: true });
 const scuteMaterial = new THREE.MeshStandardMaterial({ color: 0x9aaa5c, roughness: .9, flatShading: true });
@@ -17,9 +18,11 @@ function part(parent, geometry, material, x, y, z, sx = 1, sy = 1, sz = 1) {
 const damp = THREE.MathUtils.damp;
 
 // Behaviour tuning per kind. Times in seconds, distances in metres.
+// Health is for a level 1 explorer: a shellback falls to about three light
+// strings, or two strings and a heavy. Each explorer level adds 15% (not the bosses).
 const KINDS = {
-  shellback: { size: .64, pace: 1, health: 160, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
-  thornling: { size: .57, pace: .8, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
+  shellback: { size: .64, pace: 1, health: 72, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
+  thornling: { size: .57, pace: .8, health: 50, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
   // The Old Shell (ChatGPT Sites boss): a charred giant with breakable armour and a quake.
   oldshell: { size: 1.48, pace: 1.08, health: 900, poise: 48, walk: .72, chase: 1.9, turn: 2.25, notice: 24, spacing: 4.4, cooldown: [1.1, 2.1], biteRadius: .75 }
 };
@@ -35,7 +38,8 @@ const ATTACKS = {
   quake: { windup: 1.28, track: .4, active: .3, recover: 1.4, range: [0, 5.8], damage: 2, kind: 'heavy', label: 'quake', boss: true }
 };
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
-const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
+const PART_DAMAGE = { head: 1.3, shell: .8, belly: 2 };
+const healthFor = (type, k) => type === 'oldshell' ? k.health : Math.round(k.health * (1 + (level() - 1) * .15));
 const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
 // The slam's shockwave: radius over time. Dashing through it is safe; dashing
 // away works only if you start early.
@@ -54,7 +58,7 @@ export class Creature {
   constructor(scene, x, z, type = 'shellback', options = {}) {
     const k = KINDS[type];
     this.kind = k; this.type = type; this.home = { x, z }; this.x = x; this.z = z;
-    this.maxHealth = k.health; this.health = k.health; this.alive = true;
+    this.maxHealth = healthFor(type, k); this.health = this.maxHealth; this.alive = true;
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
     this.id = options.id || null; this.chapter = options.chapter || null;
@@ -524,7 +528,7 @@ export class Creature {
     this.respawn(); this.setState('emerge'); this.body.position.y = -2.6; this.heading = Math.random() * Math.PI * 2;
   }
   respawn() {
-    this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
+    this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
     if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
     this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0);

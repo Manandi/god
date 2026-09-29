@@ -1,7 +1,7 @@
 """Shared helpers for the procedural Blender builds (build_warden.py, build_arena.py)."""
 import bpy, bmesh, math, os
 import numpy as np
-from mathutils import Vector
+from mathutils import Vector, noise
 
 TMP = os.environ.get('HR_BAKE_TMP', '/tmp/hr_bake')
 os.makedirs(TMP, exist_ok=True)
@@ -103,6 +103,31 @@ def root_nodes(nt, bsdf):
     base = n.mix(base, hexc('#4f6f2e'), moss)
     n.out(base, bsdf.inputs['Base Color'])
     n.bump(stretched, .8, bsdf, .06)
+
+def stone_nodes(nt, bsdf):
+    """Weathered grey-green stone with moss on the upward faces (arena, memory sites)."""
+    n = N(nt)
+    big = n.noise(1.3, 5); grain = n.noise(14, 6); cracks = n.voronoi(3.2)
+    up = n.node('ShaderNodeSeparateXYZ'); nt.links.new(n.node('ShaderNodeNewGeometry').outputs['Normal'], up.inputs[0])
+    base = n.mix(hexc('#59604f'), hexc('#8a8c78'), n.ramp(big, 0, 1, .35, .7))
+    base = n.mix(base, hexc('#3e4535'), n.ramp(grain, 0, .5, .4, .8))
+    moss = n.math('MULTIPLY', n.ramp(up.outputs['Z'], 0, 1, .45, .9), n.ramp(n.noise(2.5, 4), 0, 1, .45, .62))
+    base = n.mix(base, hexc('#4d6e2e'), moss)
+    base = n.mix(base, hexc('#23271e'), n.ramp(cracks, .8, 0, 0, .05))
+    n.out(base, bsdf.inputs['Base Color'])
+    n.bump(n.math('ADD', grain, n.ramp(cracks, -1, 0, 0, .05), clamp=False), .7, bsdf, .08)
+
+def arch(p0, p1, height, r0, r1, name, wobble=.8, seed=0):
+    """A root arching from p0 to p1: wobbling, thinning in the middle, buttressed at both feet."""
+    pts, rad = [], []
+    for t in np.linspace(0, 1, 16):
+        p = p0.lerp(p1, t); p.z += math.sin(t * math.pi) * height
+        k = Vector((t * 2.2, seed, 0))
+        p += Vector((noise.noise(k), noise.noise(k + Vector((0, 0, 3))), .5 * noise.noise(k + Vector((0, 0, 6))))) * wobble
+        p += Vector((noise.noise(k * 3.1), noise.noise(k * 3.1 + Vector((0, 0, 9))), 0)) * wobble * .35
+        flare = 1 + .7 * (sstep(.18, 0, t) + sstep(.82, 1, t))          # buttressed feet
+        rad.append((r0 + (r1 - r0) * t) * (1 - .45 * math.sin(t * math.pi)) * flare); pts.append(p)
+    return tube(pts, rad, name)
 
 # ------------------------------------------------------------------- baking
 def bake(obj, size, normal=True, emission=False):

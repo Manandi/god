@@ -1,15 +1,18 @@
 import * as THREE from 'three';
 
 export const SITES = [
-  { id: 'rootwell', title: 'THE ROOTWELL', x: -61, z: -42, story: 'A spring beneath the oldest roots. Its water carries the first memory.' },
-  { id: 'ruins', title: 'MOSSWATCH RUINS', x: 63, z: -89, story: 'Stone sentinels once watched the valley. Their oath remains among the fallen arches.' },
-  { id: 'shrine', title: 'THE CANOPY SHRINE', x: -12, z: -151, story: 'The forest kept one name hidden in the crown of its tallest tree.' }
+  // approach: where the road arrives (the keeper stands on it); the Blender set piece opens toward it.
+  { id: 'rootwell', title: 'THE ROOTWELL', x: -61, z: -42, approach: { x: -51, z: -31 }, story: 'A spring beneath the oldest roots. Its water carries the first memory.' },
+  { id: 'ruins', title: 'MOSSWATCH RUINS', x: 63, z: -89, approach: { x: 52.5, z: -78 }, story: 'Stone sentinels once watched the valley. Their oath remains among the fallen arches.' },
+  { id: 'shrine', title: 'THE CANOPY SHRINE', x: -12, z: -151, approach: { x: 3, z: -140.5 }, story: 'The forest kept one name hidden in the crown of its tallest tree.' }
 ];
 export const GATE = { x: 23, z: -186 };
 // Mossgate (the town) and the Rootward Homestead (the starting base) are the
 // ChatGPT Sites design; the Warden's Hollow is the boss arena before the
 // Canopy Gate (tools/blender/build_arena.py).
 export const CITY = { name:'MOSSGATE', x:0, z:53, radius:22 };
+/** Mossgate's houses (ChatGPT town design): x, z, rotation. The Blender props dress them (sites.js). */
+export const CITY_HOUSES = [[-11,50,.16],[11,50,-.16],[-10,61,.34],[10,62,-.28],[0,67,.02]];
 export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
 // The Scorched Hollow: where the Old Shell (the ChatGPT Sites hunt) has nested.
@@ -30,11 +33,15 @@ function terrainY(x,z) {
   return broad+ridges+edge*edge*18;
 }
 export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
+// Level ground: the town square, the homestead, the arena, the hunt, and the
+// three memory sites (their Blender set pieces sit on flat ground).
+const LEVELLED=[[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8],
+  [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7]];
 export function groundY(x,z) {
   // The town square, the homestead and the arena are level gameplay spaces;
   // the land eases into each of them.
   let height=terrainY(x,z);
-  for(const [cx,cz,r,feather] of [[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8]]){
+  for(const [cx,cz,r,feather] of LEVELLED){
     const d=Math.hypot(x-cx,z-cz),blend=1-THREE.MathUtils.smoothstep(d,r,r+feather);
     if(blend>0)height=THREE.MathUtils.lerp(height,terrainY(cx,cz),blend);
   }
@@ -144,7 +151,7 @@ function buildCity(scene,colliders,animated,stone,moss,cameraObstacles){
   mesh(new THREE.CylinderGeometry(9.8,10.5,.42,24),stone,CITY.x,y-.19,CITY.z,scene);
   const squareProxy=new THREE.Mesh(new THREE.CylinderGeometry(9.8,10.5,.42,24),proxyMaterial);squareProxy.position.set(CITY.x,y-.19,CITY.z);scene.add(squareProxy);cameraObstacles.push(squareProxy);
   const compass=mesh(new THREE.RingGeometry(2.3,2.55,8),new THREE.MeshStandardMaterial({color:0xa7b875,roughness:.8,side:THREE.DoubleSide}),CITY.x,y+.29,CITY.z,scene,false);compass.rotation.x=-Math.PI/2;compass.rotation.z=Math.PI/8;
-  for(const [x,z,rot] of [[-11,50,.16],[11,50,-.16],[-10,61,.34],[10,62,-.28],[0,67,.02]]){
+  for(const [x,z,rot] of CITY_HOUSES){
     const home=new THREE.Group();home.position.set(x,groundY(x,z),z);home.rotation.y=rot;scene.add(home);
     localBox(home,6.2,.7,5.2,stone,0,.35,0);localBox(home,5.6,3.4,4.6,plaster,0,2.35,0);
     for(const sx of [-1,1])for(const sz of [-1,1])localBox(home,.28,3.55,.28,timber,sx*2.55,2.35,sz*2.05);
@@ -281,7 +288,7 @@ export function buildWorld(scene){
   }
   stalks.count=caps.count=fungusCount;scene.add(stalks,caps);
   // A readable entrance: the woodland trail begins beside a lantern-lit standing stone.
-  const runeMat=new THREE.MeshStandardMaterial({color:0xa8b394,roughness:1}),gold=new THREE.MeshStandardMaterial({color:0xe1b96e,emissive:0xa57c32,emissiveIntensity:1.8});
+  const gold=new THREE.MeshStandardMaterial({color:0xe1b96e,emissive:0xa57c32,emissiveIntensity:1.8});
   const lanternSites=[[-7,28],[-19,14],[-35,-9],[-49,-27],[16,-32],[40,-57],[54,-79],[35,-113],[6,-139]];
   for(const [x,z] of lanternSites){
     cylinder(scene,x,z,.15,.23,2.3,bark);mesh(new THREE.OctahedronGeometry(.37),gold,x,groundY(x,z)+2.62,z,scene,false);colliders.push({x,z,r:.28,top:groundY(x,z)+2.9});
@@ -300,27 +307,10 @@ export function buildWorld(scene){
       light.intensity=d<24*24?1.6:0;
     });
   }
-  // The Rootwell, Mosswatch, and the Canopy Gate have distinct silhouettes.
+  // The memory sites are Blender set pieces (tools/blender/build_sites.py),
+  // loaded by sites.js. Only the Rootwell's water lives here, for its animation.
   const rx=SITES[0].x,rz=SITES[0].z,ry=groundY(rx,rz);
-  mesh(new THREE.CylinderGeometry(7,8,1.5,16),rockMat,rx,ry+.45,rz,scene);
-  const pool=mesh(new THREE.CircleGeometry(5.7,48),new THREE.MeshPhysicalMaterial({color:0x48b3b4,emissive:0x135454,emissiveIntensity:.7,metalness:.22,roughness:.17,transparent:true,opacity:.83}),rx,ry+1.23,rz,scene,false);pool.rotation.x=-Math.PI/2;animated.push({mesh:pool,type:'pool'});
-  // The basin is a ring, not one giant blocker. Leave a clear entrance toward
-  // the lantern road and make every visible rim segment solid.
-  const rootwellEntrance=Math.atan2(CITY.z-rz,CITY.x-rx);
-  for(let i=0;i<16;i++){
-    const a=i*Math.PI/8,x=rx+Math.cos(a)*7,z=rz+Math.sin(a)*7;
-    cylinder(scene,x,z,.8,1.2,1+random()*1.8,rockMat);
-    const gap=Math.abs(Math.atan2(Math.sin(a-rootwellEntrance),Math.cos(a-rootwellEntrance)));
-    if(gap>.34)colliders.push({x,z,r:1.02,top:groundY(x,z)+2.8,kind:'rootwell-rim'});
-  }
-  const ux=SITES[1].x,uz=SITES[1].z;
-  for(let i=0;i<8;i++){const a=i*Math.PI/4,x=ux+Math.cos(a)*10,z=uz+Math.sin(a)*8;const h=3+random()*4;box(scene,x,z,1.6,h,1.6,rockMat,0,a);box(scene,x,z,2.2,.45,2.2,mossMat,h);colliders.push({x,z,r:1.1,top:groundY(x,z)+h+.45});}
-  for(let i=0;i<5;i++){let x=ux-7+i*3,z=uz-6;box(scene,x,z,3,.7,2.4,runeMat,0,.22);colliders.push({x,z,r:1.25,top:groundY(x,z)+.7});}
-  const sx=SITES[2].x,sz=SITES[2].z;const giantH=groundY(sx,sz);
-  mesh(new THREE.CylinderGeometry(2.9,5.6,24,24),bark,sx,giantH+12,sz,scene);colliders.push({x:sx,z:sz,r:5.3,top:giantH+24});
-  for(let i=0;i<9;i++){let a=i*2.399,r=5+random()*9;const branch=mesh(new THREE.CylinderGeometry(.4,1.2,r,7),bark,sx+Math.cos(a)*r*.32,giantH+17+random()*8,sz+Math.sin(a)*r*.32,scene);branch.rotation.z=Math.sin(a)*.65;branch.rotation.x=Math.cos(a)*.65;}
-  for(let i=0;i<6;i++){const a=i*1.047,m=mesh(crownGeometry,leafMaterials[i%5],sx+Math.cos(a)*6,giantH+24+(i%3)*2,sz+Math.sin(a)*6,scene);m.scale.set(7+i%2*2,6+i%2*1.5,7+i%2*2);}
-  for(let i=0;i<10;i++){let a=i*Math.PI/5,x=sx+Math.cos(a)*10,z=sz+Math.sin(a)*10;cylinder(scene,x,z,.52,.85,1.4,rockMat);colliders.push({x,z,r:.8,top:groundY(x,z)+1.4});}
+  const pool=mesh(new THREE.CircleGeometry(6.0,48),new THREE.MeshPhysicalMaterial({color:0x48b3b4,emissive:0x135454,emissiveIntensity:.7,metalness:.22,roughness:.17,transparent:true,opacity:.83}),rx,ry+.14,rz,scene,false);pool.rotation.x=-Math.PI/2;animated.push({mesh:pool,type:'pool'});
   const gx=GATE.x,gz=GATE.z,gy=groundY(gx,gz);
   for(let side of [-1,1]){box(scene,gx+side*3.2,gz,2,10,2,rockMat);colliders.push({x:gx+side*3.2,z:gz,r:1.2,top:groundY(gx+side*3.2,gz)+10});}
   const lintel=mesh(new THREE.BoxGeometry(9,2,2),rockMat,gx,gy+10,gz,scene);lintel.rotation.z=-.06;
@@ -336,6 +326,6 @@ export function buildWorld(scene){
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,city,home,nearTrail,cameraObstacles,sun,updateLanternLights,
+  return {colliders,echoes,animated,particles,gateGlow,city,home,nearTrail,cameraObstacles,sun,updateLanternLights,crownGeometry,leafMaterials,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }

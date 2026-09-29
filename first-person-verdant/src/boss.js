@@ -22,11 +22,26 @@ const ATTACKS = {
             hits: [[.72, .9], [1.66, 1.84]], lunge: [[.62, .85, 1.6], [1.55, 1.8, 1.1]], range: [0, 6.5], arc: .75 },
   stomp:  { clip: 'Stomp', dur: 2.6, windup: 1.0, kind: 'heavy', damage: 2, label: 'root stomp', impact: [1.08, 1.2],
             wave: { from: 2.2, to: 10.5, duration: .8 }, range: [0, 7.5], arc: 1.0 },
-  sweep:  { clip: 'Sweep', dur: 2.2, windup: .7, kind: 'heavy', damage: 2, label: 'tail sweep', hits: [[.72, 1.08]], range: [0, 8], arc: 9 },
-  charge: { clip: 'Charge', windup: .9, run: 2.3, speed: 9, recover: 1.3, kind: 'heavy', damage: 2, label: 'charge', range: [9, 40], arc: .6 },
+  sweep:  { clip: 'Sweep', dur: 2.2, windup: .7, kind: 'heavy', damage: 2, label: 'tail sweep', hits: [[.72, 1.08]], range: [0, 9.5], arc: 9 },
+  charge: { clip: 'Charge', windup: .9, run: 2.3, speed: 9, recover: 1.3, kind: 'heavy', damage: 2, label: 'charge', range: [12, 40], arc: .6 },
+  // A full turn with the tail held out flat: nowhere near it is safe, so dash through or back off.
+  tailspin: { clip: 'TailSpin', dur: 2.6, windup: .8, kind: 'heavy', damage: 2, label: 'tail spin', hits: [[.86, 1.5]], range: [0, 9], arc: 9 },
+  // Turns its back and hammers the tail down where you stood; the ground cracks around the tip.
+  tailslam: { clip: 'TailSlam', dur: 2.8, windup: .95, kind: 'heavy', damage: 2, label: 'tail hammer', hits: [[1.04, 1.2]], impact: [1.08, 1.2],
+              wave: { from: 2, to: 4.8, duration: .5 }, at: 'tail', range: [4.5, 10.5], arc: 9 },
+  // Crouches, then leaps at you and lands shell-first; the landing sends out a ring.
+  pounce: { clip: 'Pounce', dur: 2.6, windup: .75, kind: 'heavy', damage: 2, label: 'pounce', impact: [1.18, 1.32], wave: { from: 3.6, to: 8.5, duration: .7 }, at: 'body',
+            lunge: [[.75, 1.2, 9]], close: 1.4, range: [5.5, 17], arc: .9 },
   erupt:  { clip: 'Erupt', dur: 2.4, windup: .95, kind: 'heavy', damage: 1, label: 'root eruption', range: [3, 30], arc: 9, phase: 2 }
 };
-const PART = { head: 1.5, neck: 1.1, shell: .45, leg: 1, tail: .8, belly: 2.2 };
+// Follow-ups: some attacks flow straight into another, Monster Hunter style,
+// with no recovery between them. [next attack, chance in phase 1, phase 2, max distance].
+const FOLLOW = { bite: ['tailspin', .2, .45, 6], stomp: ['bite', .25, .4, 6.5], tailslam: ['pounce', .15, .35, 16], pounce: ['bite', .3, .5, 6] };
+const CHARGE_REST = 12;                                 // seconds before it will charge again
+const PART = { head: 1.5, neck: 1.1, shell: .45, leg: 1, tail: .8, club: 1, belly: 2.2 };
+// The root club on its tail breaks after this much damage to it: its tail
+// attacks then lose the club's reach, weight and the tail hammer's shockwave.
+const CLUB_HEALTH = 150;
 const POISE = 70, FLINCH = 110, TOPPLE_DOWN = 4.6, REEL = 2.3;
 const lerp = THREE.MathUtils.lerp, damp = THREE.MathUtils.damp;
 
@@ -39,8 +54,9 @@ export class Warden {
     this.attack = null; this.cooldown = 2; this.lastEvent = ''; this.hitDone = new Set(); this.pending = [];
     this.scene = scene; this.root = new THREE.Group(); scene.add(this.root);
     const model = gltf.scene; model.scale.setScalar(SCALE); this.root.add(model); this.model = model;
-    this.bones = {}; this.mats = {};
+    this.bones = {}; this.mats = {}; this.clubHealth = CLUB_HEALTH;
     model.traverse(o => {
+      if (o.name === 'TailClub') this.club = o;
       if (o.isBone) this.bones[o.name] = o;
       if (o.isMesh) {
         o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
@@ -91,8 +107,8 @@ export class Warden {
   /** Things the explorer cannot walk through: the shell, and the head and tail. */
   bodyCircles() {
     if (this.state === 'released' || !this.root.visible) return [{ x: this.x, z: this.z, r: this.radius }];
-    const h = this.bone('head'), t = this.bone('tail_02');
-    return [{ x: this.x, z: this.z, r: this.radius }, { x: h.x, z: h.z, r: .9 }, { x: t.x, z: t.z, r: .6 }];
+    const h = this.bone('head'), t = this.bone('tail_02'), c = this.tailTip();
+    return [{ x: this.x, z: this.z, r: this.radius }, { x: h.x, z: h.z, r: .9 }, { x: t.x, z: t.z, r: .6 }, { x: c.x, z: c.z, r: this.clubBroken ? .35 : .7 }];
   }
   showBar() {}
 
@@ -105,7 +121,9 @@ export class Warden {
     this.bone('body', v);
     for (const k of [-1.7, 0, 1.7]) out.push({ x: v.x + f.x * k, y: v.y + .6, z: v.z + f.z * k, r: 2.05, part: 'shell' });
     for (const leg of ['fl', 'fr', 'bl', 'br']) { this.bone('shin_' + leg, v); out.push({ x: v.x, y: v.y, z: v.z, r: .8, part: 'leg' }); }
-    this.bone('tail_02', v); out.push({ x: v.x, y: v.y, z: v.z, r: .55, part: 'tail' });
+    this.bone('tail_02', v); out.push({ x: v.x, y: v.y, z: v.z, r: .6, part: 'tail' });
+    this.bone('tail_03', v); out.push({ x: v.x, y: v.y, z: v.z, r: .45, part: 'tail' });
+    const c = this.tailTip(); out.push({ x: c.x, y: c.y, z: c.z, r: this.clubBroken ? .4 : .85, part: this.clubBroken ? 'tail' : 'club' });
     return out;
   }
   /** Where the current attack can hurt (also drawn by the F3 debug overlay). */
@@ -114,8 +132,19 @@ export class Warden {
     if (!a || !['attack', 'charge'].includes(this.state)) return out;
     const live = w => ct >= w[0] && ct <= w[1];
     if (this.attack === 'bite' && a.hits.some(live)) { this.bone('head', v).addScaledVector(this.forward(), .7); out.push({ x: v.x, y: v.y, z: v.z, r: 1.05 }); }
+    if (this.attack === 'tailspin' && a.hits.some(live)) {
+      for (const [b, r] of [['tail_03', 1.1], ['tail_02', 1.3], ['tail_01', 1.3]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
+      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .8 : 1.4 });
+    }
+    if (this.attack === 'tailslam' && a.hits.some(live)) { const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y + .3, z: tip.z, r: this.clubBroken ? 1.1 : 1.8 }); }
+    if (this.attack === 'pounce' && live(a.impact)) { this.bone('body', v); out.push({ x: v.x, y: groundY(v.x, v.z) + .6, z: v.z, r: 3.3 }); }
+    if (a.wave && this.attack !== 'stomp' && !(a.at === 'tail' && this.clubBroken)) {
+      const w = ct - a.impact[0];
+      if (w >= 0 && w <= a.wave.duration) { const q = this.impactPoint(); out.push({ x: q.x, y: q.y, z: q.z, r: lerp(a.wave.from, a.wave.to, w / a.wave.duration), ring: true }); }
+    }
     if (this.attack === 'sweep' && a.hits.some(live)) {
-      for (const [b, r] of [['tail_02', 1.5], ['tail_01', 1.3]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
+      for (const [b, r] of [['tail_03', 1.1], ['tail_02', 1.4], ['tail_01', 1.3]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
+      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .8 : 1.4 });
     }
     if (this.attack === 'stomp') {
       if (live(a.impact)) { const p = this.stompPoint(); out.push({ x: p.x, y: p.y + .4, z: p.z, r: 2.5 }); }
@@ -124,6 +153,14 @@ export class Warden {
     }
     if (this.attack === 'charge' && this.chargeRun) { this.bone('body', v).addScaledVector(this.forward(), 2.4); out.push({ x: v.x, y: v.y, z: v.z, r: 2.1 }); }
     return out;
+  }
+  /** The root club at the end of the tail, where the tail hammer lands. */
+  tailTip() {
+    const a = this.bone('tail_02'), b = this.bone('tail_03'); return b.clone().add(b.sub(a).multiplyScalar(this.clubBroken ? .75 : .95));
+  }
+  impactPoint() {
+    const a = ATTACKS[this.attack];
+    const p = a?.at === 'tail' ? this.tailTip() : a?.at === 'body' ? this.bone('body') : this.stompPoint(); p.y = groundY(p.x, p.z); return p;
   }
   stompPoint() {
     const a = this.bone('foot_fl'), b = this.bone('foot_fr'); const p = a.add(b).multiplyScalar(.5); p.y = groundY(p.x, p.z); return p;
@@ -138,6 +175,9 @@ export class Warden {
     if (mult < 1 && pierce) mult = Math.min(1, mult * (1 + pierce));
     const dealt = damage * mult;
     this.health = Math.max(0, this.health - dealt); this.flash = .12;
+    if (part === 'club' && !this.clubBroken && (this.clubHealth -= dealt) <= 0) {
+      this.clubBroken = true; if (this.club) this.club.visible = false; this.pending.push({ type: 'tailBroken' });
+    }
     const out = { damage: dealt, effect: part === 'belly' ? 'belly' : mult > 1 ? 'weak' : mult < 1 ? 'armored' : 'normal', toppled: false, defeated: false, staggered: false };
     if (this.health <= 0) { this.alive = false; this.attack = null; this.setState('defeated'); this.lastEvent = 'released'; out.defeated = true; this.clearSpots(); return out; }
     if (this.phase === 1 && this.health < this.maxHealth * .6) this.pendingPhase = true;
@@ -179,6 +219,7 @@ export class Warden {
   reset() {
     this.alive = true; this.awake = false; this.health = this.maxHealth; this.poise = POISE; this.phase = 1; this.enraged = false; this.pendingPhase = false;
     this.x = BED.x; this.z = BED.z; this.heading = 0; this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('dormant'); this.play('Sleep', { fade: .1 });
+    this.clubHealth = CLUB_HEALTH; this.clubBroken = false; if (this.club) this.club.visible = true;
     this.setGlow(1); this.place();
   }
   /** Freed: lies still, eyes warm, the drained memories gone from its back. */
@@ -196,7 +237,7 @@ export class Warden {
   update(dt, time, ctx) {
     if (this.sealed) { this.t += dt; this.play('Sleep'); this.mixer.update(dt); return []; }
     const events = this.pending.splice(0), p = ctx.player;
-    this.t += dt; this.flash = Math.max(0, (this.flash || 0) - dt);
+    this.t += dt; this.clock = (this.clock || 0) + dt; this.flash = Math.max(0, (this.flash || 0) - dt);
     this.poiseDelay -= dt; if (this.poiseDelay <= 0) this.poise = Math.min(POISE, this.poise + dt * 5);
     this.flinch = Math.max(0, this.flinch - dt * 6);
     const dx = p.x - this.x, dz = p.z - this.z, dist = Math.hypot(dx, dz), toPlayer = Math.atan2(dx, dz), rel = angleTo(this.heading, toPlayer);
@@ -293,7 +334,8 @@ export class Warden {
   }
 
   choose(dist, rel) {
-    const behind = Math.abs(rel) > 1.7, front = Math.abs(rel) < .8, options = [];
+    const behind = Math.abs(rel) > 1.7, side = Math.abs(rel) > 1.1, front = Math.abs(rel) < .8, options = [];
+    const chargeReady = this.clock - (this.lastCharge ?? -99) > CHARGE_REST;
     for (const [name, a] of Object.entries(ATTACKS)) {
       if (a.phase && this.phase < a.phase) continue;
       if (dist < a.range[0] || dist > a.range[1]) continue;
@@ -301,19 +343,23 @@ export class Warden {
       if (name === 'bite') w = front && dist < 6.5 ? 1.4 : 0;
       if (name === 'stomp') w = front ? (dist < 4.5 ? 1.2 : .7) : 0;
       if (name === 'sweep') w = behind || (Math.abs(rel) > 1.2 && dist < 6) ? 2.2 : 0;
-      if (name === 'charge') w = Math.abs(rel) < .6 ? 1.5 : 0;
+      // The charge is its long-range answer, used sparingly; the pounce closes most gaps.
+      if (name === 'charge') w = chargeReady && Math.abs(rel) < .6 && dist > 12 ? .8 : 0;
+      if (name === 'pounce') w = Math.abs(rel) < .9 ? (dist < 12 ? 1.1 : .8) : 0;
+      if (name === 'tailspin') w = dist < 8.5 ? (side ? 1.6 : this.phase > 1 ? 1 : .55) : 0;
+      if (name === 'tailslam') w = front && dist > 4.5 ? 1.2 : 0;   // turns its back on you, so only from the front
       if (name === 'erupt') w = dist > 7 ? 1.3 : .5;
       if (name === this.lastAttack) w *= .45;              // rarely the same thing twice
       if (w > 0) options.push([name, w]);
     }
-    options.push([null, dist > 9 ? 1.1 : .25]);          // sometimes it just keeps coming
+    options.push([null, dist > 9 ? .8 : .25]);           // sometimes it just keeps coming
     let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
     for (const [name, w] of options) if ((r -= w) <= 0) return name;
     return null;
   }
   begin(name, p, events) {
     this.attack = name; this.lastAttack = name; this.hitDone.clear();
-    if (name === 'charge') { this.setState('charge'); this.chargeRun = false; this.ran = 0; }
+    if (name === 'charge') { this.setState('charge'); this.chargeRun = false; this.ran = 0; this.lastCharge = this.clock; }
     else this.setState('attack');
     if (name === 'erupt') this.planEruption(p);
     events.push({ type: 'windup', attack: name });
@@ -325,7 +371,7 @@ export class Warden {
     if (ct < a.windup * .8) this.heading += THREE.MathUtils.clamp(angleTo(this.heading, toPlayer), -1.3 * dt, 1.3 * dt);
     if (ct >= a.windup && !this.hitDone.has('go')) { this.hitDone.add('go'); events.push({ type: 'attack', attack: this.attack }); }
     for (const [from, to, dist2] of a.lunge || []) if (ct >= from && ct < to) {
-      const f = this.forward(), gap = Math.hypot(p.x - this.x, p.z - this.z) - this.radius - 1.2;
+      const f = this.forward(), gap = Math.hypot(p.x - this.x, p.z - this.z) - (a.close ?? this.radius + 1.2);
       const s = Math.min(dist2 / (to - from) * dt / this.pace, Math.max(0, gap)); this.x += f.x * s; this.z += f.z * s;
     }
     for (const v of this.damageVolumes()) {
@@ -333,13 +379,19 @@ export class Warden {
       if (this.hitDone.has(key)) continue;
       const d = Math.hypot(v.x - p.x, v.z - p.z);
       const inside = v.ring ? Math.abs(d - v.r) < .55 && ctx.playerGrounded : d < v.r + .35 && p.y < v.y + v.r + .3 && p.y + 1.8 > v.y - v.r;
-      if (inside) { this.hitDone.add(key); events.push({ type: 'strike', attack: this.attack, label: a.label, kind: a.kind, damage: a.damage, ring: !!v.ring, x: v.x, z: v.z }); }
+      const weak = this.clubBroken && ['sweep', 'tailspin', 'tailslam'].includes(this.attack);
+      if (inside) { this.hitDone.add(key); events.push({ type: 'strike', attack: this.attack, label: a.label, kind: weak ? 'light' : a.kind, damage: weak ? 1 : a.damage, ring: !!v.ring, x: v.x, z: v.z }); }
     }
-    if (this.attack === 'stomp' && ct >= a.impact[0] && !this.hitDone.has('wave')) {
-      this.hitDone.add('wave'); const pt = this.stompPoint();
+    if (a.wave && ct >= a.impact[0] && !this.hitDone.has('wave')) {
+      this.hitDone.add('wave'); const pt = this.impactPoint();
       events.push({ type: 'shockwave', point: pt, from: a.wave.from, to: a.wave.to, duration: a.wave.duration * this.pace });
     }
-    if (ct >= a.dur) { this.recoverTime = .5 * this.pace; this.cooldown = (1.2 + Math.random() * 1.2) * (this.enraged ? .65 : 1); this.attack = null; this.setState('recover'); }
+    if (ct >= a.dur) {
+      const f = FOLLOW[this.attack], d = Math.hypot(p.x - this.x, p.z - this.z);
+      if (f && !this.followed && d <= f[3] && Math.random() < (this.phase > 1 ? f[2] : f[1])) { this.followed = true; this.begin(f[0], p, events); return; }
+      this.followed = false;
+      this.recoverTime = .5 * this.pace; this.cooldown = (1.2 + Math.random() * 1.2) * (this.enraged ? .65 : 1); this.attack = null; this.setState('recover');
+    }
   }
   runCharge(dt, p, ctx, events, toPlayer) {
     const a = ATTACKS.charge;
@@ -414,7 +466,7 @@ export class Warden {
     const active = a && (this.state === 'attack' || this.chargeRun);
     this.tell.visible = !!(this.alive && active && this.attack !== 'erupt');
     if (!this.tell.visible) return;
-    const reach = { bite: 5.2, stomp: 4.2, sweep: 6.2, charge: 3.4 }[this.attack] || 4;
+    const reach = { bite: 5.2, stomp: 4.2, sweep: 8.4, charge: 3.4, tailspin: this.clubBroken ? 7.6 : 8.8, tailslam: 8.2, pounce: 3.4 }[this.attack] || 4;
     const w = warning ? Math.min(1, this.state === 'attack' ? ct / a.windup : this.t / (a.windup * this.pace)) : 1;
     this.tell.position.set(this.x, groundY(this.x, this.z) + .07, this.z);
     this.tell.scale.setScalar(reach * (warning ? .75 + .25 * w : 1));

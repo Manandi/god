@@ -8,6 +8,7 @@ import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
 import { createChronicles,CHRONICLES,TOPICS } from './chronicles.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
+import { loadSites } from './sites.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
@@ -352,6 +353,7 @@ function handleBossEvent(c,ev){
   if(ev.type==='awaken'){introShot(c,2.2);sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
   if(ev.type==='roar'){sound.roar();cameraKick=Math.max(cameraKick,.12);cue('ROAR',.7);return true;}
   if(ev.type==='phase'){toast('THE HOLLOWING DEEPENS','The memories on its back burn brighter. Roots will rise beneath you.');return true;}
+  if(ev.type==='tailBroken'){sound.topple();slowMo(.35,.35);shoulderCam.punch(.3);toast('TAIL CLUB BROKEN','Its tail strikes are shorter and lighter now, and the hammer no longer cracks the ground.');return true;}
   if(ev.type==='enrage'){sound.enrage();toast('ORRUN IS ENRAGED','Faster, and more roots');return true;}
   if(ev.type==='shockwave'){effects.shockwave(ev.point,ev.from,ev.to,ev.duration);kick(c,.12);cameraKick=Math.max(cameraKick,.1);return true;}
   if(ev.type==='erupt'){sound.erupt();effects.chips(new THREE.Vector3(ev.x,groundY(ev.x,ev.z)+.3,ev.z));return true;}
@@ -361,7 +363,7 @@ function handleBossEvent(c,ev){
   if(ev.type==='attack'){sound.wardenAttack(ev.attack);return true;}
   return false;
 }
-const BOSS_CUES={bite:'BITE · PARRY OR DASH',stomp:'STOMP · JUMP OR DASH THROUGH THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · DASH ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
+const BOSS_CUES={tailspin:'TAIL SPIN · DASH THROUGH OR BACK OFF',tailslam:'TAIL HAMMER · SIDESTEP THE TIP',pounce:'POUNCE · DASH UNDER IT',bite:'BITE · PARRY OR DASH',stomp:'STOMP · JUMP OR DASH THROUGH THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · DASH ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
 
 // ------------------------------------------------------------------ dev mode
 // F2 (or the DEV button): test any part of the map, any weapon, any class and
@@ -904,6 +906,8 @@ function update(rawDt){
 }
 shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
+// The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
+loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
   warden.setSealed(story.before('gate'));
@@ -946,5 +950,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
