@@ -219,19 +219,37 @@ export class Creature {
     const r = this.radius * .8, step = Math.hypot(dx, dz);
     if (step < 1e-5) return true;
     const ok = (x, z) => canOccupy(x, z, groundY(x, z), grid, groundY, r) && Math.abs(groundY(x, z) - groundY(this.x, this.z)) < .9 * step + .12;
+    // Already overlapping something (shoved into a rock): let it walk back out rather than freeze.
+    if (!canOccupy(this.x, this.z, groundY(this.x, this.z), grid, groundY, r)) { this.x += dx; this.z += dz; return true; }
     if (ok(this.x + dx, this.z + dz)) { this.x += dx; this.z += dz; return true; }
     if (ok(this.x + dx, this.z)) { this.x += dx; return false; }
     if (ok(this.x, this.z + dz)) { this.z += dz; return false; }
     return false;
   }
-  /** Heading toward `want` that is not blocked, checking wider angles if needed. */
+  /**
+   * A heading toward `want` whose path is clear: checked at several points
+   * ahead, so a trunk close in front is not missed behind a clear spot further
+   * on. When it has to go round something it commits to one side
+   * (detourSide), so it does not dither left and right against a tree.
+   */
   steer(want, grid) {
-    const r = this.radius * .8;
-    for (const offset of [0, .5, -.5, 1, -1, 1.6, -1.6]) {
-      const h = want + offset, x = this.x + Math.sin(h) * 1.4, z = this.z + Math.cos(h) * 1.4;
-      if (canOccupy(x, z, groundY(x, z), grid, groundY, r) && Math.abs(groundY(x, z) - groundY(this.x, this.z)) < 1.3) return h;
+    const r = this.radius * .8, here = groundY(this.x, this.z);
+    const clear = h => [.4, .8, 1.3].every(d => {
+      const x = this.x + Math.sin(h) * d, z = this.z + Math.cos(h) * d;
+      return canOccupy(x, z, groundY(x, z), grid, groundY, r) && Math.abs(groundY(x, z) - here) < 1.1 * d + .15;
+    });
+    // Keep to one side of an obstacle until the way straight on is clear again
+    // (following its edge), so a pocket between trees and rocks is walked out of.
+    const s = this.detourSide || 1;
+    if (clear(want)) { this.detouring = false; return want; }
+    const offsets = this.detouring ? [.45, .9, 1.4, 2, 2.6, 3.1, -.45, -.9] : [.45, -.45, .9, -.9, 1.4, -1.4, 2, -2, 2.6, -2.6, 3.1];
+    for (const offset of offsets) {
+      const h = want + offset * s;
+      if (!clear(h)) continue;
+      if (!this.detouring) { this.detourSide = Math.sign(offset) * s; this.detouring = true; }
+      return h;
     }
-    return want;
+    return want + s * 1.6;
   }
   /** Pick an attack for the explorer's range and angle, or null. */
   chooseAttack(dist, rel) {
@@ -282,7 +300,7 @@ export class Creature {
         this.wanderTurn -= dt;
         if (this.wanderTurn <= 0) { this.wanderTurn = 2 + Math.random() * 2.5; this.wanderHeading = this.heading + (Math.random() - .5) * 2.4; }
         if (Math.hypot(this.x - this.home.x, this.z - this.home.z) > 8) this.wanderHeading = Math.atan2(this.home.x - this.x, this.home.z - this.z);
-        wantHeading = this.wanderHeading ?? this.heading; wantSpeed = k.walk; turn = 1.4;
+        wantHeading = this.steer(this.wanderHeading ?? this.heading, ctx.grid); wantSpeed = k.walk; turn = 1.4;
         if (dist < k.notice) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
       case 'emerge':
@@ -358,7 +376,10 @@ export class Creature {
     this.speed = damp(this.speed, wantSpeed, 6, dt);
     if (this.state !== 'attack' && this.speed > .01) {
       const yaw = moveYaw ?? this.heading;
-      this.travel(Math.sin(yaw) * this.speed * dt, Math.cos(yaw) * this.speed * dt, ctx.grid);
+      const free = this.travel(Math.sin(yaw) * this.speed * dt, Math.cos(yaw) * this.speed * dt, ctx.grid);
+      // Still pressed against something after half a second: go round the other way.
+      this.blockedFor = free ? 0 : (this.blockedFor || 0) + dt;
+      if (this.blockedFor > .5) { this.detourSide = -(this.detourSide || 1); this.detouring = true; this.blockedFor = 0; if (this.state === 'wander') this.wanderHeading = this.heading + Math.PI * (.5 + Math.random() * .5) * this.detourSide; }
     }
     if (Math.hypot(this.push.x, this.push.z) > .001) {
       const f = 1 - Math.exp(-11 * dt);

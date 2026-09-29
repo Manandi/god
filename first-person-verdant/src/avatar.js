@@ -82,6 +82,8 @@ export function createAvatar(scene){
   groveblade.visible=stonebreaker.visible=false;
   // The Blender weapons (weapons.js) replace these box stand-ins once loaded;
   // their WeaponBase/WeaponTip markers then become the strike hitbox.
+  const IK_BONES=['LeftUpLeg','LeftLeg','LeftFoot','RightUpLeg','RightLeg','RightFoot'];
+  const ikRest={q:IK_BONES.map(()=>new THREE.Quaternion()),hipsY:null};
   let current='unarmed';const mounted={};
   const showWeapon=()=>{
     groveblade.visible=!mounted.groveblade&&current==='groveblade';stonebreaker.visible=!mounted.stonebreaker&&current==='stonebreaker';
@@ -106,7 +108,12 @@ export function createAvatar(scene){
   setMood(next){mood=next;},
   /** Pose the body for this frame, then plant the feet on the terrain. */
   update(dt,groundAt){
+    // Undo last frame's foot placement first. Clips that do not key the legs
+    // (idle, for one) would otherwise keep each frame's correction and stack
+    // them, until a leg twists up past the head.
+    if(ikRest.hipsY!==null){ikRest.q.forEach((q,i)=>bones[IK_BONES[i]].quaternion.copy(q));bones.Hips.position.y=ikRest.hipsY;}
     animator.update(dt);
+    IK_BONES.forEach((n,i)=>ikRest.q[i].copy(bones[n].quaternion));ikRest.hipsY=bones.Hips.position.y;
     root.updateMatrixWorld(true);
     if(groundAt){
       const base=root.position.y,lifts=[];

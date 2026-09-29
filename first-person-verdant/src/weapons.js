@@ -43,6 +43,10 @@ export function loadWeaponModels() {
 /** Put a clone of the model in `parent` using a grip; returns { group, base, tip }. */
 export function mountWeapon(parent, model, grip) {
   const group = new THREE.Group(), m = model.clone(true);
+  // The corners of the whole weapon: the ground check watches these, not just the
+  // haft, so a wide hammer head cannot sink a corner into a slope.
+  const box = new THREE.Box3().setFromObject(m), corners = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z));
   group.position.fromArray(grip.position); group.rotation.set(...grip.rotation, 'XZY');
   m.position.y = grip.shift || 0;           // slide the haft so the fist holds it low
   group.add(m); parent.add(group);
@@ -50,7 +54,7 @@ export function mountWeapon(parent, model, grip) {
   // glTF names must be unique, so the second model's markers come back as WeaponBase001 etc.
   const find = prefix => { let hit = null; m.traverse(o => { if (!hit && o.name.startsWith(prefix)) hit = o; }); return hit; };
   const q = r => new THREE.Quaternion().setFromEuler(new THREE.Euler(...r, 'XZY'));
-  return { group, base: find('WeaponBase'), tip: find('WeaponTip'), strike: q(grip.rotation), carry: q(grip.carry || grip.rotation), blend: 0 };
+  return { group, model: m, corners, base: find('WeaponBase'), tip: find('WeaponTip'), strike: q(grip.rotation), carry: q(grip.carry || grip.rotation), blend: 0 };
 }
 
 const tip = new THREE.Vector3(), lift = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
@@ -64,11 +68,11 @@ export function holdWeapon(m, striking, dt, groundY) {
   m.group.quaternion.slerpQuaternions(m.carry, m.strike, m.blend);
   if (!groundY || !m.tip) return;
   const clearance = () => { m.group.updateWorldMatrix(true, true); let low = 9;
-    for (const o of [m.tip, m.base]) { o.getWorldPosition(tip); low = Math.min(low, tip.y - groundY(tip.x, tip.z)); } return low; };
+    for (const c of m.corners) { tip.copy(c).applyMatrix4(m.model.matrixWorld); low = Math.min(low, tip.y - groundY(tip.x, tip.z)); } return low; };
   let low = clearance();
   if (low >= .06) return;
   // Try both ways about the grip's tilt axis; keep turning whichever way lifts it.
   lift.setFromAxisAngle(X, .12); m.group.quaternion.multiply(lift); const up = clearance();
   if (up < low) { lift.setFromAxisAngle(X, -.24); m.group.quaternion.multiply(lift); lift.setFromAxisAngle(X, -.12); } else lift.setFromAxisAngle(X, .12);
-  for (let i = 0; i < 8 && clearance() < .06; i++) m.group.quaternion.multiply(lift);
+  for (let i = 0; i < 12 && clearance() < .06; i++) m.group.quaternion.multiply(lift);
 }

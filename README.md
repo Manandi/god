@@ -93,6 +93,26 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-10-01
+
+The owner reported that holding R still put weapons in the ground, a leg floated up by the head after a few seconds, and turtles got stuck on trees. Each was reproduced in a headless test before it was fixed.
+
+- **Floating leg (`update` in `src/avatar.js`):**
+  - Cause: foot placement bends the leg bones after each animation frame. Clips that do not key the legs (idle) kept each frame's correction and stacked them, until a leg twisted up past the head (a foot 0.84 m above the hips).
+  - The bug was already in `c1a998a`, the first build with the ChatGPT character code; recent changes did not introduce it.
+  - Fix: the previous frame's correction is undone before the animation plays.
+  - Test: every weapon at 5 spots, idling, running and holding R. The highest foot is now 0.17 m below the hips (during the Earthsplitter hop).
+- **Weapon in the ground when holding R (`holdWeapon` in `src/weapons.js`):**
+  - Cause: the ground check only watched two points on the haft. The Stonebreaker's head is 0.5 m wide, so its corners dipped up to 13 cm into slopes.
+  - Fix: it now checks the eight corners of each weapon's bounding box.
+  - Test: every vertex of both weapons at 8 sloped spots, idle, run, hold R, release, tap and light chain. The lowest point is now 5–7 cm above the ground or higher.
+- **Turtles stuck on trees (`steer`/`travel` in `src/creatures.js`):**
+  - Cause: steering looked at one point 1.4 m ahead (a trunk closer than that was missed) and re-picked a side every frame. Before the fix, 0 of 12 turtles placed behind a tree reached the player.
+  - Fix: the path is checked at 0.4, 0.8 and 1.3 m. A turtle keeps to one side of an obstacle until the way straight on is clear, following its edge out of pockets. It switches sides if blocked for 0.5 s, and a creature overlapping an obstacle can walk out.
+  - Test: 12/12, then 30/30 other trees from varied angles.
+- **Tested headless, no page errors:** the combat smoke test, the story, the boss, the Chronicles and Old Shell, weapons, heavies and save launches.
+- **Testing note:** these faults showed up only over time (idle for seconds), on slopes, or at the edges of a mesh. Future checks should cover those, not just the base and tip or one flat spot.
+
 ## Latest shared state — 2026-09-30 (later)
 
 The owner reported the character falling through the floor and weapons going into the ground. They asked for bench press to count as raw strength again, discipline to stay auto-calculated, and a unique heavy attack per weapon.
