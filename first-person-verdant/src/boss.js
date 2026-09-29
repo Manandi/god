@@ -21,17 +21,17 @@ const ATTACKS = {
   bite:   { clip: 'Bite', dur: 2.8, windup: .7, kind: 'light', damage: 1, label: 'Warden bite', parry: true,
             hits: [[.72, .9], [1.66, 1.84]], lunge: [[.62, .85, 1.6], [1.55, 1.8, 1.1]], range: [0, 6.5], arc: .75 },
   stomp:  { clip: 'Stomp', dur: 2.6, windup: 1.0, kind: 'heavy', damage: 2, label: 'root stomp', impact: [1.08, 1.2],
-            wave: { from: 2.2, to: 10.5, duration: .8 }, range: [0, 7.5], arc: 1.0 },
+            wave: { from: 2.2, to: 7, duration: .65 }, range: [0, 7.5], arc: 1.0 },   // the one big ring: jump or dash it
   sweep:  { clip: 'Sweep', dur: 2.2, windup: .7, kind: 'heavy', damage: 2, label: 'tail sweep', hits: [[.72, 1.08]], range: [0, 9.5], arc: 9 },
   charge: { clip: 'Charge', windup: .9, run: 2.3, speed: 9, recover: 1.3, kind: 'heavy', damage: 2, label: 'charge', range: [12, 40], arc: .6 },
   // A full turn with the tail held out flat: nowhere near it is safe, so dash through or back off.
   tailspin: { clip: 'TailSpin', dur: 2.6, windup: .8, kind: 'heavy', damage: 2, label: 'tail spin', hits: [[.86, 1.5]], range: [0, 9], arc: 9 },
   // Turns its back and hammers the tail down where you stood; the ground cracks around the tip.
   tailslam: { clip: 'TailSlam', dur: 2.8, windup: .95, kind: 'heavy', damage: 2, label: 'tail hammer', hits: [[1.04, 1.2]], impact: [1.08, 1.2],
-              wave: { from: 2, to: 4.8, duration: .5 }, at: 'tail', range: [4.5, 10.5], arc: 9 },
-  // Crouches, then leaps at you and lands shell-first; the landing sends out a ring.
-  pounce: { clip: 'Pounce', dur: 2.6, windup: .75, kind: 'heavy', damage: 2, label: 'pounce', impact: [1.18, 1.32], wave: { from: 3.6, to: 8.5, duration: .7 }, at: 'body',
-            lunge: [[.75, 1.2, 9]], close: 1.4, range: [5.5, 17], arc: .9 },
+              wave: { from: 1.9, to: 3.6, duration: .4 }, at: 'tail', range: [4.5, 10.5], arc: 9 },   // a small crack at the club only
+  // Crouches, then leaps at you and lands shell-first. No shockwave: the landing itself is the danger.
+  pounce: { clip: 'Pounce', dur: 2.6, windup: .75, kind: 'heavy', damage: 2, label: 'pounce', impact: [1.18, 1.32], at: 'body',
+            lunge: [[.75, 1.2, 9]], close: 3.2, range: [5.5, 17], arc: .9 },
   erupt:  { clip: 'Erupt', dur: 2.4, windup: .95, kind: 'heavy', damage: 1, label: 'root eruption', range: [3, 30], arc: 9, phase: 2 }
 };
 // Follow-ups: some attacks flow straight into another, Monster Hunter style,
@@ -133,21 +133,21 @@ export class Warden {
     const live = w => ct >= w[0] && ct <= w[1];
     if (this.attack === 'bite' && a.hits.some(live)) { this.bone('head', v).addScaledVector(this.forward(), .7); out.push({ x: v.x, y: v.y, z: v.z, r: 1.05 }); }
     if (this.attack === 'tailspin' && a.hits.some(live)) {
-      for (const [b, r] of [['tail_03', 1.1], ['tail_02', 1.3], ['tail_01', 1.3]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
-      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .8 : 1.4 });
+      for (const [b, r] of [['tail_03', .85], ['tail_02', 1.05], ['tail_01', 1.1]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
+      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .7 : 1.05 });
     }
-    if (this.attack === 'tailslam' && a.hits.some(live)) { const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y + .3, z: tip.z, r: this.clubBroken ? 1.1 : 1.8 }); }
-    if (this.attack === 'pounce' && live(a.impact)) { this.bone('body', v); out.push({ x: v.x, y: groundY(v.x, v.z) + .6, z: v.z, r: 3.3 }); }
+    if (this.attack === 'tailslam' && a.hits.some(live)) { const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y + .3, z: tip.z, r: this.clubBroken ? .9 : 1.3 }); }
+    if (this.attack === 'pounce' && live(a.impact)) { this.bone('body', v).addScaledVector(this.forward(), 3.4); out.push({ x: v.x, y: groundY(v.x, v.z) + .6, z: v.z, r: 2.3 }); }   // under the head and plastron as it lands
     if (a.wave && this.attack !== 'stomp' && !(a.at === 'tail' && this.clubBroken)) {
       const w = ct - a.impact[0];
       if (w >= 0 && w <= a.wave.duration) { const q = this.impactPoint(); out.push({ x: q.x, y: q.y, z: q.z, r: lerp(a.wave.from, a.wave.to, w / a.wave.duration), ring: true }); }
     }
     if (this.attack === 'sweep' && a.hits.some(live)) {
-      for (const [b, r] of [['tail_03', 1.1], ['tail_02', 1.4], ['tail_01', 1.3]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
-      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .8 : 1.4 });
+      for (const [b, r] of [['tail_03', .85], ['tail_02', 1.05], ['tail_01', 1.1]]) { this.bone(b, v); out.push({ x: v.x, y: v.y, z: v.z, r }); }
+      const tip = this.tailTip(); out.push({ x: tip.x, y: tip.y, z: tip.z, r: this.clubBroken ? .7 : 1.05 });
     }
     if (this.attack === 'stomp') {
-      if (live(a.impact)) { const p = this.stompPoint(); out.push({ x: p.x, y: p.y + .4, z: p.z, r: 2.5 }); }
+      if (live(a.impact)) { const p = this.stompPoint(); out.push({ x: p.x, y: p.y + .4, z: p.z, r: 2.1 }); }
       const w = ct - a.impact[0];
       if (w >= 0 && w <= a.wave.duration) { const p = this.stompPoint(); out.push({ x: p.x, y: p.y, z: p.z, r: lerp(a.wave.from, a.wave.to, w / a.wave.duration), ring: true }); }
     }
@@ -466,7 +466,7 @@ export class Warden {
     const active = a && (this.state === 'attack' || this.chargeRun);
     this.tell.visible = !!(this.alive && active && this.attack !== 'erupt');
     if (!this.tell.visible) return;
-    const reach = { bite: 5.2, stomp: 4.2, sweep: 8.4, charge: 3.4, tailspin: this.clubBroken ? 7.6 : 8.8, tailslam: 8.2, pounce: 3.4 }[this.attack] || 4;
+    const reach = { bite: 5.2, stomp: 4, sweep: 8, charge: 3.4, tailspin: this.clubBroken ? 7.3 : 8.3, tailslam: 7.8, pounce: 2.8 }[this.attack] || 4;
     const w = warning ? Math.min(1, this.state === 'attack' ? ct / a.windup : this.t / (a.windup * this.pace)) : 1;
     this.tell.position.set(this.x, groundY(this.x, this.z) + .07, this.z);
     this.tell.scale.setScalar(reach * (warning ? .75 + .25 * w : 1));

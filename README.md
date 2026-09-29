@@ -93,6 +93,19 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-10-01 (later)
+
+- **Orrun's reach (`ATTACKS` and `damageVolumes` in `src/boss.js`).** The owner felt the boss's attacks reached too far, and that the pounce should not make a wave when the tail already does.
+  - Only two attacks make ground waves now:
+    - the stomp: the jumpable ring, 2.2→7 m, was 10.5
+    - the tail hammer: a small crack at the club, 1.9→3.6 m, was 2→4.8
+  - The pounce has no wave. Its landing hit now sits under the head and plastron (body + 3.4 m ahead, r 2.3), because the head pushes a standing player about 5.5 m from the centre. The old centre hit (r 3.3) could never reach, so the pounce had only ever hit through its wave. Forced test: it lands 3/4 from 10 m and 2/4 from 14 m.
+  - Tail and club hit zones are tighter (tail r 0.85–1.1, club 1.05, hammer club 1.3), and the ground tells match.
+- **Co-op:**
+  - The Supabase project `hollow-roots` (`gitqmiwwakaejznucxqn`) is ACTIVE_HEALTHY.
+  - Its logs show no realtime connections yet, so co-op has not been tried by two players.
+  - It needs no ChatGPT hosting.
+
 ## Latest shared state — 2026-10-01
 
 The owner reported that holding R still put weapons in the ground, a leg floated up by the head after a few seconds, and turtles got stuck on trees. Each was reproduced in a headless test before it was fixed.
