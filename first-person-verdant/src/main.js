@@ -14,6 +14,7 @@ import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
 import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides } from './mechanics.js';
 import { createGlobe } from './globe.js';
+import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile } from './profile.js';
 import { PlayerCombat } from './combat/player.js';
@@ -35,7 +36,7 @@ const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCrea
 // The keepers of the trail are solid, like everything else you can see.
 for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.scale||1),top:groundY(n.x,n.z)+2.2*(n.scale||1)});
 const collisionGrid=createCollisionGrid(world.colliders);
-const globe=createGlobe();let shell;
+const globe=createGlobe(),narrator=createNarrator();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
 const shoulderCam=new ShoulderCamera(camera,{obstacles:world.cameraObstacles,grid:collisionGrid});
 // The procedural body shows until the authored explorer has loaded, and stays
@@ -238,7 +239,7 @@ function interact(){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
 }
 
 // ----------------------------------------------------------------- dialogue
@@ -406,10 +407,10 @@ function teleport(x,z,label){
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
   ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
 const STAT_PRESETS={
-  weak:{pushups:2,pullups:0,dashSeconds:7.4,verticalJumpCm:12,mileSeconds:880,restingHeartRate:88,plankSeconds:15,benchPressKg:15,sleepHours:5},
-  default:{pushups:15,pullups:5,dashSeconds:5.5,verticalJumpCm:40,mileSeconds:600,restingHeartRate:68,plankSeconds:90,benchPressKg:60,sleepHours:7},
-  athlete:{pushups:40,pullups:12,dashSeconds:4.9,verticalJumpCm:55,mileSeconds:480,restingHeartRate:58,plankSeconds:180,benchPressKg:90,sleepHours:8},
-  max:{pushups:60,pullups:22,dashSeconds:4.4,verticalJumpCm:70,mileSeconds:360,restingHeartRate:45,plankSeconds:300,benchPressKg:130,sleepHours:8.5}};
+  weak:{pushups:2,pullups:0,dashSeconds:7.4,verticalJumpCm:12,mileSeconds:880,benchPressKg:15},
+  default:{pushups:15,pullups:5,dashSeconds:5.5,verticalJumpCm:40,mileSeconds:600,benchPressKg:60},
+  athlete:{pushups:40,pullups:12,dashSeconds:4.9,verticalJumpCm:55,mileSeconds:480,benchPressKg:90},
+  max:{pushups:60,pullups:22,dashSeconds:4.4,verticalJumpCm:70,mileSeconds:360,benchPressKg:130}};
 /** Jump straight to a story stage: earlier chapters count as done. */
 function devJumpTo(stage){
   const at=STAGES.findIndex(s=>s.id===stage);
@@ -515,19 +516,25 @@ const strikePower=()=>mech.damage*weaponPower(equippedWeapon());
 function hurtPlayer(from,kind='light',damage=1){
   closeDialogue(false);
   if(dev.invulnerable){cue('DEV · NO DAMAGE',.45);return;}
+  // Stoneframe: heavy blows stagger instead of knocking you down (the damage still lands).
+  if(kind==='heavy'&&mech.steadfast){kind='light';cue('STEADFAST',.5);}
   player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
   hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);shoulderCam.punch(kind==='heavy'?.3:.12);combo=0;
   checkDefeated();
 }
-function checkDefeated(){if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}}
+function checkDefeated(){
+  // Trueframe: once per rest, a blow that would drop you leaves you standing.
+  if(player.health<=0&&mech.secondWind&&!player.secondWindUsed){player.health=1;player.secondWindUsed=true;slowMo(.3,.6);cue('SECOND WIND',1.1);toast('SECOND WIND','Your balanced frame keeps you standing · rest to renew it');return;}
+  if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
+}
 function respawn(){
   // You wake at the homestead; once the story reaches the gate, at Pip's lookout below the Hollow.
   const checkpoint=story.reached('gate')&&!story.reached('end');
   if(warden?.awake&&warden.alive)warden.reset();
   player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:world.home.spawn.x;player.z=checkpoint?-147:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
-  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;
+  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;player.secondWindUsed=false;
   if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
   toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');
 }
@@ -904,7 +911,7 @@ function update(rawDt){
   updateNumbers(rawDt);
   updateHUD();
 }
-shell=createShell(entry,canvas,globe,{enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
+shell=createShell(entry,canvas,globe,{narrator,enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
@@ -939,6 +946,7 @@ function frame(){
   }else{perfSeconds=0;perfFrames=0;}
   if(!paused)update(dt);
   if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}
+  else if(shell.view==='intro'){narrator.update(rawDt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(narrator.scene,narrator.camera);}
   else if(!paused||((pausedRender+=rawDt)>.15)){pausedRender=0;renderer.render(scene,camera);}
 }frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a
@@ -950,5 +958,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }

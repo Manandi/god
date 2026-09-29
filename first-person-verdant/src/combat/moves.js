@@ -68,7 +68,7 @@ MOVES.rootbreaker = {
 };
 
 // --- Groveblade: a quick sword. The blade continues the forearm (hits.js). ---
-const BLADE = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .14 };
+const BLADE = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .14, weapon: true };   // weapon: the model's own markers once loaded
 MOVES.blade1 = { label: 'Grove Cut', clip: 'blade1', fp: 'fp_swing', duration: .52, kind: 'light',
   active: [.13, .22], chainFrom: .22, heavyFrom: .22, evadeFrom: .2, moveFrom: .36, turnUntil: .1,
   lunge: { from: .02, to: .13, distance: .55 }, reach: 1.9, hitbox: BLADE,
@@ -94,7 +94,7 @@ MOVES.blade_counter = { ...MOVES.blade3, label: 'Guard Counter', active: [.18, .
 MOVES.blade_root = { ...MOVES.blade3, label: 'Root Strike', kind: 'critical', damage: 34, poise: 0, stamina: 0, hitstop: .2, armor: [0, .4], next: null, lunge: { from: .1, to: .26, distance: .9 } };
 
 // --- Stonebreaker: a slow hammer that breaks shells (armour pierce). --------
-const HAMMER = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .3 };
+const HAMMER = { from: 'RightForeArm', to: 'RightHand', blade: .95, radius: .3, weapon: true };
 MOVES.hammer1 = { label: 'Stone Sweep', clip: 'hammer1', fp: 'fp_swing', duration: .85, kind: 'light',
   active: [.3, .42], chainFrom: .44, heavyFrom: .42, evadeFrom: .46, moveFrom: .62, turnUntil: .22,
   lunge: { from: .18, to: .34, distance: .6 }, reach: 2.0, hitbox: HAMMER,

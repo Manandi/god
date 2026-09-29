@@ -4,6 +4,10 @@ const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3();
 
 /** World-space striking segment for a move's hitbox, taken from the posed skeleton. */
 export function strikeSegment(bones, hitbox, out = { a: new THREE.Vector3(), b: new THREE.Vector3() }) {
+  if (hitbox.weapon && bones.WeaponBase && bones.WeaponTip) {   // a Blender weapon: its own marked striking segment
+    bones.WeaponBase.getWorldPosition(out.a); bones.WeaponTip.getWorldPosition(out.b);
+    return out;
+  }
   bones[hitbox.from].getWorldPosition(a);
   bones[hitbox.to].getWorldPosition(b);
   d.copy(b).sub(a).normalize();

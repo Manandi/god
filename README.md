@@ -21,8 +21,9 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Story and plot**: stages, all dialogue, journal, quest-point mob spawns, save migration | Claude | `src/story.js`, and the encounter and dialogue code in `src/main.js` |
 | **Boss and arena**: Orrun, the Hollow Warden (moveset, tail club), and the Warden's Hollow | Claude | `src/boss.js`, `tools/blender/build_warden.py`, `build_arena.py` |
 | **Camera and quest waypoint**: shoulder camera (hold right click to orbit), compass strip, on-screen waypoint | Claude; camera adapted from [Rotten Souls](https://github.com/igorjohn/rotten-souls) (MIT) | `src/camera.js`, `updateWaypoint` in `src/main.js` |
-| **Stats → mechanics**: what each real-life stat does in play | Claude | `src/mechanics.js` (the stats screen shows the same table) |
-| **Classes, weapons, Rootbreaker, double jump**: rules and weapon models from ChatGPT; movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
+| **Stats → mechanics**: what each real-life stat does in play, and frames (weight and height) | Claude | `src/mechanics.js`, `FRAMES`/`frame()` in `src/profile.js` (the stats screen shows the same table) |
+| **Onboarding**: the story intro with the floating Mycel (Blender), measure, mind check, how you play, class reveal | Claude (at the owner's request, 2026-09-30) | `src/shell.js` (intro to reveal), `src/narrator.js`, `tools/blender/build_mycel.py`, `src/reasoning.js`, `METRICS`/`PERSONALITY` in `src/profile.js`. The character creator that follows stays ChatGPT's design |
+| **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
 | **Mossgate Chronicles, dialogue choices, the Old Shell**: quest text and boss look from ChatGPT; wired into Claude's story, dialogue and creature AI | Both | `src/chronicles.js`, `oldshell` in `src/creatures.js`, `HUNT` in `src/world.js` |
 | **Dev panel (F2) and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
 
@@ -66,6 +67,8 @@ How the story uses the ChatGPT NPCs:
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks, thornlings and the Old Shell (AI, poise, topple, shell armour, quake) |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
+| `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
+| `narrator.js` | The intro's 3D glade and the floating, animated Mycel |
 | `sites.js` | Loads the Blender memory sites and Mossgate's props, their colliders, and the shrine tree's leaf crowns |
 | `profile.js`, `shell.js` | Real-life profile, stats, classes and weapon eligibility; the menus, stats screen and character creator |
 | `story.js` | Quest stages, NPC positions, all dialogue, the journal, save migration |
@@ -89,6 +92,43 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: Vite/Three.js 3D game. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
+
+## Latest shared state — 2026-09-30
+
+The owner asked for better weapons, a new Mycel who floats while he talks, a story intro, a new measurement and question flow, rewards for every body type, and a class recommendation shaped by personality.
+
+- **Weapons (`tools/blender/build_weapons.py`, `src/weapons.js`):**
+  - **Groveblade:** a leaf-shaped heartwood blade with a glowing sap vein and a root crossguard.
+  - **Stonebreaker:** a hewn stone maul bound in bronze, with glowing runes.
+  - Both have their grip in the fist, in first and third person. The Groveblade is held forward; the Stonebreaker rests at the shoulder.
+  - The strike hitbox now follows markers on the model, so the blade you see is what hits. Groveblade chain 35 damage (as before); its Rootbreaker now lands 84, up from 52.
+- **Mycel (`tools/blender/build_mycel.py`, `src/narrator.js`):**
+  - A new 3D floating mushroom spirit in a dusky glade. He drifts to a new spot above the story box on each line, bobs and blinks, and moves his mouth while text types.
+  - Each line sets a mood (brows, eyes, arm gestures). The Heartseed orbits him.
+  - The owner wrote "Mystrel"; the narrator is Mycel, and the name was kept.
+- **Intro:** eleven story beats, starting "Welcome to the world of Built." / "This is no normal world. In this world, what you do out there carries over." Chips show which real effort feeds which stat, and what each frame gives. Space or NEXT advances.
+- **Onboarding (4 steps):**
+  - **Measure:** weight, height, max push-ups, pull-ups, vertical, 40-yard dash, mile (min:sec) and bench, with a metric/imperial toggle. Resting heart rate, plank and sleep are no longer asked.
+  - **Mind check:** 8 questions, 5 reasoning and 3 knowledge.
+  - **How you play:** 2 questions (your usual role in games; what you do when a fight goes badly).
+  - **Reveal:** recommended class with the reason, frame card and stats, then the character creator.
+- **Stats:**
+  - Strength comes from push-ups, pull-ups and bench (judged against body weight).
+  - Speed from dash and vertical; stamina from mile.
+  - Defense from bench, push-ups and mile; intelligence from the check.
+  - Personality adds 5 (role) and 3 (instinct) to a class's score.
+- **Frames (`FRAMES`, `frame()`):**
+  - **Stoneframe** (heavier): +1 vitality and steadfast (heavy blows stagger instead of knocking down), plus cheaper guarding.
+  - **Swiftframe** (light, or tall and lean): faster, with a longer dash.
+  - **Trueframe** (balanced): +15% Breath recovery and Second Wind (once per rest, survive a lethal blow on 1 heart).
+  - Weight and height never appear as numbers in the game.
+- **Saves:** returning players keep going to the menu. The stats screen has HOW YOU PLAY and MIND CHECK. Old profiles load; missing weight and height default to 75 kg and 175 cm (Trueframe).
+- **Tested headless, no page errors:**
+  - a full new-player walkthrough (intro to measure, check, questions, reveal and customize) and the unit toggle round trip
+  - each frame's bonuses, and Second Wind against real turtle hits
+  - weapons in first and third person
+  - the story, combat smoke test, Chronicles and Old Shell, boss, and save launches
+- **Not verified:** feel in a real browser.
 
 ## Latest shared state — 2026-09-29 (late)
 

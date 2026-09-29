@@ -3,6 +3,7 @@ import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js'
 import {createHumanoid} from './humanoid.js';
 import {Animator,solveLeg} from './anim/animator.js';
 import {buildClips} from './anim/clips.js';
+import {loadWeaponModels,mountWeapon,WEAPON_MODELS,GRIP,FP_GRIP} from './weapons.js';
 
 export const SKIN_TONES=['#74503b','#a46b49','#c89365','#e5b584','#f0d0a5','#5b3b30'];
 export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e54',ivory:'#c3bb9c',violet:'#795d86',navy:'#344c67'};
@@ -79,7 +80,16 @@ export function createAvatar(scene){
   groveblade.rotation.set(0,0,-.12);part(groveblade,new THREE.BoxGeometry(.07,.72,.08),weaponDark,0,-.28,0);const blade=part(groveblade,new THREE.BoxGeometry(.11,.78,.055),weaponMat,0,-.96,0);blade.rotation.z=-.08;
   stonebreaker.rotation.set(0,0,-.08);part(stonebreaker,new THREE.BoxGeometry(.09,.88,.1),weaponDark,0,-.38,0);part(stonebreaker,new RoundedBoxGeometry(.43,.25,.25,2,.04),weaponMat,0,-.88,0);
   groveblade.visible=stonebreaker.visible=false;
-  return {root,bones,animator,setWeapon(w){groveblade.visible=w==='groveblade';stonebreaker.visible=w==='stonebreaker';},setAppearance(a){
+  // The Blender weapons (weapons.js) replace these box stand-ins once loaded;
+  // their WeaponBase/WeaponTip markers then become the strike hitbox.
+  let current='unarmed';const mounted={};
+  const showWeapon=()=>{
+    groveblade.visible=!mounted.groveblade&&current==='groveblade';stonebreaker.visible=!mounted.stonebreaker&&current==='stonebreaker';
+    for(const [name,m] of Object.entries(mounted))m.group.visible=name===current;
+    if(mounted[current]){bones.WeaponBase=mounted[current].base;bones.WeaponTip=mounted[current].tip;}else{delete bones.WeaponBase;delete bones.WeaponTip;}
+  };
+  loadWeaponModels().then(models=>{for(const name of WEAPON_MODELS)if(models[name])mounted[name]=mountWeapon(body.bones.RightHand,models[name],GRIP[name]);showWeapon();}).catch(e=>console.warn('Weapon models failed to load',e));
+  return {root,bones,animator,weaponMounts:mounted,setWeapon(w){current=w;showWeapon();},setAppearance(a){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
@@ -175,12 +185,15 @@ export function createFirstPersonHands(camera){
   part(fpBlade,new THREE.BoxGeometry(.07,.07,.3),grip,0,0,-.38);part(fpBlade,new THREE.BoxGeometry(.05,.11,.9),metal,0,0,-.98);
   part(fpHammer,new THREE.BoxGeometry(.08,.08,.8),grip,0,0,-.66);part(fpHammer,new THREE.BoxGeometry(.28,.26,.42),metal,0,0,-1.1);
   fpBlade.visible=fpHammer.visible=false;
+  let fpCurrent='unarmed';const fpMounted={};
+  const showFp=()=>{fpBlade.visible=!fpMounted.groveblade&&fpCurrent==='groveblade';fpHammer.visible=!fpMounted.stonebreaker&&fpCurrent==='stonebreaker';for(const [name,m] of Object.entries(fpMounted))m.group.visible=name===fpCurrent;};
+  loadWeaponModels().then(models=>{for(const name of WEAPON_MODELS)if(models[name]){fpMounted[name]=mountWeapon(fpR,models[name],FP_GRIP[name]);fpMounted[name].group.traverse(o=>{if(o.isMesh)o.castShadow=false;});}showFp();}).catch(()=>{});
   const leg=new THREE.Group();leg.name='fpLeg';group.add(leg);
   part(leg,new THREE.BoxGeometry(.2,.2,.53),trousers,0,0,.2);
   part(leg,new THREE.BoxGeometry(.22,.17,.29),boot,0,-.01,-.18);
   group.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
   const animator=new Animator(group,Object.entries(FP_CLIPS).map(([n,k])=>fpClip(n,k)));
-  return {group,setWeapon(w){fpBlade.visible=w==='groveblade';fpHammer.visible=w==='stonebreaker';},setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
+  return {group,weaponMounts:fpMounted,setWeapon(w){fpCurrent=w;showFp();},setAppearance(a){shirt.color.set(SHIRTS[a.shirt]||SHIRTS.moss);skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);trousers.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);leather.color.set(a.outfit==='warden'?'#4a4b43':'#524537');},
     update(dt,combat,guarded,frozen){
       const clip=combat.clip(),map={palm:'fp_palm',swing:'fp_swing',heel:'fp_heel',rootbreaker:'fp_heavy',hurt:'fp_hurt'};
       const fpName=clip&&(clip.name.startsWith('evade')?'fp_evade':clip.fp||map[clip.name]);

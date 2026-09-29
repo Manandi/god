@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES } from './profile.js';
 import { MOVESETS, WEAPONS } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -10,10 +10,10 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const devOverrides = { anyWeapon: false };
 
 export function mechanics() {
-  const s = stats(), klass = profile.appearance.discipline || 'fighter', jumpCm = profile.inputs.verticalJumpCm;
+  const s = stats(), klass = profile.appearance.discipline || 'fighter', jumpCm = profile.inputs.verticalJumpCm, body = frame();
   const staminaCost = clamp(.98 - (s.stamina - 10) * .025, .62, 1.2);
-  return {
-    klass,
+  const m = {
+    klass, frame: body,
     // Strength: every strike; fighters add more on top.
     damage: 1 + clamp((s.strength - 10) * .05, -.3, .65) + (klass === 'fighter' ? Math.max(0, s.strength - 8) * .015 : 0),
     stagger: klass === 'fighter' ? 1.2 : 1,
@@ -35,8 +35,14 @@ export function mechanics() {
     chargePower: klass === 'mage' ? 1 + Math.max(0, s.intelligence - 8) * .025 : 1,
     echoReach: Math.max(0, s.intelligence - 10) * .18,
     // Discipline: a better parry reward for support.
-    parryReward: klass === 'support' ? 22 : 10
+    parryReward: klass === 'support' ? 22 : 10,
+    steadfast: false, secondWind: false
   };
+  // Frames (weight and height): every body gets a real advantage.
+  if (body === 'stone') { m.maxHealth = Math.min(9, m.maxHealth + 1); m.steadfast = true; m.guardCost *= .85; }
+  if (body === 'swift') { m.runSpeed *= 1.07; m.dash *= 1.15; m.iframeBonus += .02; }
+  if (body === 'balanced') { m.regen *= 1.15; m.secondWind = true; }
+  return m;
 }
 
 /** The weapon actually in hand: the chosen one if your stats allow it (or dev mode), else bare hands. */
@@ -58,6 +64,7 @@ export function mechanicsTable() {
     ['DEFENSE', `${m.maxHealth} vitality · guard cost ${pct(m.guardCost)}`],
     ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · memories answer from +${m.echoReach.toFixed(1)} m`],
     ['CLASS', `${m.klass.toUpperCase()} · parry restores ${m.parryReward} Breath`],
+    ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`]
   ];
 }

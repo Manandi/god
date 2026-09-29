@@ -9,7 +9,13 @@ npm install
 npm run dev
 ```
 
-Meet Mycel, enter your real-world baseline, then select Verdant Reach from the spinning world map. Your measurements decide your stats, and your stats decide how you play (see *Real-life stats* below).
+Mycel, the floating keeper of the Heartseed, tells the story of Built: what you do out there carries over. Then he takes your measure in four steps:
+1. **Measure:** weight, height, max push-ups, max pull-ups, vertical jump, 40-yard dash, mile time and max bench, in metric or imperial.
+2. **Mind check:** eight questions, five reasoning and three general knowledge.
+3. **How you play:** two questions about the roles you take in games.
+4. **Reveal:** your recommended class and your frame.
+
+Then you make your character and select Verdant Reach from the spinning world map.
 
 | Control | Action |
 |---|---|
@@ -48,18 +54,25 @@ The player is the Roblox-style block explorer from the ChatGPT Sites design: squ
 - **The Old Shell** is a boss. Its shell halves damage until enough hits break it, which exposes the head and enrages it. When it rears, dash through the quake or guard it.
 Timing lives in `src/combat/moves.js`; each clip is keyed to the same timeline, and hits are tested against the posed limb, so first and third person land identically. Press **F3** (or add `?debug`) for a combat readout that draws the collision capsule, strike and hurt volumes and the creature's damage volumes, and logs why each strike hit, missed or was blocked. `?arena` skips the menus and starts beside the first shellback. `/lab.html?clips=palm,swing` renders any clip from several angles during development.
 
+## Frames: every body gets something
+
+Weight and height choose a frame; they never lower a stat.
+- **Stoneframe** (heavier builds): +1 vitality, and heavy blows stagger you instead of knocking you down. Guarding also costs 15% less Breath.
+- **Swiftframe** (light, or tall and lean): +7% run speed and +15% dash distance, with longer dash invulnerability.
+- **Trueframe** (the balanced middle): +15% Breath recovery, plus **Second Wind**: once per rest, a blow that would drop you leaves you standing on your last heart.
+
 ## Real-life stats
 
 `src/mechanics.js` turns your measurements into play, and the stats screen shows the same table:
 
-- **Strength:** damage.
-- **Speed:** run speed, dash distance and dash invulnerability.
+- **Strength** (push-ups, pull-ups, bench against body weight): damage.
+- **Speed** (40-yard dash, vertical): run speed, dash distance and dash invulnerability.
 - **Vertical jump:** jump height, and a double jump from 55 cm.
-- **Stamina:** Breath cost and recovery.
-- **Defense:** vitality and guard cost.
-- **Intelligence:** how far away memories answer, and Rootbreaker power for mages.
+- **Stamina** (mile): Breath cost and recovery.
+- **Defense** (bench, push-ups, mile): vitality and guard cost.
+- **Intelligence** (the mind check): how far away memories answer, and Rootbreaker power for mages.
 
-Classes add to what you already have:
+Mycel recommends a class from your stats and your two answers about how you play; you can change it any time in CUSTOMIZE. Classes add to what you already have:
 
 - fighter: damage and stagger
 - tank: one more heart and cheaper guards
