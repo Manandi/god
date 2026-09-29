@@ -22,7 +22,7 @@ const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
 const clean = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-const EVENTS = ['pos', 'state', 'hello', 'world', 'hit', 'act'];
+const EVENTS = ['pos', 'state', 'hello', 'world', 'hit', 'act', 'spawn'];
 
 function nameTag(text) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 48;
@@ -69,7 +69,7 @@ function localTransport(code, id, on) {
   };
 }
 
-export function createCoop(scene, { player, groundY, getName, getAppearance, getShared, onShared, onWorld, onHit }) {
+export function createCoop(scene, { player, groundY, getName, getAppearance, getShared, onShared, onWorld, onHit, onSpawn }) {
   const button = document.getElementById('lobbyButton'), status = document.getElementById('lobbyStatus');
   const params = new URLSearchParams(location.search), local = params.get('net') === 'local';
   // Each tab is its own player (sessionStorage), so two tabs can share a lobby.
@@ -109,6 +109,7 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
       else if (name === 'hello') sendShared(true);
       else if (name === 'world' && payload.from !== id && !isHost()) onWorld?.(payload);
       else if (name === 'hit' && isHost()) onHit?.(payload);
+      else if (name === 'spawn' && isHost()) onSpawn?.(payload.id);
       else if (name === 'act' && payload.id !== id) { const r = remotes.get(payload.id); if (r) r.act = .35; }
     },
     async status(s) {
@@ -153,9 +154,11 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     get guest() { return connected && remotes.size > 0 && !isHost(); },
     get teamSize() { return connected ? remotes.size + 1 : 1; },
     /** Other explorers, for creatures to choose whom to chase (the host uses this). */
-    others() { return [...remotes.values()].map(r => ({ x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y })); },
+    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y })); },
     sendWorld: world => send('world', { ...world, from: id }),
     sendHit: hit => send('hit', { ...hit, from: id }),
+    /** A guest reached a nest: ask the host to raise it. */
+    sendSpawn: chapter => send('spawn', { id: chapter, from: id }),
     /** This explorer attacked: friends see their figure lunge. */
     sendAct: () => send('act', { id }),
     update(dt, time) {

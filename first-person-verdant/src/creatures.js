@@ -585,3 +585,20 @@ export function createCreatures(scene, chapters = [], hunt = null) {
   if (hunt) list.push(new Creature(scene, hunt.x, hunt.z - 3, 'oldshell', { id: 'oldshell' }));
   return list;
 }
+
+/**
+ * Team fights: the k-th extra hollowed for a chapter's nest (two per extra
+ * explorer). Every game makes the same one for the same k, so it can be
+ * synced by id. It stands in a free spot around one of the nest's own.
+ */
+export function extraHollowed(scene, chapter, k, grid) {
+  const [hx, hz, type] = chapter.mobs[k % chapter.mobs.length];
+  let x = hx, z = hz;
+  for (let i = 0; i < 16; i++) {
+    const a = k * 2.4 + i * .9, r = 3 + (k % 2) * 1.3 + i * .25, px = hx + Math.sin(a) * r, pz = hz + Math.cos(a) * r;
+    if (!grid || canOccupy(px, pz, groundY(px, pz), grid, groundY, .75)) { x = px; z = pz; break; }
+  }
+  const m = new Creature(scene, x, z, type, { chapter: chapter.id });
+  m.sleep(); m.extra = k; m.netId = `x:${chapter.id}:${k}`;
+  return m;
+}

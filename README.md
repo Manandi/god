@@ -101,6 +101,10 @@ How the story uses the ChatGPT NPCs:
   - Guests show those snapshots and send every hit they land to the host (`hit`, and `deflect` for parries). The host's game applies the damage, so everyone sees the same health bar.
   - Each game still judges the blows that land on its own explorer: guard, parry, dodge and damage feel the same as solo.
   - Enemies go after the nearest explorer. Bosses get +50% health per extra player (Orrun 1000 → 1500 for two).
+  - **Bigger nests for bigger parties.** Each story nest rises with two more hollowed (shellbacks or thornlings, like the nest's own) for every extra player: 3 → 5 at the Rootwell for two. Someone joining mid-fight raises two more. Solo nests are unchanged. The extras are made the same way in every game (`extraHollowed` in `src/creatures.js`, ids `x:<chapter>:<k>`).
+  - The small hollowed spread out: at most two go after each player while another player nearby has room, and each keeps its player while it can (`assignTargets` in `src/main.js`). Each player has their own attack tokens, so two players can both be attacked at once.
+  - A guest who reaches a nest first asks the host to raise it (`spawn`), so the nest rises for everyone at once.
+  - Tested between tabs: a solo nest rose with 3; a two-player nest rose with 5 when the guest arrived, split 2 and 3 between the players, and clearing it on the host moved both players on to the memory.
   - A defeat shows for everyone. When the host leaves, the next member should take over from the last snapshot (built that way, not yet tested).
   - Friends' block figures lunge when they attack (`act`).
 - **Tested** with `?lobby=CODE&net=local`, which runs the same protocol between tabs of one browser (BroadcastChannel). The sandbox blocks websockets, so the Supabase path is still untested with real players.

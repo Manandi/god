@@ -36,7 +36,7 @@ Then you make your character and select Verdant Reach from the spinning world ma
 | 1–4, 0 | Emotes (pose, sit, wave, cheer; clear) when no dialogue is open |
 | Esc | Pause |
 
-Mossgate's people start the story (three memories, then the Canopy Gate and Orrun) and the Mossgate Chronicles side quests, including the hunt for the Old Shell in the Scorched Hollow. Press CO-OP LOBBY to create or join a lobby by code, or share a `?lobby=CODE` link. Everyone in a lobby fights the same enemies and bosses: the host's game runs them, enemies go after the nearest explorer, and bosses get 50% more health per extra player. Add `&net=local` to test a lobby between tabs of one browser. Progress saves in this browser.
+Mossgate's people start the story (three memories, then the Canopy Gate and Orrun) and the Mossgate Chronicles side quests, including the hunt for the Old Shell in the Scorched Hollow. Press CO-OP LOBBY to create or join a lobby by code, or share a `?lobby=CODE` link. Everyone in a lobby fights the same enemies and bosses: the host's game runs them, each story nest has two more hollowed per extra player (two for each of you), and bosses get 50% more health per extra player. Add `&net=local` to test a lobby between tabs of one browser. Progress saves in this browser.
 
 ## The explorer
 

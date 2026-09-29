@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE, HUNT, ARENA } from './world.js';
-import { createCreatures,SHOCKWAVE } from './creatures.js';
+import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
@@ -464,7 +464,7 @@ devPanel.addEventListener('click',e=>{
 // --------------------------------------------------------------------- co-op
 // Lobby codes (ChatGPT Sites design) over Supabase Realtime: friends appear as
 // block figures, and recovered memories, cleared nests and the Old Shell are shared.
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},
   getShared:()=>({memories:[...memories],cleared:[...story.cleared],oldShellDefeated}),
   onShared:shared=>{
     let changed=false;
@@ -483,21 +483,37 @@ const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer'
 function spawnEncounter(id){
   if(spawned.has(id)||story.cleared.has(id))return;
   spawned.add(id);
-  const mobs=creatures.filter(c=>c.chapter===id);
+  const mobs=creatures.filter(c=>c.chapter===id&&c.extra===undefined);
   mobs.forEach(c=>{c.emerge();effects.ring(new THREE.Vector3(c.x,groundY(c.x,c.z),c.z));});
+  raised[id]=0;raiseExtras(id);
   sound.attack('slam');sound.enrage();cue('THE HOLLOWED RISE',1.4);
-  debug.note(`encounter ${id}: ${mobs.length} hollowed rise`,elapsed);
+  debug.note(`encounter ${id}: ${mobs.length+raised[id]} hollowed rise`,elapsed);
 }
+// Team fights: each nest gets two more hollowed for every extra explorer, so
+// everyone has two to deal with. Someone joining mid-fight raises two more.
+const raised={};
+function extraFor(ch,k){let m=byNet(`x:${ch.id}:${k}`);if(!m){m=extraHollowed(scene,ch,k,collisionGrid);creatures.push(m);}return m;}
+function raiseExtras(id){
+  if(!coop.authority)return;
+  const ch=CHAPTERS.find(c=>c.id===id),want=2*(coop.teamSize-1);
+  for(let k=raised[id]||0;k<want;k++){const m=extraFor(ch,k);m.emerge();effects.ring(new THREE.Vector3(m.x,groundY(m.x,m.z),m.z));}
+  raised[id]=Math.max(raised[id]||0,want);
+}
+let askedAt=-9;
 function updateEncounters(){
   if(story.stage==='trial'&&creatures.some(c=>c.id==='trial'&&c.state==='defeated')){story.advance('trial_report');persist();toast('WREN’S TRIAL PASSED',story.info.objective);playTone(620,.35,.05,'sine');}
   const ch=story.chapter,step=story.info.step;
   if(ch&&!story.cleared.has(ch.id)&&!spawned.has(ch.id)&&(step==='find'||step==='fight')){
     const d=Math.hypot(player.x-ch.site.x,player.z-ch.site.z);
-    if(d<(step==='fight'?24:12))spawnEncounter(ch.id);
+    // A guest asks the host, whose game runs the nest (it rises for everyone).
+    if(d<(step==='fight'?24:12)){if(!coop.guest)spawnEncounter(ch.id);else if(elapsed-askedAt>1){askedAt=elapsed;coop.sendSpawn(ch.id);}}
   }
   for(const id of spawned){
-    if(creatures.some(c=>c.chapter===id&&c.alive))continue;
-    spawned.delete(id);story.clear(id);persist();
+    const mobs=creatures.filter(c=>c.chapter===id);
+    if(mobs.every(c=>c.state==='dormant')){spawned.delete(id);continue;}   // the host's nest sank back
+    raiseExtras(id);
+    if(mobs.some(c=>c.alive))continue;
+    spawned.delete(id);delete raised[id];story.clear(id);persist();
     const c=CHAPTERS.find(c=>c.id===id);
     playTone(560,.6,.06,'triangle');playTone(840,.5,.03,'sine');
     toast(`${c.site.title} IS CLEAR`,story.info.step==='memory'?story.info.objective:`Speak with ${keeperName(c.npc)}.`);
@@ -505,7 +521,7 @@ function updateEncounters(){
 }
 function resetEncounters(){
   for(const id of spawned)creatures.filter(c=>c.chapter===id).forEach(c=>c.sleep());
-  spawned.clear();
+  spawned.clear();for(const id in raised)delete raised[id];
 }
 // Real-life stats and class decide these numbers (mechanics.js); refreshed every frame.
 let mech=mechanics();
@@ -618,7 +634,9 @@ function handleCombatEvents(){
 // Attack tokens: at most one creature commits to an attack at a time (two once
 // any of them is enraged), so a group circles and takes turns instead of swarming.
 function mayAttack(self){
-  const busy=creatures.filter(c=>c!==self&&c.alive&&(c.state==='windup'||c.state==='attack')&&Math.hypot(c.x-player.x,c.z-player.z)<12).length;
+  // In a team fight each explorer has their own tokens: count only those after the same one.
+  const t=self.target||player,key=self.targetKey??'me';
+  const busy=creatures.filter(c=>c!==self&&c.alive&&(c.state==='windup'||c.state==='attack')&&(c.targetKey??'me')===key&&Math.hypot(c.x-t.x,c.z-t.z)<12).length;
   return busy<(creatures.some(c=>c.alive&&c.enraged)?2:1);
 }
 const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
@@ -643,8 +661,11 @@ function sendWorld(dt){
 }
 function applyWorld(world){
   for(const s of world.c||[]){
-    const c=byNet(s.id);if(!c)continue;
+    const [x,chId,k]=s.id.split(':'),ch=x==='x'&&CHAPTERS.find(c=>c.id===chId);
+    const c=byNet(s.id)||(ch&&s.state!=='dormant'?extraFor(ch,+k):null);if(!c)continue;
     c.net=s;
+    // The host's nest rising: show it rising here too.
+    if(c.chapter&&c.state==='dormant'&&s.state!=='dormant'&&!spawned.has(c.chapter)&&!story.cleared.has(c.chapter)){spawned.add(c.chapter);sound.attack('slam');sound.enrage();cue('THE HOLLOWED RISE',1.4);}
     if(c===warden&&s.sealed!==undefined&&!!c.sealed!==s.sealed)c.setSealed(s.sealed);
     const wasAlive=c.alive;
     // A new state, or a new attack (the Warden chains attacks inside one state): take the host's timing.
@@ -667,6 +688,28 @@ function applyTeamHit(h){
   if(h.deflect){c.deflect();return;}
   const res=c.hit(h);
   if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1.2,c.z),res.damage,res.effect);if(res.defeated)creatureDefeated(c);}
+}
+/**
+ * Host: whom each creature goes after. Bosses take the nearest explorer. The
+ * small hollowed spread out, at most two to an explorer while another nearby
+ * has room, and keep their explorer while they can.
+ */
+function assignTargets(local){
+  const who=[{...local,key:'me',ref:local},...coop.others().map(o=>({...o,ref:o}))],load=new Map(who.map(o=>[o.key,0])),out=new Map();
+  const d=(c,o)=>Math.hypot(c.x-o.x,c.z-o.z),near=c=>Math.min(...who.map(o=>d(c,o)));
+  const small=[];
+  for(const c of creatures){
+    if(c===warden||c.isBoss||!c.alive||c.state==='dormant')out.set(c,{o:teamTarget(c,local),key:null});
+    else small.push(c);
+  }
+  small.sort((a,b)=>near(a)-near(b));
+  for(const c of small){
+    const byDist=[...who].sort((a,b)=>d(c,a)-d(c,b)),reach=d(c,byDist[0])+15;
+    const free=o=>load.get(o.key)<2&&d(c,o)<reach;
+    const pick=byDist.find(o=>o.key===c.targetKey&&free(o))||byDist.find(free)||byDist[0];
+    load.set(pick.key,load.get(pick.key)+1);out.set(c,{o:pick.ref,key:pick.key});
+  }
+  return out;
 }
 /** Host: the explorer each creature goes after (the nearest one). */
 function teamTarget(c,local){
@@ -889,10 +932,12 @@ function update(rawDt){
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
   const team=coop.teamSize>1,guest=coop.guest;
   if(team&&coop.authority)scaleBosses();
+  const targets=team&&!guest?assignTargets(playerPos):null;
   for(const c of creatures){
     c.remote=guest;
-    // The host's creatures chase the nearest explorer; a guest's follow the host's snapshots.
-    const target=team&&!guest?teamTarget(c,playerPos):playerPos;
+    // The host's creatures go after their explorer (assignTargets); a guest's follow the host's snapshots.
+    const pick=targets?.get(c),target=pick?.o||playerPos;
+    c.target=target;c.targetKey=pick?.key??'me';
     const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
     if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
     // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
