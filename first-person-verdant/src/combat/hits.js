@@ -23,6 +23,17 @@ export function closestOnSegment(p, s0, s1, out = new THREE.Vector3()) {
 }
 
 /**
+ * A hurt volume is a sphere, or with `up` a short upright capsule (from its
+ * centre up by `up`): low creatures reach up to meet a strike thrown at chest
+ * height, so a punch that passes just over a turtle's shell still lands.
+ */
+function nearestOnVolume(v, s0, s1, c, center) {
+  center.set(v.x, v.y, v.z); closestOnSegment(center, s0, s1, c);
+  if (!v.up) return;
+  for (let i = 0; i < 2; i++) { center.y = THREE.MathUtils.clamp(c.y, v.y, v.y + v.up); closestOnSegment(center, s0, s1, c); }
+}
+
+/**
  * Sweeps the striking segment from last frame's pose to this frame's pose and
  * returns the first contact against each target's hurt volumes. Sweeping keeps
  * fast strikes from passing through a target between two frames.
@@ -34,11 +45,10 @@ export function sweep(prev, cur, radius, targets) {
   for (const target of targets) {
     let best = null;
     for (const v of target.hurtVolumes()) {
-      center.set(v.x, v.y, v.z);
       for (let i = 0; i <= 4; i++) {
         const k = i / 4;
         s0.lerpVectors(prev.a, cur.a, k); s1.lerpVectors(prev.b, cur.b, k);
-        closestOnSegment(center, s0, s1, c);
+        nearestOnVolume(v, s0, s1, c, center);
         const gap = c.distanceTo(center) - radius - v.r;
         nearest = Math.min(nearest, gap);
         if (gap <= 0 && (!best || gap < best.gap)) {

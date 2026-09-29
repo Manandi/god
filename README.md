@@ -90,6 +90,15 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-09-29 (late)
+
+The owner reported that the little turtles still took too many hits, and that swings kept missing them.
+
+- **Swings missing (`src/combat/hits.js`):** it was the height difference. The punch travels at 1.1–1.4 m, just above a shellback's shell and head, so it missed by 2–6 cm even point-blank (0 of 12 in a probe). Small creatures' hurt volumes are now short upright capsules (`up` in `hurtVolumes` in `src/creatures.js`), and the same probe lands 12 of 12. Bosses are unchanged.
+- **Little turtles:** health 45 (shellback) and 32 (thornling) at level 1, about 4–6 hits. Each explorer level still adds 15%.
+- **Two moves only:** shellbacks and thornlings now only lunge and spin. The rearing slam and its shockwave belong to the Old Shell alone.
+- **Tested headless, no page errors:** the combat smoke test, weapons, the full story, the Chronicles and the Old Shell, and the boss.
+
 ## Latest shared state — 2026-09-29 (evening)
 
 The owner asked for a more distinctive boss moveset (it charged too often and had no tail attacks), easier level 1 mobs, and Blender work on the memory areas and the town.

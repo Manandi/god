@@ -18,11 +18,11 @@ function part(parent, geometry, material, x, y, z, sx = 1, sy = 1, sz = 1) {
 const damp = THREE.MathUtils.damp;
 
 // Behaviour tuning per kind. Times in seconds, distances in metres.
-// Health is for a level 1 explorer: a shellback falls to about three light
-// strings, or two strings and a heavy. Each explorer level adds 15% (not the bosses).
+// Health is for a level 1 explorer: a shellback falls to about two light
+// strings, or one string and a heavy. Each explorer level adds 15% (not the bosses).
 const KINDS = {
-  shellback: { size: .64, pace: 1, health: 72, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
-  thornling: { size: .57, pace: .8, health: 50, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
+  shellback: { size: .64, pace: 1, health: 45, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
+  thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
   // The Old Shell (ChatGPT Sites boss): a charred giant with breakable armour and a quake.
   oldshell: { size: 1.48, pace: 1.08, health: 900, poise: 48, walk: .72, chase: 1.9, turn: 2.25, notice: 24, spacing: 4.4, cooldown: [1.1, 2.1], biteRadius: .75 }
 };
@@ -140,8 +140,14 @@ export class Creature {
     this.setState('reeling'); this.flash = .1; this.lastEvent = 'PARRIED';
     return true;
   }
-  /** Hurt volumes in world space. Upright: shell (two spheres) and head. On its back: the belly. */
+  /** Hurt volumes in world space. Upright: shell (two spheres) and head. On its back: the belly.
+   *  Small creatures' volumes reach up (`up`) to meet strikes thrown at chest height. */
   hurtVolumes() {
+    const out = this.volumes();
+    if (!this.isBoss) for (const v of out) v.up = .6;
+    return out;
+  }
+  volumes() {
     const s = this.kind.size, out = [], f = new THREE.Vector3();
     if (this.state === 'toppled' || this.state === 'rising') {
       // On its back only the belly is offered; the head is tucked against the ground.
@@ -236,7 +242,8 @@ export class Creature {
       let w = 1;
       if (name === 'lunge') w = behind ? 0 : Math.abs(rel) < .5 ? 1.4 : .6;
       if (name === 'spin') w = behind || dist < 1.4 ? 2.4 : .35;
-      if (name === 'slam') w = behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
+      // Shellbacks and thornlings only lunge and spin; the rearing slam is the Old Shell's.
+      if (name === 'slam') w = !this.isBoss || behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
       if (a.boss) w = this.isBoss ? (dist < 4.5 ? 1.6 : .8) * (this.enraged ? 1.4 : 1) : 0;
       if (w > 0) options.push([name, w]);
     }
