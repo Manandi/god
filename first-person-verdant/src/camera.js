@@ -13,13 +13,13 @@ import * as THREE from 'three';
 
 const PIVOT_HEIGHT = 1.5, SHOULDER = .42, SHOULDER_LOCKED = .9;
 export const MIN_ELEVATION = -.45, MAX_ELEVATION = 1.05;
-const COLLISION_PAD = .32, MIN_DISTANCE = 1.1;
+const COLLISION_PAD = .32, MIN_DISTANCE = 1.1, BLEND_TIME = .6;
 const approachAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * Math.min(1, t);
 
 export class ShoulderCamera {
   constructor(camera, { obstacles, grid }) {
     this.camera = camera; this.obstacles = obstacles; this.grid = grid;
-    this.distance = 5; this.armLength = 5; this.shake = 0; this.shakeStrength = 0; this.cinematic = null;
+    this.distance = 5; this.armLength = 5; this.shake = 0; this.shakeStrength = 0; this.cinematic = null; this.blend = 0;
     this.raycaster = new THREE.Raycaster();
     this.pivot = new THREE.Vector3(); this.desired = new THREE.Vector3(); this.look = new THREE.Vector3();
     this.forward = new THREE.Vector3(); this.right = new THREE.Vector3(); this.dir = new THREE.Vector3();
@@ -63,10 +63,15 @@ export class ShoulderCamera {
       this.desired.x += (Math.random() - .5) * amount; this.desired.y += (Math.random() - .5) * amount; this.desired.z += (Math.random() - .5) * amount;
       if (this.shake <= 0) this.shakeStrength = 0;
     }
-    this.camera.position.copy(this.desired);
     this.look.copy(this.pivot); this.look.y += .2;
     if (target) this.look.lerp(new THREE.Vector3(target.x, target.y + (target.focus ?? 1), target.z), target.big ? .35 : .4);
     this.look.addScaledVector(this.right, shoulder);
+    // After a cinematic, ease from where the shot ended back to the shoulder.
+    if (this.blend > 0) {
+      this.blend = Math.max(0, this.blend - dt); const k = 1 - this.blend / BLEND_TIME, e = k * k * (3 - 2 * k);
+      this.desired.lerpVectors(this.blendFrom, this.desired, e); this.look.lerpVectors(this.blendLook, this.look, e);
+    }
+    this.camera.position.copy(this.desired);
     this.camera.lookAt(this.look);
   }
 
@@ -97,6 +102,6 @@ export class ShoulderCamera {
     const t = Math.min(1, shot.t / shot.duration), eased = t * t * (3 - 2 * t);
     this.camera.position.copy(shot.from).lerp(shot.to, eased);
     this.camera.lookAt(this.look.copy(shot.lookFrom).lerp(shot.lookTo, eased));
-    if (t >= 1) this.cinematic = null;
+    if (t >= 1) { this.cinematic = null; this.blend = BLEND_TIME; this.blendFrom = this.camera.position.clone(); this.blendLook = this.look.clone(); }
   }
 }

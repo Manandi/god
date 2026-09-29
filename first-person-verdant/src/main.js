@@ -337,8 +337,19 @@ function updateBoss(rawDt){
     $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',boss===warden?warden.phase>1:oldShell.shellBroken);
   }
 }
+// Boss intro shots (Monster Hunter style): the camera swings low beside the
+// boss as it wakes, holds on it, then eases back to the shoulder. Once each per visit.
+const introsSeen=new Set();
+function introShot(c,duration){
+  if(!player.thirdPerson||introsSeen.has(c)||dev.open)return;introsSeen.add(c);
+  const gy=groundY(c.x,c.z),dx=player.x-c.x,dz=player.z-c.z,d=Math.hypot(dx,dz)||1,reach=c===warden?9:6;
+  const to=new THREE.Vector3(c.x+(dx*reach-dz*reach*.45)/d,gy+1.1,c.z+(dz*reach+dx*reach*.45)/d);
+  to.y=Math.max(to.y,groundY(to.x,to.z)+.8);
+  const lookTo=new THREE.Vector3(c.x,gy+(c.focusHeight??1.5),c.z);
+  shoulderCam.playCinematic({from:camera.position,to,lookFrom:new THREE.Vector3(player.x,groundY(player.x,player.z)+1.6,player.z),lookTo,duration});
+}
 function handleBossEvent(c,ev){
-  if(ev.type==='awaken'){sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
+  if(ev.type==='awaken'){introShot(c,2.2);sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
   if(ev.type==='roar'){sound.roar();cameraKick=Math.max(cameraKick,.12);cue('ROAR',.7);return true;}
   if(ev.type==='phase'){toast('THE HOLLOWING DEEPENS','The memories on its back burn brighter. Roots will rise beneath you.');return true;}
   if(ev.type==='enrage'){sound.enrage();toast('ORRUN IS ENRAGED','Faster, and more roots');return true;}
@@ -505,7 +516,7 @@ function hurtPlayer(from,kind='light',damage=1){
   player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
-  hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);combo=0;
+  hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);shoulderCam.punch(kind==='heavy'?.3:.12);combo=0;
   checkDefeated();
 }
 function checkDefeated(){if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}}
@@ -568,7 +579,7 @@ function handleCombatEvents(){
       const heavy=ev.heavy;
       sound.hit(ev.move,res.effect,combo);
       if(res.effect==='armored')effects.chips(ev.point);else effects.burst(ev.point,dir.clone().negate(),heavy);
-      if(heavy)effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));
+      if(heavy){effects.ring(new THREE.Vector3(ev.target.x,groundY(ev.target.x,ev.target.z),ev.target.z));shoulderCam.punch(res.effect==='armored'?.08:.16);}
       if(ev.ring){effects.shockwave(new THREE.Vector3(ev.point.x,groundY(ev.point.x,ev.point.z),ev.point.z),.4,2.2+ev.chargeLevel*.6,.3);shoulderCam.punch(.25+ev.chargeLevel*.12);}
       damageNumber(ev.point,res.damage,ev.critical?'crit':res.effect);
       hitstop=Math.max(hitstop,ev.hitstop*(res.effect==='armored'?.7:1));player.engaged=4;
@@ -789,7 +800,7 @@ function update(rawDt){
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
       else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
-      else if(ev.type==='alert')sound.alert();
+      else if(ev.type==='alert'){sound.alert();if(c===oldShell){introShot(c,1.5);toast('THE OLD SHELL','Its armour turns light blows · strike the head, crack the shell, dash the quake.');}}
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
       else if(ev.type==='enrage'){sound.enrage();toast(c.type==='thornling'?'THE THORNLING IS ENRAGED':'THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}

@@ -37,7 +37,7 @@ const ATTACKS = {
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
 const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
-// The slam's shockwave: radius over time. Rolling through it is safe; rolling
+// The slam's shockwave: radius over time. Dashing through it is safe; dashing
 // away works only if you start early.
 export const SHOCKWAVE = { start: .02, duration: .4, from: .5, to: 3.1 };
 const shockwaveRadius = t => SHOCKWAVE.from + (SHOCKWAVE.to - SHOCKWAVE.from) * Math.min(1, Math.max(0, (t - SHOCKWAVE.start) / SHOCKWAVE.duration));
@@ -395,7 +395,7 @@ export class Creature {
       if (gap <= 0 && p.y < v.y + 1.2) strike();
       else this.closest = Math.min(this.closest, gap);
     } else if (this.attack === 'slam') {
-      // The shell hits the ground, then a shockwave ring rolls outward: roll
+      // The shell hits the ground, then a shockwave ring rolls outward: dash
       // through it or jump over it.
       for (const v of this.damageVolumes()) {
         const d = Math.hypot(v.x - p.x, v.z - p.z);
