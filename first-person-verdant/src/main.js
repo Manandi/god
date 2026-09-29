@@ -6,6 +6,7 @@ import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
 import { createChronicles,CHRONICLES,TOPICS } from './chronicles.js';
+import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
@@ -445,6 +446,20 @@ devPanel.addEventListener('click',e=>{
   updateDevTelemetry();
 });
 
+// --------------------------------------------------------------------- co-op
+// Lobby codes (ChatGPT Sites design) over Supabase Realtime: friends appear as
+// block figures, and recovered memories, cleared nests and the Old Shell are shared.
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,
+  getShared:()=>({memories:[...memories],cleared:[...story.cleared],oldShellDefeated}),
+  onShared:shared=>{
+    let changed=false;
+    for(const id of shared.memories||[])if(SITES.some(s=>s.id===id)&&!memories.has(id)){memories.add(id);const e=world.echoes.find(e=>e.id===id);if(e)e.crystal.visible=e.ring.visible=e.light.visible=false;changed=true;}
+    for(const id of shared.cleared||[])if(CHAPTERS.some(c=>c.id===id)&&!story.cleared.has(id)){
+      story.cleared.add(id);if(spawned.has(id)){creatures.filter(c=>c.chapter===id).forEach(c=>c.sleep());spawned.delete(id);}changed=true;}
+    if(shared.oldShellDefeated&&!oldShellDefeated){oldShellDefeated=true;oldShell.sleep();changed=true;}
+    if(changed){const before=story.stage;story.advance(story.stage);persist();toast('CO-OP · PROGRESS SHARED',story.stage!==before?story.info.objective:'Your party’s discoveries are yours too.');}
+  }});
+
 // ---------------------------------------------------------------- encounters
 // The hollowed gather only at the site of the chapter being played: they rise
 // out of the roots when its keeper sends you in, or when you walk into the
@@ -758,7 +773,7 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);coop.update(rawDt,elapsed);
   if(oldShell&&!oldShell.alive&&oldShell.state==='defeated'&&!oldShellDefeated){oldShellDefeated=true;persist();}
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
@@ -920,5 +935,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }

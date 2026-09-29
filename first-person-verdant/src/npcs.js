@@ -9,7 +9,8 @@ import { groundY } from './world.js';
 function material(color, emissive = 0) { return new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: emissive ? 1.1 : 0, roughness: .9, flatShading: true }); }
 function cube(parent, size, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(...size), mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; }
 
-function makeNpc(scene, id, def) {
+/** Build one block figure; also used for co-op friends (coop.js). */
+export function makeNpc(scene, id, def) {
   const { look } = def, root = new THREE.Group();
   root.position.set(def.x, groundY(def.x, def.z), def.z); root.scale.setScalar(def.scale || 1); scene.add(root);
   const skin = material(look.skin), cloth = material(look.cloth), dark = material(look.trousers ?? 0x26332f), leather = material(0x554438), glow = material(0xd6d58e, 0x4f6d3d);
