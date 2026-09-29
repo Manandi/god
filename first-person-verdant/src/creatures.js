@@ -19,7 +19,9 @@ const damp = THREE.MathUtils.damp;
 // Behaviour tuning per kind. Times in seconds, distances in metres.
 const KINDS = {
   shellback: { size: .64, pace: 1, health: 160, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
-  thornling: { size: .57, pace: .8, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 }
+  thornling: { size: .57, pace: .8, health: 110, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
+  // The Old Shell (ChatGPT Sites boss): a charred giant with breakable armour and a quake.
+  oldshell: { size: 1.48, pace: 1.08, health: 900, poise: 48, walk: .72, chase: 1.9, turn: 2.25, notice: 24, spacing: 4.4, cooldown: [1.1, 2.1], biteRadius: .75 }
 };
 // The moveset. Each attack: wind-up (the telegraph), active, recovery (the
 // punish window). `track` is how long the wind-up keeps turning toward the
@@ -28,8 +30,11 @@ const KINDS = {
 const ATTACKS = {
   lunge: { windup: .82, track: .46, active: .3, recover: 1.12, range: [1.5, 3.4], damage: 1, kind: 'light', label: 'shell lunge' },
   spin:  { windup: .65, track: 0, active: 1.0, recover: 1.1, range: [0, 2.4], damage: 1, kind: 'light', label: 'shell spin' },
-  slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' }
+  slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' },
+  // Old Shell only: rears for over a second, then the ground breaks around it.
+  quake: { windup: 1.28, track: .4, active: .3, recover: 1.4, range: [0, 5.8], damage: 2, kind: 'heavy', label: 'quake', boss: true }
 };
+const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .7, belly: 2 };
 const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
 // The slam's shockwave: radius over time. Rolling through it is safe; rolling
@@ -53,6 +58,8 @@ export class Creature {
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
     this.id = options.id || null; this.chapter = options.chapter || null;
+    this.isBoss = type === 'oldshell'; this.name = this.isBoss ? 'THE OLD SHELL' : ''; this.shellDamage = 0; this.shellBroken = false;
+    if (this.isBoss) { this.markerHeight = 3.6; this.focusHeight = 1.6; }
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
     this.state = 'wander'; this.t = 0; this.cooldown = 1; this.wanderTurn = 0;
     this.attack = null; this.attackYaw = 0; this.connected = false; this.enraged = false; this.combo = false;
@@ -64,11 +71,21 @@ export class Creature {
     this.body = new THREE.Group(); this.tilt.add(this.body);       // rears, lunges, flinches
     this.root.scale.setScalar(k.size);
     this.shellMat = shellMaterial.clone(); this.skinMat = skinMaterial.clone(); this.eyeMat = eyeMaterial.clone();
+    this.bossScuteMat = this.isBoss ? new THREE.MeshStandardMaterial({ color: 0x8e5636, emissive: 0x45140c, emissiveIntensity: .55, roughness: .88, flatShading: true }) : scuteMaterial;
     part(this.body, sphere(), this.skinMat, 0, .95, 0, 1.28, .58, 1.8);
     this.shell = part(this.body, new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), this.shellMat, 0, 1.05, -.27, 1.43, 1.22, 1.65);
+    if(this.isBoss){
+      this.shellMat.color.setHex(0x28372d);this.shellMat.emissive.setHex(0x160b08);this.eyeMat.color.setHex(0xff5b27);
+      // A crown of asymmetric, charred shell-spines gives the Old Shell the
+      // exaggerated anime silhouette the distant encounter needs.
+      for(let i=0;i<13;i++){const a=i/13*Math.PI*2,r=.78+(i%3)*.11,spike=part(this.body,new THREE.ConeGeometry(.16+(i%2)*.06,.72+(i%4)*.18,5),this.bossScuteMat,Math.sin(a)*r,1.8+Math.cos(a)*.22,Math.cos(a)*r-.34);spike.rotation.set(Math.cos(a)*.48,0,-Math.sin(a)*.48);}
+      const ridge=part(this.body,new THREE.TorusGeometry(.88,.09,5,14),this.bossScuteMat,0,1.8,-.34);ridge.rotation.x=Math.PI/2;
+      this.bossAura=new THREE.PointLight(0xff4b25,2.8,13,2);this.bossAura.position.set(0,1.65,.4);this.body.add(this.bossAura);
+    }
+
     for (let i = 0; i < 9; i++) {
       const a = i * 2.399, r = .82 + .24 * (i % 2);
-      const q = part(this.body, sphere(.23), scuteMaterial, Math.cos(a) * r, 1.89 - Math.abs(Math.cos(a)) * .17, Math.sin(a) * r - .25, 1.4, .55, 1.1); q.rotation.y = a;
+      const q = part(this.body, sphere(.23), this.bossScuteMat, Math.cos(a) * r, 1.89 - Math.abs(Math.cos(a)) * .17, Math.sin(a) * r - .25, 1.4, .55, 1.1); q.rotation.y = a;
     }
     this.legs = [];
     for (const xSide of [-1, 1]) for (const zSide of [-1, 1]) {
@@ -83,6 +100,15 @@ export class Creature {
     for (const xEye of [-.38, .38]) {
       part(this.head, sphere(.11), this.eyeMat, xEye, .23, .92);
       part(this.head, sphere(.05), darkMaterial, xEye, .23, 1.005);
+    }
+    if(this.isBoss){
+      this.head.scale.set(1.18,1.05,1.2);
+      const jaw=part(this.head,new THREE.BoxGeometry(1.02,.22,.62),darkMaterial,0,-.27,.62);jaw.rotation.x=-.08;this.bossJaw=jaw;
+      for(const side of [-1,1]){
+        const brow=part(this.head,new THREE.ConeGeometry(.13,.68,4),this.bossScuteMat,side*.34,.48,.66);brow.rotation.z=side*.92;brow.rotation.x=-.35;
+        const tusk=part(this.head,new THREE.ConeGeometry(.09,.5,5),new THREE.MeshStandardMaterial({color:0xd9c595,roughness:.8}),side*.38,-.23,.96);tusk.rotation.x=Math.PI*.48;tusk.rotation.z=side*.15;
+      }
+      const scar=part(this.head,new THREE.BoxGeometry(.055,.48,.025),new THREE.MeshBasicMaterial({color:0xff6b38}),-.16,.2,1.03);scar.rotation.z=-.38;
     }
     if (type === 'thornling') {
       for (let i = -1; i <= 1; i++) { const thorn = part(this.body, new THREE.ConeGeometry(.25, .85, 5), thornMaterial, i * .7, 2.0, -.4); thorn.rotation.z = i * .24; }
@@ -144,9 +170,18 @@ export class Creature {
     const onBack = this.state === 'toppled' || this.state === 'rising';
     // Armour-piercing weapons (the Stonebreaker) turn shell hits into full hits.
     let mult = PART_DAMAGE[part] ?? 1;
+    // The Old Shell's armour turns more aside until enough shell hits crack it.
+    if (this.isBoss && part === 'shell') mult = this.shellBroken ? 1 : .5;
     if (mult < 1 && pierce) mult = Math.min(1, mult * (1 + pierce));
     const dealt = damage * mult;
     this.health = Math.max(0, this.health - dealt);
+    if (this.isBoss && part === 'shell' && !this.shellBroken) {
+      this.shellDamage += damage * (1 + pierce);
+      if (this.shellDamage >= SHELL_BREAK) {
+        this.shellBroken = true; this.enraged = true; this.enragedNow = true; this.brokeNow = true;
+        this.shellMat.color.setHex(0x58473d); this.bossScuteMat.color.setHex(0x3d332e); this.bossScuteMat.emissiveIntensity = 1.4; this.shellMat.roughness = 1;
+      }
+    }
     const d = Math.hypot(this.x - fromX, this.z - fromZ) || 1, dx = (this.x - fromX) / d, dz = (this.z - fromZ) / d;
     // Jolt away from the blow in the creature's own frame.
     const f = this.forward(); this.jolt.pitch += -(dx * f.x + dz * f.z) * .22 * (stagger + .3); this.jolt.roll += (dx * f.z - dz * f.x) * .22 * (stagger + .3);
@@ -198,6 +233,7 @@ export class Creature {
       if (name === 'lunge') w = behind ? 0 : Math.abs(rel) < .5 ? 1.4 : .6;
       if (name === 'spin') w = behind || dist < 1.4 ? 2.4 : .35;
       if (name === 'slam') w = behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
+      if (a.boss) w = this.isBoss ? (dist < 4.5 ? 1.6 : .8) * (this.enraged ? 1.4 : 1) : 0;
       if (w > 0) options.push([name, w]);
     }
     let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
@@ -210,6 +246,7 @@ export class Creature {
     this.t += dt;
     this.flash = Math.max(0, this.flash - dt); this.shake = Math.max(0, this.shake - dt);
     this.jolt.pitch = damp(this.jolt.pitch, 0, 9, dt); this.jolt.roll = damp(this.jolt.roll, 0, 9, dt);
+    if (this.brokeNow) { this.brokeNow = false; events.push({ type: 'shellBroken' }); }
     if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
     if (this.state === 'dormant') return events;
     if (this.state === 'defeated') {
@@ -367,7 +404,15 @@ export class Creature {
         else this.closest = Math.min(this.closest, v.ring ? Math.abs(d - v.r) - .45 : d - v.r - .34);
       }
     }
+    if (this.attack === 'quake' && this.t >= .1 && !this.connected) {
+      // The ground breaks around it: dash through (i-frames), guard, or be out of range.
+      const gap = Math.hypot(this.x - p.x, this.z - p.z) - QUAKE_RADIUS;
+      if (gap <= 0 && ctx.playerGrounded) strike({ ring: true, quake: true });
+      else this.closest = Math.min(this.closest, gap);
+      if (!this.quaked) { this.quaked = true; events.push({ type: 'quake', x: this.x, z: this.z, radius: QUAKE_RADIUS }); }
+    }
     if (this.t >= a.active) {
+      this.quaked = false;
       if (!this.connected) events.push({ type: 'missed', attack: this.attack, label: a.label, gap: this.closest ?? 9 });
       this.setState('recover');
     }
@@ -382,6 +427,10 @@ export class Creature {
     if (this.attack === 'spin') {
       const g = groundY(this.x, this.z);
       return [{ x: this.x, y: g + .5, z: this.z, r: this.radius + .55 }];
+    }
+    if (this.attack === 'quake') {
+      const g = groundY(this.x, this.z);
+      return this.state === 'attack' ? [{ x: this.x, y: g + .1, z: this.z, r: QUAKE_RADIUS, ring: true }] : [];
     }
     if (this.attack === 'slam') {
       const fw = this.forward(), cx = this.x + fw.x * 1.0 * s, cz = this.z + fw.z * 1.0 * s, g = groundY(cx, cz);
@@ -410,12 +459,14 @@ export class Creature {
       if (this.attack === 'lunge') { rear = -.28 * w; headOut = -.35 * w; }
       if (this.attack === 'spin') { headOut = -.6 * w; legsIn = w; spin = Math.sin(t * 40) * .06 * w; }    // retract and rattle
       if (this.attack === 'slam') { rear = -.75 * w; lift = .9 * w; headOut = .2 * w; }                     // rear up high
+      if (this.attack === 'quake') { rear = -.62 * w; lift = .7 * w; headOut = -.48 * w; spin = Math.sin(t * 30) * .04 * w; }
     }
     if (st === 'attack') {
       glow = .7;
       if (this.attack === 'lunge') { rear = .16; headOut = .45; }
       if (this.attack === 'spin') { headOut = -.6; legsIn = 1; spin = this.spinAngle; }
       if (this.attack === 'slam') { const k = Math.min(1, t / .07); rear = -.75 + .95 * k; lift = .9 * (1 - k); }
+      if (this.attack === 'quake') { const k = Math.min(1, t / .08); rear = -.62 + .98 * k; lift = .7 * (1 - k); headOut = .22; headLow = -.42; }
     }
     if (st === 'recover') { rear = .06; headOut = .1; headLow = -.25 + Math.sin(time * 5) * .03; legRate = .5; }
     if (st === 'stagger') { lean = Math.sin(t * 28) * .12 * Math.max(0, 1 - t / this.staggerTime); rear = .1; headOut = -.2; }
@@ -436,6 +487,10 @@ export class Creature {
       mesh.scale.setScalar(damp(mesh.scale.x, 1 - legsIn * .55, 14, dt));
     });
     const rage = this.enraged ? 1 : 0;
+    if (this.isBoss) {
+      this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
+      this.bossJaw.rotation.x = damp(this.bossJaw.rotation.x, st === 'windup' || st === 'attack' ? -.42 : -.08, 9, dt);
+    }
     this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
     this.eyeMat.emissive.setRGB(.35 + glow * .8 + rage * .9, (.26 + glow * .4) * (1 - rage * .8), .13 * (1 - rage));
@@ -443,7 +498,7 @@ export class Creature {
     if (this.tell.visible) {
       const warning = st === 'windup', w = warning ? Math.min(1, t / tm.windup) : 1;
       // The spin's danger zone is wider than the body; size the tell to match.
-      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : 1;
+      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : this.attack === 'quake' ? QUAKE_RADIUS / this.radius : 1;
       this.tell.position.set(this.x, groundY(this.x, this.z) + .065, this.z);
       this.tell.scale.setScalar(this.radius * reach * (warning ? .9 + .45 * w : st === 'attack' ? 1.42 : 1.18));
       this.tell.material.color.setHex(warning ? 0xe9ad62 : st === 'attack' ? 0xf27d56 : 0xb9d892);
@@ -453,7 +508,7 @@ export class Creature {
     this.root.updateMatrixWorld(true);
   }
   showBar(visible, camera) {
-    this.bar.visible = visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
+    this.bar.visible = !this.isBoss && visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
     if (!this.bar.visible) return;
     this.bar.quaternion.copy(this.root.quaternion).invert().multiply(camera.quaternion);
     const f = this.health / this.maxHealth;
@@ -470,13 +525,14 @@ export class Creature {
   }
   respawn() {
     this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
+    if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
     this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0);
     this.setState('wander'); this.cooldown = 1.5; this.push = { x: 0, z: 0 }; this.attack = null;
   }
 }
 
-export function createCreatures(scene, chapters = []) {
+export function createCreatures(scene, chapters = [], hunt = null) {
   // The first shellback waits on the open slope below the camp so the first
   // fight (Wren's trial) happens on readable ground. It returns after defeat.
   const list = [new Creature(scene, 1, 27, 'shellback', { respawn: 6, id: 'trial' })];
@@ -485,5 +541,7 @@ export function createCreatures(scene, chapters = []) {
   for (const c of chapters) for (const [x, z, type] of c.mobs) {
     const m = new Creature(scene, x, z, type, { chapter: c.id }); m.sleep(); list.push(m);
   }
+  // The Old Shell nests in the Scorched Hollow: a standing hunt, not part of any chapter.
+  if (hunt) list.push(new Creature(scene, hunt.x, hunt.z - 3, 'oldshell', { id: 'oldshell' }));
   return list;
 }

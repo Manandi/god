@@ -52,3 +52,7 @@
 .dev-panel>small{display:block;margin-top:10px;color:#8fa99a;font-size:9px;line-height:1.5}
 .dev-select{width:100%;margin-bottom:8px;padding:8px;background:#06110e;color:#e5edda;border:1px solid #5d7f67;font:11px 'DM Mono',monospace}
 #perfPanel{position:fixed;right:16px;bottom:96px;padding:9px 12px;margin:0;z-index:12;pointer-events:none;color:#d5edd5;background:#091b19e8;font:11px/1.5 monospace;border:1px solid #72997a}
+#dialogue{pointer-events:auto}#dialogueChoices{display:grid;gap:6px;margin:4px 0 10px}#dialogueChoices:empty{display:none}
+#dialogueChoices button{display:flex;gap:10px;align-items:baseline;text-align:left;padding:9px 12px;border:1px solid #6f8f6b;background:#10251fcc;color:#e8f1df;font:14px/1.4 'Cinzel',serif;cursor:pointer}
+#dialogueChoices button:hover{background:#c6de9e;color:#142018}#dialogueChoices b{font:700 11px 'DM Mono',monospace;color:#f0d98f}#dialogueChoices button:hover b{color:#142018}
+#sideObjective{color:#f0d98f}

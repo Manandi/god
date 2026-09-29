@@ -5,6 +5,7 @@ import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
+import { createChronicles,CHRONICLES,TOPICS } from './chronicles.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
@@ -28,7 +29,7 @@ let pixelRatio=Math.min(devicePixelRatio,1.25);
 renderer.setPixelRatio(pixelRatio);renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
-const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene,CHAPTERS);
+const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene,CHAPTERS,HUNT);
 // The keepers of the trail are solid, like everything else you can see.
 for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.scale||1),top:groundY(n.x,n.z)+2.2*(n.scale||1)});
 const collisionGrid=createCollisionGrid(world.colliders);
@@ -48,9 +49,13 @@ let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const story=createStory(save.story,memories);
+// Mossgate Chronicles: the town's side quests (ChatGPT Sites), done when a memory is found or the Old Shell falls.
+let oldShellDefeated=save.oldShellDefeated===true;
+const oldShell=creatures.find(c=>c.isBoss);if(oldShellDefeated)oldShell.sleep();
+const chronicles=createChronicles(save.chronicles,site=>site==='oldshell'?oldShellDefeated:memories.has(site));
 const npcs=createNpcs(scene,NPCS);let dialogue=null;const spawned=new Set();
 // Orrun, the Hollow Warden, and its arena load after the world; until then the gate is just a gate.
-let warden=null,gateRoots=null,bossShown=false,bossTrail=1;
+let warden=null,gateRoots=null,bossShown=null,bossTrail=1;
 const SPEAKERS={orrun:{name:'ORRUN',title:'THE WARDEN, REMEMBERED',get x(){return warden?.x??BED.x;},get z(){return warden?.z??BED.z;}}};
 const speakerOf=id=>NPCS[id]||SPEAKERS[id];
 const RELEASE_LINES=[
@@ -77,10 +82,12 @@ function initAudio(){
   }catch{/* Sound is optional on unsupported browsers. */}
 }
 function toast(title,detail=''){$('toast').innerHTML=title+(detail?`<small>${detail}</small>`:'');$('toast').classList.remove('hidden');toastTimer=3.5;}
-function persist(){try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({memories:[...memories],story:story.serialize()}));}catch{/* No storage available. */}}
+function persist(){try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize(),oldShellDefeated}));}catch{/* No storage available. */}}
 function updateJournal(){
+  const chronicleEntries=CHRONICLES.map((q,i)=>{const done=chronicles.completed.has(q.id),active=chronicles.active?.id===q.id;
+    return `<article class="${done||active?'':'unknown'}"><strong>CHRONICLE ${i+1} · ${done?'TOLD':active?'ACTIVE':'UNTOLD'}</strong>${done?`${q.title}. ${q.complete}`:active?`${q.title}. ${q.accepted}`:'Mossgate’s townsfolk will tell this one.'}</article>`;}).join('');
   $('journalEntries').innerHTML=story.journal().map((page,i)=>
-    `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('');
+    `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('')+chronicleEntries;
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
 function resume(){if(!started)player.health=maxHealth();started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
@@ -117,7 +124,7 @@ window.addEventListener('keydown',e=>{
     }
     updateModeLabel();playTone(410,.12,.025);
   }
-  if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!combat.busy){
+  if(['Digit0','Digit1','Digit2','Digit3','Digit4'].includes(e.code)&&started&&!paused&&!dialogue&&!combat.busy){
     const name={Digit0:'idle',Digit1:'pose',Digit2:'sit',Digit3:'wave',Digit4:'cheer'}[e.code];player.emote=name;avatar.emote(name);toast(name==='idle'?'EMOTE ENDED':`${name.toUpperCase()} · MOVE TO STAND`);return;
   }
   if(e.code==='Space'&&!paused&&!dialogue&&!combat.busy&&!player.defeated){
@@ -133,6 +140,8 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyF')attackPressed();
   if(e.code==='KeyR')heavyPressed(true);
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
+  if(dialogue?.choices&&/^Digit[1-9]$/.test(e.code)){chooseDialogue(Number(e.code.slice(5))-1);return;}
+  if(dialogue&&e.code==='Escape'){closeDialogue(false);return;}
   if(e.code==='KeyE'&&!paused&&!journalOpen){if(dialogue){advanceDialogue();return;}if(combat.busy)return;const n=nearestInteractable();if(n&&n.type!=='npc')player.interactT=0;interact();}
 });
 canvas.addEventListener('wheel',e=>{if(!player.thirdPerson)return;e.preventDefault();player.zoom=THREE.MathUtils.clamp(player.zoom+Math.sign(e.deltaY)*.65,3.3,9.5);},{passive:false});
@@ -235,32 +244,66 @@ function interact(){
 // away ends the conversation. Story conversations advance the quest when
 // they finish, and may wake the chapter's hollowed.
 function openDialogue(id,conversation=null){
-  const conv=conversation||story.talk(id,profile.name),who=speakerOf(id);
-  dialogue={id,...conv,i:0,chars:0,opened:elapsed};if(npcs[id])npcs[id].talking=true;
+  const conv=conversation||story.talk(id,profile.name),who=speakerOf(id),lines=[...conv.lines];
+  if(!conversation){
+    // Idle talk remembers what you chose to discuss (ChatGPT Sites design); a chronicle offer follows the story.
+    const stance=chronicles.stances[id],topic=stance&&TOPICS[id]?.find(t=>t[0]===stance);
+    if(!conv.then&&topic)lines[0]+=` Last time you asked me, “${topic[1]}” I remember.`;
+    const offer=chronicles.openingFor(id);if(offer)lines.push(offer);
+  }
+  dialogue={id,...conv,lines,i:0,chars:0,opened:elapsed,custom:!!conversation,choices:null};if(npcs[id])npcs[id].talking=true;
   $('dialogueName').textContent=who.name;$('dialogueTitle').textContent=who.title;
   $('dialogue').classList.remove('hidden');renderDialogue();playTone(520,.12,.025,'triangle');
 }
 function renderDialogue(){
-  const line=dialogue.lines[dialogue.i],shown=Math.min(line.length,Math.floor(dialogue.chars));
+  const d=dialogue,line=d.lines[d.i],shown=Math.min(line.length,Math.floor(d.chars));
   $('dialogueText').textContent=line.slice(0,shown);
-  $('dialogueHint').innerHTML=shown<line.length?'<b>E</b> · SKIP':dialogue.i<dialogue.lines.length-1?`<b>E</b> · CONTINUE <em>${dialogue.i+1} / ${dialogue.lines.length}</em>`:'<b>E</b> · FAREWELL';
+  $('dialogueChoices').innerHTML=d.choices?d.choices.map(([,label],i)=>`<button type="button" data-choice="${i}"><b>${i+1}</b>${esc(label)}</button>`).join(''):'';
+  $('dialogueHint').innerHTML=d.choices?'<b>1–'+d.choices.length+'</b> OR CLICK · CHOOSE':shown<line.length?'<b>E</b> · SKIP':d.i<d.lines.length-1?`<b>E</b> · CONTINUE <em>${d.i+1} / ${d.lines.length}</em>`:d.custom?'<b>E</b> · FAREWELL':'<b>E</b> · CONTINUE';
 }
-function advanceDialogue(){
-  if(!dialogue)return;
-  const line=dialogue.lines[dialogue.i];
-  if(dialogue.chars<line.length){dialogue.chars=line.length;renderDialogue();return;}
-  if(++dialogue.i>=dialogue.lines.length){closeDialogue(true);return;}
-  dialogue.chars=0;renderDialogue();playTone(460,.05,.012,'triangle');
-}
-function closeDialogue(finished){
-  const d=dialogue;if(!d)return;dialogue=null;
-  $('dialogue').classList.add('hidden');if(npcs[d.id])npcs[d.id].talking=false;
-  if(finished&&d.id==='orrun'){finishStory();return;}
-  if(!finished||!d.then)return;
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/** A story conversation moves the quest on as soon as its last line is heard. */
+function applyStoryStep(d){
+  if(d.applied||!d.then)return;d.applied=true;
   const from=story.stage;story.advance(d.then);
   if(from==='trial_report'){player.flasks=FLASK.charges;player.health=maxHealth();}
   if(d.spawn)spawnEncounter(d.spawn);
   persist();toast('NEW OBJECTIVE',story.info.objective);playTone(620,.35,.05,'sine');
+}
+/** Dialogue choices: a chronicle action if this person has one, what you can ask about, and farewell. */
+function showChoices(){
+  const d=dialogue,quest=chronicles.choiceFor(d.id);
+  d.choices=[...(quest?[quest]:[]),...(TOPICS[d.id]||[]),['farewell','Farewell.','']];
+  if(document.pointerLockElement)document.exitPointerLock();renderDialogue();
+}
+function chooseDialogue(index){
+  const d=dialogue;if(!d?.choices)return;const choice=d.choices[index];if(!choice)return;
+  const [key,,reply]=choice;
+  if(key==='farewell'){closeDialogue(true);return;}
+  let text=reply;
+  if(/^(accept|turnin|remind):/.test(key)){
+    const q=CHRONICLES.find(q=>q.id===key.split(':')[1]),extra=chronicles.choose(key);
+    if(key.startsWith('accept'))toast('CHRONICLE ACCEPTED',q.title);
+    if(key.startsWith('turnin')){toast('CHRONICLE COMPLETE',q.title);playTone(660,.5,.05,'sine');}
+    if(extra)text+=` ${extra}`;
+  }else chronicles.stances[d.id]=key;
+  if(npcs[d.id])npcs[d.id].expression=/^(accept|turnin)/.test(key)?'warm':key==='doubt'||key==='boast'?'stern':'warm';
+  persist();d.lines=[text];d.i=0;d.chars=0;d.choices=null;d.replying=true;renderDialogue();playTone(430,.08,.025,'triangle');
+}
+function advanceDialogue(){
+  const d=dialogue;if(!d||d.choices)return;
+  const line=d.lines[d.i];
+  if(d.chars<line.length){d.chars=line.length;renderDialogue();return;}
+  if(++d.i<d.lines.length){d.chars=0;renderDialogue();playTone(460,.05,.012,'triangle');return;}
+  d.i=d.lines.length-1;applyStoryStep(d);
+  if(d.custom){closeDialogue(true);return;}
+  showChoices();
+}
+function closeDialogue(finished){
+  const d=dialogue;if(!d)return;dialogue=null;
+  $('dialogue').classList.add('hidden');if(npcs[d.id]){npcs[d.id].talking=false;npcs[d.id].expression='neutral';}
+  if(finished&&d.id==='orrun'){finishStory();return;}
+  if(d.choices!==undefined&&started&&!paused)canvas.requestPointerLock?.()?.catch?.(()=>{});
 }
 function updateDialogue(dt){
   if(!dialogue)return;
@@ -268,7 +311,9 @@ function updateDialogue(dt){
   if(Math.hypot(n.x-player.x,n.z-player.z)>(dialogue.id==='orrun'?11:5.5)){closeDialogue(false);return;}
   const line=dialogue.lines[dialogue.i];
   if(dialogue.chars<line.length){dialogue.chars=Math.min(line.length,dialogue.chars+dt*62);renderDialogue();}
+  else if(dialogue.replying){dialogue.replying=false;}
 }
+$('dialogue').addEventListener('click',e=>{const b=e.target.closest('[data-choice]');if(b){e.stopPropagation();chooseDialogue(Number(b.dataset.choice));}});
 
 /** Orrun is released: the gate roots wither, the story ends, the gate opens. */
 function finishStory(){
@@ -278,15 +323,18 @@ function finishStory(){
 }
 let witherT=-1;
 function updateBoss(rawDt){
-  if(!warden)return;
-  warden.setSealed(story.before('gate'));
-  if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
-  const fighting=warden.awake&&warden.alive;
-  if(fighting!==bossShown){bossShown=fighting;$('bossBar').classList.toggle('hidden',!fighting);$('bossName').textContent=warden.name;}
-  if(fighting){
-    const f=warden.health/warden.maxHealth;bossTrail=Math.max(f,bossTrail-rawDt*.25);
-    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',warden.phase>1);
-  }else bossTrail=1;
+  if(warden){
+    warden.setSealed(story.before('gate'));
+    if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
+  }
+  // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
+  const boss=warden?.awake&&warden.alive?warden:oldShell?.alive&&!['wander','return','dormant'].includes(oldShell.state)&&Math.hypot(oldShell.x-player.x,oldShell.z-player.z)<36?oldShell:null;
+  if(boss!==bossShown){bossShown=boss;bossTrail=1;$('bossBar').classList.toggle('hidden',!boss);}
+  if(boss){
+    const f=boss.health/boss.maxHealth;bossTrail=Math.max(f,bossTrail-rawDt*.25);
+    $('bossName').textContent=boss===oldShell?`THE OLD SHELL · ${oldShell.shellBroken?'SHELL BROKEN · HEAD EXPOSED':'ANCIENT ARMOUR'}`:boss.name;
+    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',boss===warden?warden.phase>1:oldShell.shellBroken);
+  }
 }
 function handleBossEvent(c,ev){
   if(ev.type==='awaken'){sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
@@ -351,7 +399,11 @@ const STAT_PRESETS={
 /** Jump straight to a story stage: earlier chapters count as done. */
 function devJumpTo(stage){
   const at=STAGES.findIndex(s=>s.id===stage);
-  for(const c of CHAPTERS)if(STAGES.findIndex(s=>s.id===`${c.id}_report`)<at){memories.add(c.id);story.cleared.add(c.id);const e=world.echoes.find(e=>e.id===c.id);if(e)e.crystal.visible=e.ring.visible=e.light.visible=false;}
+  const idx=id=>STAGES.findIndex(s=>s.id===id);
+  for(const c of CHAPTERS){
+    if(idx(`${c.id}_fight`)<at)story.cleared.add(c.id);
+    if(idx(`${c.id}_memory`)<at){memories.add(c.id);const e=world.echoes.find(e=>e.id===c.id);if(e)e.crystal.visible=e.ring.visible=e.light.visible=false;}
+  }
   resetEncounters();story.advance(stage);
   if(story.reached('end')){warden?.release(true);if(gateRoots)gateRoots.visible=false;}else if(warden&&!warden.alive){warden.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;}
   persist();toast('DEV · STORY',story.info.objective);
@@ -388,7 +440,7 @@ devPanel.addEventListener('click',e=>{
     case 'reset-world':
       memories.clear();story.cleared.clear();resetEncounters();story.advance('meet_sela');
       for(const e of world.echoes)e.crystal.visible=e.ring.visible=e.light.visible=true;
-      warden?.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;persist();toast('DEV · STORY RESET');break;
+      warden?.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;chronicles.reset();oldShellDefeated=false;oldShell.respawn();persist();toast('DEV · STORY RESET');break;
   }
   updateDevTelemetry();
 });
@@ -510,7 +562,8 @@ function handleCombatEvents(){
       if(ev.critical){slowMo(.35,.45);}
       debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
       if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
-      if(res.defeated&&ev.target===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
+      if(res.defeated&&ev.target===oldShell){oldShellDefeated=true;persist();sound.defeated();sound.roar();slowMo(.2,1);lockTarget=null;toast('THE OLD SHELL FALLS',chronicles.active?.id==='old-shell'?'Return to Orin in Mossgate to finish the hunt.':'The Scorched Hollow is quiet.');}
+      else if(res.defeated&&ev.target===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
       else if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');
 }
     }
@@ -535,7 +588,8 @@ function incomingStrike(c,ev){
   // Guard: only attacks from the front arc are blocked.
   const facing={x:-Math.sin(combat.facing),z:-Math.cos(combat.facing)},toward={x:c.x-player.x,z:c.z-player.z},tl=Math.hypot(toward.x,toward.z)||1;
   const inFront=Math.acos(Math.max(-1,Math.min(1,(facing.x*toward.x+facing.z*toward.z)/tl)))<GUARD.arc/2;
-  if(combat.guarding&&inFront&&!ev.ring){
+  // The Old Shell's quake comes from all around and can be guarded; other rings must be jumped or dashed.
+  if(combat.guarding&&(inFront||ev.quake)&&(!ev.ring||ev.quake)){
     if(combat.parrying&&c.deflect()){
       sound.parry();slowMo(.35,.35);hitstop=Math.max(hitstop,.12);effects.burst(new THREE.Vector3(player.x+toward.x/tl*.6,groundY(player.x,player.z)+1.2,player.z+toward.z/tl*.6),new THREE.Vector3(-toward.x/tl,0,-toward.z/tl),true);
       player.stamina=Math.min(STAMINA.max,player.stamina+mech.parryReward);player.winded=false;
@@ -572,6 +626,8 @@ function updateHUD(){
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${distance} m`;
   updateWaypoint(next,distance);
   $('objective').textContent=story.info.objective;
+  const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
+  $('sideObjective').textContent=cq?`CHRONICLE · ${cq.title} · ${chronicles.goalMet(cq)?'return to '+giver(cq):cq.site==='oldshell'?'hunt in the Scorched Hollow':'recover the memory'}`:offer?`CHRONICLE · speak with ${giver(offer)} in Mossgate`:'';
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
@@ -703,6 +759,7 @@ function update(rawDt){
 
   // The story: conversations, the active chapter's hollowed, the keepers.
   updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);
+  if(oldShell&&!oldShell.alive&&oldShell.state==='defeated'&&!oldShellDefeated){oldShellDefeated=true;persist();}
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
   updateNpcs(npcs,elapsed,rawDt,player,story.speaker);world.updateLanternLights(player.x,player.z);
@@ -713,7 +770,9 @@ function update(rawDt){
     const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
     for(const ev of events){
       if(c===warden&&handleBossEvent(c,ev))continue;
-      if(ev.type==='windup'){sound.windup(c.type,ev.attack);cue({lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
+      else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
+      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert')sound.alert();
       else if(ev.type==='strike')incomingStrike(c,ev);
@@ -861,5 +920,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
