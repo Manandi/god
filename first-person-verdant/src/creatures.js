@@ -270,8 +270,15 @@ export class Creature {
     return null;
   }
 
+  /** The current attack's numbers (the team-fight code checks hits on other explorers with them). */
+  get attackInfo() { return ATTACKS[this.attack] || null; }
+
+  // `remote`: in a team fight on a guest's game this creature follows the host's
+  // snapshots (coop.js). It still moves and animates here, but it does not choose
+  // attacks, notice anyone or respawn on its own; `netEvents` carries the host's
+  // wind-ups so the telegraph cues still play.
   update(dt, time, ctx) {
-    const events = [], k = this.kind, p = ctx.player;
+    const events = this.netEvents ? this.netEvents.splice(0) : [], k = this.kind, p = ctx.player;
     this.t += dt;
     this.flash = Math.max(0, this.flash - dt); this.shake = Math.max(0, this.shake - dt);
     this.jolt.pitch = damp(this.jolt.pitch, 0, 9, dt); this.jolt.roll = damp(this.jolt.roll, 0, 9, dt);
@@ -283,7 +290,7 @@ export class Creature {
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
       if (this.t > 2.2) this.root.visible = false;
-      if (this.respawnDelay && this.t > this.respawnDelay) this.respawn();
+      if (this.respawnDelay && this.t > this.respawnDelay && !this.remote) this.respawn();
       this.bar.visible = false;
       return events;
     }
@@ -293,7 +300,7 @@ export class Creature {
     const toPlayer = Math.atan2(dx, dz), rel = angleTo(this.heading, toPlayer);
     let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
-    if (['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
+    if (!this.remote && ['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
 
     switch (this.state) {
       case 'wander':
@@ -301,7 +308,7 @@ export class Creature {
         if (this.wanderTurn <= 0) { this.wanderTurn = 2 + Math.random() * 2.5; this.wanderHeading = this.heading + (Math.random() - .5) * 2.4; }
         if (Math.hypot(this.x - this.home.x, this.z - this.home.z) > 8) this.wanderHeading = Math.atan2(this.home.x - this.x, this.home.z - this.z);
         wantHeading = this.steer(this.wanderHeading ?? this.heading, ctx.grid); wantSpeed = k.walk; turn = 1.4;
-        if (dist < k.notice) { this.setState('alert'); events.push({ type: 'alert' }); }
+        if (dist < k.notice && !this.remote) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
       case 'emerge':
         // Clawing up out of the roots: no threat until it is fully out.
@@ -391,6 +398,7 @@ export class Creature {
   }
 
   beginAttack(dist, rel, events, ctx) {
+    if (this.remote) return;               // the host starts every attack in a team fight
     // Attack tokens: creatures take turns instead of swarming the explorer.
     if (ctx.mayAttack && !ctx.mayAttack(this)) { this.cooldown = .4 + Math.random() * .5; return; }
     const name = this.chooseAttack(dist, rel);

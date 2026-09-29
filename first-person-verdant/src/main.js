@@ -33,6 +33,7 @@ renderer.setPixelRatio(pixelRatio);renderer.setSize(window.innerWidth,window.inn
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.43;
 const scene=new THREE.Scene();const world=buildWorld(scene),creatures=createCreatures(scene,CHAPTERS,HUNT);
+creatures.forEach((c,i)=>{c.netId='c'+i;});   // stable ids for team fights (creation order is the same in every game)
 // The keepers of the trail are solid, like everything else you can see.
 for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.scale||1),top:groundY(n.x,n.z)+2.2*(n.scale||1)});
 const collisionGrid=createCollisionGrid(world.colliders);
@@ -463,7 +464,7 @@ devPanel.addEventListener('click',e=>{
 // --------------------------------------------------------------------- co-op
 // Lobby codes (ChatGPT Sites design) over Supabase Realtime: friends appear as
 // block figures, and recovered memories, cleared nests and the Old Shell are shared.
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,
   getShared:()=>({memories:[...memories],cleared:[...story.cleared],oldShellDefeated}),
   onShared:shared=>{
     let changed=false;
@@ -565,7 +566,7 @@ function critTarget(){
 }
 function handleCombatEvents(){
   for(const ev of combat.events){
-    if(ev.type==='swing'){sound.swing(ev.move);cue(MOVES[ev.move].label.toUpperCase(),.22);}
+    if(ev.type==='swing'){coop.sendAct();sound.swing(ev.move);cue(MOVES[ev.move].label.toUpperCase(),.22);}
     else if(ev.type==='spend')spend(ev.amount);
     else if(ev.type==='evade'){sound.evade();cue('DASH',.3);}
     else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
@@ -576,7 +577,7 @@ function handleCombatEvents(){
       effects.shockwave(at,.5,ev.radius,.35);shoulderCam.punch(.35+ev.chargeLevel*.12);sound.attack('slam');
       for(const c of creatures){
         if(!c.alive||Math.hypot(c.x-ev.x,c.z-ev.z)>ev.radius+(c.radius||1))continue;
-        const res=c.hit({damage:ev.damage*strikePower(),poise:ev.poise*strikePower(),fromX:ev.x,fromZ:ev.z,push:1.2,stagger:.8,part:c===warden?'leg':'shell',pierce:ev.pierce});
+        const res=strikeCreature(c,{damage:ev.damage*strikePower(),poise:ev.poise*strikePower(),fromX:ev.x,fromZ:ev.z,push:1.2,stagger:.8,part:c===warden?'leg':'shell',pierce:ev.pierce});
         if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1,c.z),res.damage,res.effect);if(res.toppled){sound.topple();toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}}
       }
       cue(MOVES[ev.move].label.toUpperCase(),.7);
@@ -593,7 +594,7 @@ function handleCombatEvents(){
       const power=strikePower();
       // Mages put Intelligence into charged Rootbreakers; fighters stagger harder.
       const chargePower=/rootbreaker/.test(ev.move)?mech.chargePower:1;
-      const res=ev.target.hit({damage:ev.damage*power*chargePower,poise:ev.poise*power*chargePower,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger*mech.stagger,part:ev.part,pierce:ev.pierce});
+      const res=strikeCreature(ev.target,{damage:ev.damage*power*chargePower,poise:ev.poise*power*chargePower,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger*mech.stagger,part:ev.part,pierce:ev.pierce});
       if(!res)continue;
       combo++;comboTimer=2;
       const heavy=ev.heavy;
@@ -608,10 +609,7 @@ function handleCombatEvents(){
       if(ev.critical){slowMo(.35,.45);}
       debug.note(`${m.label}${ev.chargeLevel?` (charge ${ev.chargeLevel})`:''}${ev.counter?' COUNTER':''} → HIT ${ev.part} at t=${ev.t.toFixed(2)}s (active ${m.active.join('–')})  ${res.damage.toFixed(1)} dmg [${res.effect}] · ${ev.target.lastEvent}`,elapsed);
       if(res.toppled){sound.topple();slowMo(.45,.3);toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}
-      if(res.defeated&&ev.target===oldShell){oldShellDefeated=true;persist();sound.defeated();sound.roar();slowMo(.2,1);lockTarget=null;toast('THE OLD SHELL FALLS',chronicles.active?.id==='old-shell'?'Return to Orin in Mossgate to finish the hunt.':'The Scorched Hollow is quiet.');}
-      else if(res.defeated&&ev.target===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
-      else if(res.defeated){sound.defeated();slowMo(.25,.6);if(lockTarget===ev.target)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');
-}
+      if(res.defeated)creatureDefeated(ev.target);
     }
     else if(ev.type==='blocked'){sound.blocked();effects.chips(ev.point);hitstop=Math.max(hitstop,.05);cue('BLOCKED',.45);debug.note(`${MOVES[ev.move].label} → BLOCKED by an obstacle`,elapsed);}
     else if(ev.type==='whiff'){sound.whiff();cue('MISSED',.3);debug.note(`${MOVES[ev.move].label} → MISS  (${ev.nearest===Infinity?'no creature near':`${ev.nearest.toFixed(2)} m short`})`,elapsed);}
@@ -625,6 +623,81 @@ function mayAttack(self){
 }
 const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
 /** A creature's attack reached the explorer: evade, absorb with hyper-armour, or take it. */
+// ------------------------------------------------------------- team fights
+// Host-authoritative (coop.js): the host's game runs every creature and sends a
+// snapshot ten times a second; guests follow it and send their hits to the host.
+const SNAP_KEYS=['x','z','heading','state','t','attack','health','maxHealth','alive','enraged','poise'];
+const byNet=id=>creatures.find(c=>c.netId===id);
+let snapTimer=0,snapTick=0;
+function sendWorld(dt){
+  if((snapTimer-=dt)>0)return;snapTimer=.1;snapTick++;
+  const out=[];
+  for(const c of creatures){
+    if(!c.netId||(c.state==='dormant'&&snapTick%10))continue;   // sleeping ones once a second
+    const s={id:c.netId,vis:c.root.visible};for(const k of SNAP_KEYS)s[k]=c[k];
+    if(c.isBoss)s.shellBroken=!!c.shellBroken;
+    if(c===warden){Object.assign(s,{phase:c.phase,awake:c.awake,clubBroken:!!c.clubBroken,chargeRun:!!c.chargeRun,sealed:!!c.sealed});if(c.attack==='erupt'&&c.plan)s.plan=c.plan;}
+    out.push(s);
+  }
+  coop.sendWorld({c:out});
+}
+function applyWorld(world){
+  for(const s of world.c||[]){
+    const c=byNet(s.id);if(!c)continue;
+    c.net=s;
+    if(c===warden&&s.sealed!==undefined&&!!c.sealed!==s.sealed)c.setSealed(s.sealed);
+    const wasAlive=c.alive;
+    // A new state, or a new attack (the Warden chains attacks inside one state): take the host's timing.
+    if(s.state!==c.state||(s.attack??null)!==(c.attack??null)){
+      if(c.state==='defeated'&&s.state!=='defeated'&&c!==warden&&c.respawn)c.respawn();
+      if(s.state==='dormant'&&c.sleep){c.sleep();continue;}
+      if(s.state==='released'&&c===warden){c.release();continue;}
+      const newAttack=s.attack&&s.attack!==c.attack;
+      c.attack=s.attack??null;c.setState(s.state);c.t=s.t;
+      if(newAttack&&['windup','attack','charge'].includes(s.state))(c===warden?c.pending:(c.netEvents||=[])).push({type:'windup',attack:s.attack});
+    }else if(Math.abs(c.t-s.t)>.2)c.t=s.t;
+    c.health=s.health;c.maxHealth=s.maxHealth;c.alive=s.alive;c.enraged=s.enraged;c.poise=s.poise;c.root.visible=s.vis;
+    if(c===warden){c.phase=s.phase;c.awake=s.awake;c.chargeRun=s.chargeRun;if(s.plan&&!c.plan)c.plan=s.plan.map(p=>({...p}));
+      if(s.clubBroken&&!c.clubBroken){c.clubBroken=true;if(c.club)c.club.visible=false;}}
+    if(wasAlive&&!s.alive&&s.state!=='dormant')creatureDefeated(c);
+  }
+}
+function applyTeamHit(h){
+  const c=byNet(h.id);if(!c||!c.alive)return;
+  if(h.deflect){c.deflect();return;}
+  const res=c.hit(h);
+  if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1.2,c.z),res.damage,res.effect);if(res.defeated)creatureDefeated(c);}
+}
+/** Host: the explorer each creature goes after (the nearest one). */
+function teamTarget(c,local){
+  let best=local,bd=Math.hypot(c.x-local.x,c.z-local.z);
+  for(const o of coop.others()){const d=Math.hypot(c.x-o.x,c.z-o.z);if(d<bd){bd=d;best=o;}}
+  return best;
+}
+/** Host, when a creature is after someone else: does its attack still catch you? */
+function strikesLocal(c){
+  if(!['attack','charge'].includes(c.state)||!c.damageVolumes)return false;
+  const feet=groundY(player.x,player.z)+player.height;
+  return c.damageVolumes().some(v=>{const d=Math.hypot(v.x-player.x,v.z-player.z);return v.ring?Math.abs(d-v.r)<.55&&player.grounded:d<v.r+.4&&feet<v.y+v.r+.3&&feet+1.8>v.y-v.r;});
+}
+/** Bosses get tougher with more explorers: +50% health per extra member. */
+function scaleBosses(){
+  const k=1+.5*(coop.teamSize-1);
+  for(const c of [warden,oldShell]){if(!c)continue;c.baseMax??=c.maxHealth;const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
+}
+
+/** A creature went down (by your hand, or in a team fight by anyone's). */
+function creatureDefeated(c){
+  if(c===oldShell){oldShellDefeated=true;persist();sound.defeated();sound.roar();slowMo(.2,1);lockTarget=null;toast('THE OLD SHELL FALLS',chronicles.active?.id==='old-shell'?'Return to Orin in Mossgate to finish the hunt.':'The Scorched Hollow is quiet.');}
+  else if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
+  else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
+}
+/** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
+function strikeCreature(c,params){
+  const res=c.hit(params);
+  if(coop.guest&&c.netId)coop.sendHit({id:c.netId,...params});
+  return res;
+}
 function incomingStrike(c,ev){
   if(combat.invulnerable){
     const perfect=combat.perfectWindow;
@@ -637,6 +710,7 @@ function incomingStrike(c,ev){
   // The Old Shell's quake comes from all around and can be guarded; other rings must be jumped or dashed.
   if(combat.guarding&&(inFront||ev.quake)&&(!ev.ring||ev.quake)){
     if(combat.parrying&&c.deflect()){
+      if(coop.guest&&c.netId)coop.sendHit({id:c.netId,deflect:true});
       sound.parry();slowMo(.35,.35);hitstop=Math.max(hitstop,.12);effects.burst(new THREE.Vector3(player.x+toward.x/tl*.6,groundY(player.x,player.z)+1.2,player.z+toward.z/tl*.6),new THREE.Vector3(-toward.x/tl,0,-toward.z/tl),true);
       player.stamina=Math.min(STAMINA.max,player.stamina+mech.parryReward);player.winded=false;
       cue('PARRY · RIPOSTE',.9);debug.note(`${c.type} ${ev.label} → PARRIED (guard raised ${(combat.clock-combat.guardSince).toFixed(2)} s before)`,elapsed);return;
@@ -805,6 +879,7 @@ function update(rawDt){
 
   // The story: conversations, the active chapter's hollowed, the keepers.
   updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);coop.update(rawDt,elapsed);
+  if(coop.teamSize>1&&coop.authority)sendWorld(rawDt);
   if(oldShell&&!oldShell.alive&&oldShell.state==='defeated'&&!oldShellDefeated){oldShellDefeated=true;persist();}
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
@@ -812,8 +887,18 @@ function update(rawDt){
 
   // Creatures act after the explorer so a strike this frame can interrupt them.
   const playerPos={x:player.x,z:player.z,y:groundY(player.x,player.z)+player.height};
+  const team=coop.teamSize>1,guest=coop.guest;
+  if(team&&coop.authority)scaleBosses();
   for(const c of creatures){
-    const events=frozen?[]:c.update(dt,elapsed,{player:playerPos,playerGrounded:player.grounded,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
+    c.remote=guest;
+    // The host's creatures chase the nearest explorer; a guest's follow the host's snapshots.
+    const target=team&&!guest?teamTarget(c,playerPos):playerPos;
+    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
+    if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
+    // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
+    if(target!==playerPos){const key=c.state+c.attack;if(c.localKey!==key){c.localKey=key;c.localHit=false;}
+      if(!c.localHit&&strikesLocal(c)){c.localHit=true;const a=c.attackInfo||{};incomingStrike(c,{attack:c.attack,label:a.label||c.attack,kind:a.kind||'heavy',damage:a.damage||1});}
+      for(let i=events.length-1;i>=0;i--)if(events[i].type==='strike')events.splice(i,1);}
     for(const ev of events){
       if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
@@ -929,7 +1014,7 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
-  warden=res.warden;gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
+  warden=res.warden;warden.netId='warden';gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
   warden.setSealed(story.before('gate'));
   if(story.reached('end')){warden.release(true);if(gateRoots)gateRoots.visible=false;}
 }).catch(err=>console.warn('The Warden or its arena failed to load.',err));

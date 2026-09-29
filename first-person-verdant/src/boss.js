@@ -166,6 +166,8 @@ export class Warden {
     const a = this.bone('foot_fl'), b = this.bone('foot_fr'); const p = a.add(b).multiplyScalar(.5); p.y = groundY(p.x, p.z); return p;
   }
   get clipTime() { return this.t / this.pace; }
+  /** The current attack's numbers (the team-fight code checks hits on other explorers with them). */
+  get attackInfo() { return ATTACKS[this.attack] || null; }
 
   // --------------------------------------------------------- being hit
   hit({ damage, poise, fromX, fromZ, stagger, part, pierce = 0 }) {
@@ -236,7 +238,7 @@ export class Warden {
   // ---------------------------------------------------------- behaviour
   update(dt, time, ctx) {
     if (this.sealed) { this.t += dt; this.play('Sleep'); this.mixer.update(dt); return []; }
-    const events = this.pending.splice(0), p = ctx.player;
+    const events = this.pending.splice(0), p = ctx.player;   // (in a team fight a guest's host pushes wind-ups here too)
     this.t += dt; this.clock = (this.clock || 0) + dt; this.flash = Math.max(0, (this.flash || 0) - dt);
     this.poiseDelay -= dt; if (this.poiseDelay <= 0) this.poise = Math.min(POISE, this.poise + dt * 5);
     this.flinch = Math.max(0, this.flinch - dt * 6);
@@ -246,13 +248,13 @@ export class Warden {
     const pc = this.pace, ct = this.clipTime;
 
     // The fight has a boundary: flee the Hollow and it returns to its bed.
-    if (this.awake && this.alive && Math.hypot(p.x - ARENA.x, p.z - ARENA.z) > ARENA.r + 13 && !['return', 'topple', 'down', 'getup'].includes(this.state)) {
+    if (!this.remote && this.awake && this.alive && Math.hypot(p.x - ARENA.x, p.z - ARENA.z) > ARENA.r + 13 && !['return', 'topple', 'down', 'getup'].includes(this.state)) {
       this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('return'); events.push({ type: 'leash' });
     }
     switch (this.state) {
       case 'dormant':
         this.play('Sleep');
-        if (ctx.canWake && (Math.hypot(p.x - BED.x, p.z - BED.z) < 15 || Math.hypot(p.x - ARENA.x, p.z - ARENA.z) < ARENA.r - 4)) this.wake();
+        if (!this.remote && ctx.canWake && (Math.hypot(p.x - BED.x, p.z - BED.z) < 15 || Math.hypot(p.x - ARENA.x, p.z - ARENA.z) < ARENA.r - 4)) this.wake();
         break;
       case 'awaken': case 'roar': {
         this.play('Roar', { time: this.t });
@@ -265,9 +267,10 @@ export class Warden {
         break;
       }
       case 'hunt': {
-        if (this.pendingPhase) { this.pendingPhase = false; this.phase = 2; this.setState('roar'); events.push({ type: 'phase', phase: 2 }); break; }
+        if (this.pendingPhase && !this.remote) { this.pendingPhase = false; this.phase = 2; this.setState('roar'); events.push({ type: 'phase', phase: 2 }); break; }
         this.cooldown -= dt;
-        if (this.cooldown <= 0 && (!ctx.mayAttack || ctx.mayAttack(this))) {
+        // In a team fight a guest's Warden waits for the host to start each attack.
+        if (!this.remote && this.cooldown <= 0 && (!ctx.mayAttack || ctx.mayAttack(this))) {
           const name = this.choose(dist, rel);
           if (name) { this.begin(name, p, events); break; }
           this.cooldown = .8;
@@ -388,7 +391,7 @@ export class Warden {
     }
     if (ct >= a.dur) {
       const f = FOLLOW[this.attack], d = Math.hypot(p.x - this.x, p.z - this.z);
-      if (f && !this.followed && d <= f[3] && Math.random() < (this.phase > 1 ? f[2] : f[1])) { this.followed = true; this.begin(f[0], p, events); return; }
+      if (f && !this.remote && !this.followed && d <= f[3] && Math.random() < (this.phase > 1 ? f[2] : f[1])) { this.followed = true; this.begin(f[0], p, events); return; }
       this.followed = false;
       this.recoverTime = .5 * this.pace; this.cooldown = (1.2 + Math.random() * 1.2) * (this.enraged ? .65 : 1); this.attack = null; this.setState('recover');
     }

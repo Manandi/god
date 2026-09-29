@@ -49,7 +49,7 @@ How the story uses the ChatGPT NPCs:
 
 ### Next steps, in order
 
-1. **Test co-op with two real browsers.** Open `/god/verdant/?lobby=ABC234` in two tabs or devices. The sandbox this was built in blocks websockets, so co-op has never connected in a test. If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
+1. **Test co-op and team fights with two real browsers.** Open `/god/verdant/?lobby=ABC234` in two tabs or devices and walk both explorers into the Canopy Gate hollow. The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
 2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`; the Old Shell's in `KINDS.oldshell` in `src/creatures.js`. Headless tests only check logic.
 3. **Town features.** A shop and more Mossgate life. Build them in the ChatGPT town, with block NPCs from `src/npcs.js`, and tie any new dialogue to the story stages in `src/story.js`.
 4. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
@@ -62,7 +62,7 @@ How the story uses the ChatGPT NPCs:
 | `camera.js` | Third-person shoulder camera: right-drag orbit, lock-on framing, world collision, shake, boss intro shots |
 | `mechanics.js` | Real-life stats → damage, speed, dash, jump and double jump, Breath cost, vitality, class bonuses; the equipped weapon |
 | `chronicles.js` | The four Mossgate Chronicles and each NPC's dialogue topics |
-| `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress |
+| `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks, thornlings and the Old Shell (AI, poise, topple, shell armour, quake) |
@@ -92,6 +92,21 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: Vite/Three.js 3D game. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
+
+## Latest shared state — 2026-10-01 (team fights)
+
+- **Team fights (`src/coop.js`, the team-fights block in `src/main.js`).** Players in one lobby now fight the same Orrun, Old Shell and shellbacks together.
+  - **The host runs the fight.** The lobby member with the smallest id is the host; every game works this out the same way, so no one has to choose. The status reads `CODE · 2 HUNTERS · HOST` or `· GUEST`.
+  - The host's game runs every creature and boss. Ten times a second it sends each one's position, state, attack, timing and health (`world`); sleeping ones are sent once a second.
+  - Guests show those snapshots and send every hit they land to the host (`hit`, and `deflect` for parries). The host's game applies the damage, so everyone sees the same health bar.
+  - Each game still judges the blows that land on its own explorer: guard, parry, dodge and damage feel the same as solo.
+  - Enemies go after the nearest explorer. Bosses get +50% health per extra player (Orrun 1000 → 1500 for two).
+  - A defeat shows for everyone. When the host leaves, the next member should take over from the last snapshot (built that way, not yet tested).
+  - Friends' block figures lunge when they attack (`act`).
+- **Tested** with `?lobby=CODE&net=local`, which runs the same protocol between tabs of one browser (BroadcastChannel). The sandbox blocks websockets, so the Supabase path is still untested with real players.
+  - One tab became host and one guest. Orrun woke, went for the nearer player and chained pounce, bite and tail slam, and the guest saw the same states at the same spot.
+  - Three 30-damage head hits sent by the guest took the host's Orrun from 1500 to 1365, and the guest saw the same number. A defeat on the host showed on the guest.
+  - Solo play is unchanged: smoke, boss, story, chronicles, heavies and saves tests pass.
 
 ## Latest shared state — 2026-10-01 (later)
 
