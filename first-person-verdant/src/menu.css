@@ -78,3 +78,4 @@
 .reveal-grid .class-recommend{margin:0}.reveal-grid .class-recommend p{margin:8px 0 0;color:#d8efc0;font-size:13px}
 .frame-card{border-color:#d9c27a88}.frame-card strong{color:#f0d98f}
 @media(max-width:700px){.reveal-grid{grid-template-columns:1fr}}
+.auto-metric{padding:10px 12px;border:1px dashed #acd29866;display:flex;flex-direction:column;gap:4px}.auto-metric strong{font-size:22px;color:#e5f1c9}.auto-metric small{color:#91b297;font-size:10px}

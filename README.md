@@ -93,6 +93,29 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-09-30 (later)
+
+The owner reported the character falling through the floor and weapons going into the ground. They asked for bench press to count as raw strength again, discipline to stay auto-calculated, and a unique heavy attack per weapon.
+
+- **Falling through the floor (`groundY` in `src/world.js`):**
+  - Cause: the terrain is drawn as flat triangles on a 2.5 m grid, but everything stood on the exact height curve. The two disagreed by up to 0.4–0.6 m (worst on the slopes into the town, the homestead and the levelled sites), so feet sank below the visible ground or floated.
+  - Fix: `groundY` now reads the drawn triangles (`surfaceY` is the exact curve the grid samples). A probe over every area now measures 0.00 m difference.
+  - The shoulder camera also never goes below the ground (`ground` option in `src/camera.js`).
+- **Weapons in the ground (`src/weapons.js`):**
+  - Each weapon has a carry grip for standing and running (Groveblade raised forward, Stonebreaker upright) and a strike grip for attacking, charging and guarding, blended quickly.
+  - `holdWeapon` tilts a weapon up if it would still touch the ground.
+  - The hammer's overhead slam (hammer2) now stops the hands at knee height.
+  - Measured lowest point: Groveblade 0.06–0.9 m above ground in every state; Stonebreaker 1.0–1.4 m when carried, and touching the ground only at the moment of a slam.
+  - Bug fixed: the Stonebreaker's markers were renamed on export (`WeaponBase001`), so its hitbox had silently fallen back to the forearm line. `mountWeapon` now finds them by prefix.
+- **Unique heavies (`src/combat/moves.js`, `src/anim/clips.js`), R to use, hold R to charge:**
+  - **Rootbound:** Taproot Heel, then the Rootbreaker.
+  - **Groveblade:** Crescent Sweep (a wide wound-up cut), then the Verdant Spiral (a full spinning cut that hits all around; tested hitting enemies ahead, beside and behind).
+  - **Stonebreaker:** Earthsplitter (a hop into a slam whose shockwave hits everything near the impact), then the Faultline (a bigger, harder quake). The shockwave is a `slam` event from `player.js`, handled in `main.js`.
+  - The old overhead split stays as the Groveblade's leaping and falling heavies.
+- **Stats:**
+  - Bench press counts as raw weight again (anchors 10–130 kg), so the strongest are rewarded.
+  - Discipline stays auto-calculated from logged training, and is now shown as its own tile on the measure page.
+
 ## Latest shared state — 2026-09-30
 
 The owner asked for better weapons, a new Mycel who floats while he talks, a story intro, a new measurement and question flow, rewards for every body type, and a class recommendation shaped by personality.

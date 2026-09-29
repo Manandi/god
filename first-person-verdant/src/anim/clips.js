@@ -279,14 +279,54 @@ const HAMMER2_LOAD = merge(HAMMER_READY, {
   HipsPos: [0, -.06, .08], Spine: [16, 0, 0], Chest: [10, 0, 0], Neck: [-12, 0, 0],
   RightArm: [170, 10, 14], RightForeArm: [30, 0, 0], LeftArm: [168, -10, -14], LeftForeArm: [30, 0, 0]
 });
-const HAMMER2_HIT = merge(HAMMER_READY, {
-  HipsPos: [0, -.22, -.14], Spine: [-32, 0, 0], Chest: [-22, 0, 0], Neck: [18, 0, 0], Head: [10, 0, 0],
-  RightArm: [44, 6, 10], RightForeArm: [4, 0, 0], LeftArm: [44, -6, -10], LeftForeArm: [4, 0, 0],
+const HAMMER2_HIT = merge(HAMMER_READY, {   // the hands stop at knee height; the head meets the ground ahead
+  HipsPos: [0, -.18, -.12], Spine: [-24, 0, 0], Chest: [-16, 0, 0], Neck: [14, 0, 0], Head: [8, 0, 0],
+  RightArm: [62, 6, 10], RightForeArm: [4, 0, 0], LeftArm: [60, -6, -10], LeftForeArm: [4, 0, 0],
   LeftUpLeg: [50, 10, -4], LeftLeg: [-52, 0, 0], RightUpLeg: [-20, 16, 5], RightLeg: [-34, 0, 0]
 });
 export const HAMMER2 = { name: 'hammer2', keys: [
   { t: 0, pose: HAMMER_READY }, { t: .26, pose: HAMMER2_LOAD }, { t: .36, pose: HAMMER2_LOAD }, { t: .44, pose: HAMMER2_HIT },
   { t: .56, pose: HAMMER2_HIT }, { t: .8, pose: merge(HAMMER_READY, { HipsPos: [0, -.14, -.08] }) }, { t: 1.0, pose: HAMMER_READY }
+] };
+
+// --- Each weapon's own heavy -------------------------------------------------
+// Groveblade: CRESCENT SWEEP, a wound-up horizontal cut across a wide arc;
+// charged, it becomes the VERDANT SPIRAL, a full spinning cut that hits all around.
+const CRESCENT_LOAD = merge(BLADE_READY, {
+  HipsPos: [0, -.12, .05], Hips: [0, -70, 0], Spine: [0, -20, 0], Chest: [-2, -22, 0], Neck: [0, 40, 0], Head: [0, 26, 0],
+  RightArm: [22, -84, 78], RightForeArm: [32, 0, 0], LeftArm: [40, -20, -40], LeftForeArm: [80, 0, 0],
+  LeftUpLeg: [30, 10, -6], LeftLeg: [-40, 0, 0], RightUpLeg: [-10, -10, 4], RightLeg: [-16, 0, 0]
+});
+const CRESCENT_MID = merge(CRESCENT_LOAD, { HipsPos: [0, -.14, -.02], Hips: [0, 8, 0], Spine: [-6, 6, 0], Chest: [-6, 10, 0], Neck: [0, -6, 0], Head: [0, -4, 0], RightArm: [14, 16, 88], RightForeArm: [8, 0, 0] });
+const CRESCENT_HIT = merge(CRESCENT_MID, { HipsPos: [0, -.14, -.06], Hips: [0, 66, 0], Spine: [-8, 22, 0], Chest: [-8, 30, 0], Neck: [0, -40, 0], Head: [0, -24, 0], RightArm: [18, 82, 80], RightForeArm: [10, 0, 0] });
+export const BLADE_CRESCENT = { name: 'blade_crescent', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .2, pose: CRESCENT_LOAD }, { t: .3, pose: CRESCENT_LOAD }, { t: .38, pose: CRESCENT_MID }, { t: .46, pose: CRESCENT_HIT },
+  { t: .58, pose: merge(CRESCENT_HIT, { Hips: [0, 80, 0], RightArm: [26, 96, 64] }) }, { t: .85, pose: BLADE_READY }
+] };
+const SPIN = deg => merge(CRESCENT_MID, { HipsPos: [0, -.1, 0], Hips: [0, deg, 0], Spine: [-4, 0, 0], Chest: [-4, 0, 0], Neck: [0, 0, 0], Head: [0, 0, 0],
+  RightArm: [10, 0, 88], RightForeArm: [6, 0, 0], LeftArm: [10, 0, -80], LeftForeArm: [10, 0, 0], LeftUpLeg: [14, 0, -4], LeftLeg: [-20, 0, 0], RightUpLeg: [14, 0, 4], RightLeg: [-20, 0, 0] });
+export const BLADE_SPIRAL = { name: 'blade_spiral', keys: [
+  { t: 0, pose: BLADE_READY }, { t: .2, pose: CRESCENT_LOAD }, { t: .3, pose: CRESCENT_LOAD },
+  // A whole turn in steps under 180°, so the keyframes turn one way.
+  ...[-20, 60, 140, 220, 300, 360].map((deg, i) => ({ t: .36 + i * .07, pose: SPIN(deg) })),
+  { t: .86, pose: merge(SPIN(360), { HipsPos: [0, -.12, -.04] }) }, { t: 1.1, pose: BLADE_READY }
+] };
+// Stonebreaker: EARTHSPLITTER, a hop into a two-handed slam whose shockwave
+// hits everything around; charged, the FAULTLINE, a bigger quake.
+const SPLIT_LOAD = merge(HAMMER_READY, {
+  HipsPos: [0, .02, .05], Spine: [14, 0, 0], Chest: [10, 0, 0], Neck: [-10, 0, 0],
+  RightArm: [170, 10, 10], RightForeArm: [40, 0, 0], LeftArm: [170, -10, -10], LeftForeArm: [40, 0, 0],
+  LeftUpLeg: [20, 0, -4], LeftLeg: [-20, 0, 0], RightUpLeg: [-8, 0, 4]
+});
+const SPLIT_AIR = merge(SPLIT_LOAD, { HipsPos: [0, .2, -.04], LeftUpLeg: [40, 0, -4], LeftLeg: [-60, 0, 0], RightUpLeg: [30, 0, 4], RightLeg: [-50, 0, 0], RightArm: [150, 10, 10], LeftArm: [150, -10, -10] });
+const SPLIT_HIT = merge(HAMMER_READY, {
+  HipsPos: [0, -.2, -.14], Spine: [-26, 0, 0], Chest: [-18, 0, 0], Neck: [14, 0, 0], Head: [8, 0, 0],
+  RightArm: [66, 6, 10], RightForeArm: [4, 0, 0], LeftArm: [64, -6, -10], LeftForeArm: [6, 0, 0],
+  LeftUpLeg: [50, 8, -4], LeftLeg: [-60, 0, 0], RightUpLeg: [-20, 10, 4], RightLeg: [-30, 0, 0]
+});
+export const HAMMER_EARTHSPLITTER = { name: 'hammer_earthsplitter', keys: [
+  { t: 0, pose: HAMMER_READY }, { t: .24, pose: SPLIT_LOAD }, { t: .3, pose: SPLIT_LOAD }, { t: .44, pose: SPLIT_AIR }, { t: .54, pose: SPLIT_HIT },
+  { t: .7, pose: SPLIT_HIT }, { t: .92, pose: merge(HAMMER_READY, { HipsPos: [0, -.14, -.08] }) }, { t: 1.15, pose: HAMMER_READY }
 ] };
 
 export function buildClips() {
@@ -304,6 +344,7 @@ export function buildClips() {
     cycle('cheer', 1, [CHEER, merge(CHEER, { HipsPos: [0, .04, 0] })]),
     // one-shots
     oneShot(PALM), oneShot(SWING), oneShot(HEEL), oneShot(ROOTBREAKER), ...EVADES.map(oneShot), oneShot(HURT),
-    oneShot(BLADE1), oneShot(BLADE2), oneShot(BLADE3), oneShot(BLADE_HEAVY), oneShot(HAMMER1), oneShot(HAMMER2)
+    oneShot(BLADE1), oneShot(BLADE2), oneShot(BLADE3), oneShot(BLADE_HEAVY), oneShot(HAMMER1), oneShot(HAMMER2),
+    oneShot(BLADE_CRESCENT), oneShot(BLADE_SPIRAL), oneShot(HAMMER_EARTHSPLITTER)
   ];
 }

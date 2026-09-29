@@ -3,7 +3,7 @@ import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js'
 import {createHumanoid} from './humanoid.js';
 import {Animator,solveLeg} from './anim/animator.js';
 import {buildClips} from './anim/clips.js';
-import {loadWeaponModels,mountWeapon,WEAPON_MODELS,GRIP,FP_GRIP} from './weapons.js';
+import {loadWeaponModels,mountWeapon,holdWeapon,WEAPON_MODELS,GRIP,FP_GRIP} from './weapons.js';
 
 export const SKIN_TONES=['#74503b','#a46b49','#c89365','#e5b584','#f0d0a5','#5b3b30'];
 export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e54',ivory:'#c3bb9c',violet:'#795d86',navy:'#344c67'};
@@ -89,7 +89,12 @@ export function createAvatar(scene){
     if(mounted[current]){bones.WeaponBase=mounted[current].base;bones.WeaponTip=mounted[current].tip;}else{delete bones.WeaponBase;delete bones.WeaponTip;}
   };
   loadWeaponModels().then(models=>{for(const name of WEAPON_MODELS)if(models[name])mounted[name]=mountWeapon(body.bones.RightHand,models[name],GRIP[name]);showWeapon();}).catch(e=>console.warn('Weapon models failed to load',e));
-  return {root,bones,animator,weaponMounts:mounted,setWeapon(w){current=w;showWeapon();},setAppearance(a){
+  let striking=false;
+  return {root,bones,animator,weaponMounts:mounted,setWeapon(w){current=w;showWeapon();},
+  /** Attacking, charging or guarding: the striking grip; otherwise the carry grip. */
+  setWeaponStance(strike){striking=strike;},
+  /** After posing: hold the weapon, and keep it out of the ground. */
+  holdWeapon(dt,groundAt){if(mounted[current])holdWeapon(mounted[current],striking,dt,groundAt);},setAppearance(a){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');

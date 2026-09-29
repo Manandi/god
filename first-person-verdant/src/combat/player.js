@@ -193,6 +193,12 @@ export class PlayerCombat {
         step = Math.min(step, Math.max(0, gap));
       }
       out.dx = -Math.sin(this.facing) * step; out.dz = -Math.cos(this.facing) * step;
+      // A ground slam (the Earthsplitter): at impact, a shockwave ahead that hits everything in reach.
+      if (m.slam && t0 < m.slam.at && this.t >= m.slam.at) {
+        const k = 1 + this.chargeLevel * .2;
+        this.events.push({ type: 'slam', move: this.move, x: ctx.x - Math.sin(this.facing) * m.slam.ahead, z: ctx.z - Math.cos(this.facing) * m.slam.ahead,
+          radius: m.slam.radius * k, damage: m.slam.damage * k, poise: m.slam.poise * k, pierce: m.pierce || 0, chargeLevel: this.chargeLevel });
+      }
 
       // Hit detection runs only while the strike is active, against the posed limb.
       // The limb is also sampled during startup, so the first active frame sweeps

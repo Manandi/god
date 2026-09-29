@@ -5,7 +5,7 @@ export const BIOMES=[
   {id:'wraith',name:'WRAITHMOOR',short:'WRAITH',longitude:.865,latitude:.20,level:15,color:'#d5a9fa',description:'Violet ruins where the dead still wander.',creatures:'Lantern Wraiths · Hollow Knights',guardian:'The Veiled Queen'}
 ];
 // What Mycel measures. Body weight and height set your frame (FRAMES), not a stat.
-// Bench is scored against body weight, so lighter lifters are not penalised.
+// Bench is raw weight lifted: the strongest lift, the strongest score.
 export const METRICS=[
   {key:'weightKg',label:'Body weight',unit:'kg',min:30,max:250,step:.5,value:75,body:true,imperial:{unit:'lb',factor:2.20462,step:1}},
   {key:'heightCm',label:'Height',unit:'cm',min:120,max:230,step:1,value:175,body:true,imperial:{unit:'in',factor:1/2.54,step:.5}},
@@ -14,7 +14,7 @@ export const METRICS=[
   {key:'verticalJumpCm',label:'Vertical jump',unit:'cm',min:0,max:150,step:1,value:40,anchors:[10,25,40,55,70],stat:'speed',imperial:{unit:'in',factor:1/2.54,step:.5}},
   {key:'dashSeconds',label:'40-yard dash',unit:'seconds',min:3.5,max:20,step:.1,value:5.5,anchors:[7.5,6.3,5.5,4.9,4.4],stat:'speed'},
   {key:'mileSeconds',label:'One-mile time',unit:'min:sec',min:200,max:2400,step:1,value:600,anchors:[900,720,600,480,360],stat:'stamina',clock:true},
-  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:60,anchors:[0,.4,.75,1.1,1.5],relative:true,stat:'strength',imperial:{unit:'lb',factor:2.20462,step:5}}
+  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:60,anchors:[10,35,60,90,130],stat:'strength',imperial:{unit:'lb',factor:2.20462,step:5}}
 ];
 /** Frames: every body gets something. Heavier frames are hard to move; light or tall
  *  ones are quick; balanced ones endure. Chosen from weight and height, never shown as numbers. */
@@ -83,7 +83,7 @@ export function loadProfile(){
   }catch{/* New profile. */}
 }
 const score=m=>{
-  const v=m.relative?profile.inputs[m.key]/Math.max(30,profile.inputs.weightKg):profile.inputs[m.key],a=m.anchors,asc=a[4]>a[0],points=[1,5,10,15,20];
+  const v=profile.inputs[m.key],a=m.anchors,asc=a[4]>a[0],points=[1,5,10,15,20];
   if(asc?v<=a[0]:v>=a[0])return 1;
   if(asc?v>=a[4]:v<=a[4])return 20;
   for(let i=0;i<4;i++)if(asc?v>=a[i]&&v<=a[i+1]:v<=a[i]&&v>=a[i+1])return Math.round(points[i]+(v-a[i])/(a[i+1]-a[i])*(points[i+1]-points[i]));

@@ -81,15 +81,26 @@ MOVES.blade3 = { label: 'Heartwood Thrust', clip: 'blade3', fp: 'fp_palm', durat
   active: [.22, .32], chainFrom: .34, heavyFrom: .3, evadeFrom: .3, moveFrom: .48, turnUntil: .16,
   lunge: { from: .12, to: .26, distance: .95 }, reach: 2.1, hitbox: { ...BLADE, radius: .16 },
   damage: 17, poise: 5, stamina: 14, hitstop: .09, push: .8, stagger: .5, next: 'blade1' };
-MOVES.blade_heavy = { label: 'Canopy Split', clip: 'blade_heavy', fp: 'fp_heavy', duration: .9, kind: 'heavy',
+// The overhead split: the Groveblade's leaping and falling heavies.
+const BLADE_SPLIT = { label: 'Canopy Split', clip: 'blade_heavy', fp: 'fp_heavy', duration: .9, kind: 'heavy',
   active: [.34, .44], chainFrom: 99, heavyFrom: 99, evadeFrom: .52, moveFrom: .68, turnUntil: .26,
   lunge: { from: .28, to: .4, distance: .7 }, reach: 2.1, hitbox: { ...BLADE, radius: .18 },
   damage: 24, poise: 7, stamina: 18, hitstop: .12, push: 1.4, stagger: .8, next: null, armor: [.12, .44],
-  charge: { at: .2, levels: [.35, .75], max: 1.1, damage: [1, 1.3, 1.65], poise: [1, 1.6, 2.4], stamina: 6, into: 'blade_rootbreaker' } };
-MOVES.blade_rootbreaker = { ...MOVES.rootbreaker, label: 'Rootbreaker · Blade', hitbox: { ...BLADE, radius: .2 }, reach: 2.2, damage: 36 };
+  charge: null };
+// The Groveblade's own heavy: a wide Crescent Sweep; held, the Verdant Spiral, a full turn that hits all around.
+MOVES.blade_heavy = { label: 'Crescent Sweep', clip: 'blade_crescent', fp: 'fp_swing', duration: .85, kind: 'heavy',
+  active: [.32, .5], chainFrom: 99, heavyFrom: 99, evadeFrom: .56, moveFrom: .7, turnUntil: .24,
+  lunge: { from: .3, to: .44, distance: .8 }, reach: 2.2, hitbox: { ...BLADE, radius: .2 },
+  damage: 24, poise: 7, stamina: 18, hitstop: .11, push: 1.5, stagger: .8, next: null, armor: [.12, .48],
+  charge: { at: .2, levels: [.35, .75], max: 1.1, damage: [1, 1.3, 1.65], poise: [1, 1.6, 2.4], stamina: 6, into: 'blade_spiral' } };
+MOVES.blade_spiral = { label: 'Verdant Spiral', clip: 'blade_spiral', fp: 'fp_swing', duration: 1.1, kind: 'heavy',
+  active: [.34, .8], chainFrom: 99, heavyFrom: 99, evadeFrom: .86, moveFrom: .95, turnUntil: .2,
+  lunge: { from: .32, to: .74, distance: 1.4 }, reach: 2.3, hitbox: { ...BLADE, radius: .22 },
+  damage: 30, poise: 10, stamina: 26, hitstop: .09, push: 2, stagger: 1, next: null, armor: [.1, .8],
+  charge: { at: .2, levels: [.35, .8], max: 1.3, damage: [1, 1.35, 1.75], poise: [1, 1.7, 2.6], stamina: 7 } };
 MOVES.blade_dash = { ...MOVES.blade3, label: 'Running Thrust', lunge: { from: 0, to: .26, distance: 2.2 }, damage: 18, poise: 5, stamina: 14, next: 'blade1' };
-MOVES.blade_dash_heavy = { ...MOVES.blade_heavy, label: 'Leaping Split', lunge: { from: .1, to: .38, distance: 2.3 }, damage: 26, charge: null };
-MOVES.blade_air = { ...MOVES.blade_heavy, label: 'Falling Split', lunge: { from: 0, to: .36, distance: .6 }, damage: 22, poise: 10, charge: null, armor: [0, .44], airborne: true };
+MOVES.blade_dash_heavy = { ...BLADE_SPLIT, label: 'Leaping Split', lunge: { from: .1, to: .38, distance: 2.3 }, damage: 26, charge: null };
+MOVES.blade_air = { ...BLADE_SPLIT, label: 'Falling Split', lunge: { from: 0, to: .36, distance: .6 }, damage: 22, poise: 10, charge: null, armor: [0, .44], airborne: true };
 MOVES.blade_counter = { ...MOVES.blade3, label: 'Guard Counter', active: [.18, .28], damage: 24, poise: 10, charge: null, armor: [0, .28], next: null };
 MOVES.blade_root = { ...MOVES.blade3, label: 'Root Strike', kind: 'critical', damage: 34, poise: 0, stamina: 0, hitstop: .2, armor: [0, .4], next: null, lunge: { from: .1, to: .26, distance: .9 } };
 
@@ -103,8 +114,16 @@ MOVES.hammer2 = { label: 'Stonefall', clip: 'hammer2', fp: 'fp_heavy', duration:
   active: [.4, .52], chainFrom: 99, heavyFrom: 99, evadeFrom: .6, moveFrom: .8, turnUntil: .3,
   lunge: { from: .3, to: .44, distance: .7 }, reach: 2.0, hitbox: { ...HAMMER, radius: .34 },
   damage: 28, poise: 12, stamina: 22, hitstop: .15, push: 2, stagger: 1, next: null, armor: [.1, .52], pierce: 1, ring: true };
-MOVES.hammer_heavy = { ...MOVES.hammer2, charge: { at: .3, levels: [.35, .8], max: 1.3, damage: [1, 1.35, 1.75], poise: [1, 1.7, 2.6], stamina: 7, into: 'hammer_rootbreaker' } };
-MOVES.hammer_rootbreaker = { ...MOVES.rootbreaker, label: 'Rootbreaker · Stone', hitbox: { ...HAMMER, radius: .36 }, reach: 2.1, damage: 40, poise: 16, pierce: 1 };
+// The Stonebreaker's own heavy: the Earthsplitter, a hopping slam whose shockwave (slam) hits
+// everything around the impact; held, the Faultline, a bigger, harder quake.
+MOVES.hammer_heavy = { label: 'Earthsplitter', clip: 'hammer_earthsplitter', fp: 'fp_heavy', duration: 1.15, kind: 'heavy',
+  active: [.48, .6], chainFrom: 99, heavyFrom: 99, evadeFrom: .74, moveFrom: .9, turnUntil: .3,
+  lunge: { from: .32, to: .52, distance: 1.0 }, reach: 2.0, hitbox: { ...HAMMER, radius: .36 },
+  damage: 30, poise: 13, stamina: 24, hitstop: .15, push: 2, stagger: 1, next: null, armor: [.1, .62], pierce: 1, ring: true,
+  slam: { at: .54, ahead: 1.3, radius: 3.2, damage: 14, poise: 8 },
+  charge: { at: .3, levels: [.35, .8], max: 1.3, damage: [1, 1.35, 1.75], poise: [1, 1.7, 2.6], stamina: 7, into: 'hammer_faultline' } };
+MOVES.hammer_faultline = { ...MOVES.hammer_heavy, label: 'Faultline', damage: 40, poise: 16, stamina: 30,
+  slam: { at: .54, ahead: 1.3, radius: 5, damage: 22, poise: 16 }, charge: { ...MOVES.hammer_heavy.charge, into: null } };
 MOVES.hammer_dash = { ...MOVES.hammer1, label: 'Charging Sweep', lunge: { from: .05, to: .34, distance: 2.0 }, damage: 22 };
 MOVES.hammer_dash_heavy = { ...MOVES.hammer2, label: 'Leaping Stonefall', lunge: { from: .1, to: .42, distance: 2.2 } };
 MOVES.hammer_air = { ...MOVES.hammer2, label: 'Meteor Fall', lunge: { from: 0, to: .4, distance: .5 }, damage: 26, poise: 14, armor: [0, .52], airborne: true };

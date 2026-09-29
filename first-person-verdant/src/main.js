@@ -38,7 +38,7 @@ for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.sc
 const collisionGrid=createCollisionGrid(world.colliders);
 const globe=createGlobe(),narrator=createNarrator();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
-const shoulderCam=new ShoulderCamera(camera,{obstacles:world.cameraObstacles,grid:collisionGrid});
+const shoulderCam=new ShoulderCamera(camera,{obstacles:world.cameraObstacles,grid:collisionGrid,ground:groundY});
 // The procedural body shows until the authored explorer has loaded, and stays
 // as the fallback if it cannot load.
 let avatar=createAvatar(scene);const raycaster=new THREE.Raycaster();
@@ -569,8 +569,19 @@ function handleCombatEvents(){
     else if(ev.type==='spend')spend(ev.amount);
     else if(ev.type==='evade'){sound.evade();cue('DASH',.3);}
     else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
-    else if(ev.type==='rootbreaker'){cue('ROOTBREAKER · HOLD TO CHARGE',.6);sound.charge(0);}
-    else if(ev.type==='charge'){sound.charge(ev.level);cue(`ROOTBREAKER · CHARGE ${'I'.repeat(ev.level+1)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
+    else if(ev.type==='rootbreaker'){cue(`${MOVES[ev.move].label.toUpperCase()} · HOLD TO CHARGE`,.6);sound.charge(0);}
+    else if(ev.type==='slam'){
+      // The Earthsplitter's shockwave: everything within reach of the impact takes a share.
+      const at=new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z);
+      effects.shockwave(at,.5,ev.radius,.35);shoulderCam.punch(.35+ev.chargeLevel*.12);sound.attack('slam');
+      for(const c of creatures){
+        if(!c.alive||Math.hypot(c.x-ev.x,c.z-ev.z)>ev.radius+(c.radius||1))continue;
+        const res=c.hit({damage:ev.damage*strikePower(),poise:ev.poise*strikePower(),fromX:ev.x,fromZ:ev.z,push:1.2,stagger:.8,part:c===warden?'leg':'shell',pierce:ev.pierce});
+        if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1,c.z),res.damage,res.effect);if(res.toppled){sound.topple();toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}}
+      }
+      cue(MOVES[ev.move].label.toUpperCase(),.7);
+    }
+    else if(ev.type==='charge'){sound.charge(ev.level);cue(`${(MOVES[combat.move]?.label||'Rootbreaker').toUpperCase()} · CHARGE ${'I'.repeat(ev.level+1)}`,.4);effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z),player.z));fovKick=Math.max(fovKick,1.5*ev.level);}
     else if(ev.type==='release'&&ev.level)debug.note(`${MOVES[combat.move]?.label||'Heavy'} released at charge ${ev.level}`,elapsed);
     else if(ev.type==='guardUp')sound.guardUp();
     else if(ev.type==='flask'){sound.flask();cue('SAP FLASK',.6);}
@@ -845,7 +856,9 @@ function update(rawDt){
     a.setLocomotion({idle:Math.max(0,1-s*2.2),walk:s<.6?walk:0,run:Math.max(0,s-.3)*1.6},dt/(s<.6?1.1:.72)*Math.max(.3,s*1.25));
   }
   avatar.setMood(combat.state==='hurt'?'hurt':combat.state==='attack'&&(combat.phase()==='active'||combat.charging)?'strain':combat.busy||guarded?'focus':player.emote==='cheer'?'cheer':'calm');
+  avatar.setWeaponStance?.(combat.state==='attack'||combat.charging||combat.state==='guard');
   avatar.update(frozen?0:dt,player.grounded?groundY:null);
+  avatar.holdWeapon?.(frozen?0:dt,groundY);
   avatar.flicker(elapsed,combat.clock<combat.invulnerableUntil?1:0);
   avatar.root.visible=avatar.root.visible&&player.thirdPerson;
 
@@ -958,5 +971,5 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},oldShell,chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }

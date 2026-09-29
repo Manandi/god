@@ -23,7 +23,7 @@ Then you make your character and select Verdant Reach from the spinning world ma
 | Hold right click + mouse | Orbit the camera (third person); look around (first person) |
 | Scroll | Zoom |
 | Left click / F | Attack (string) |
-| R | Heavy; hold to charge a Rootbreaker |
+| R | Heavy (each weapon has its own); hold to charge it |
 | Shift | Dash (tap); hold to sprint |
 | C | Guard; raise it just before a hit to parry |
 | X | Sap Flask |
@@ -45,7 +45,11 @@ The player is the Roblox-style block explorer from the ChatGPT Sites design: squ
 ## Combat
 
 - **Weapons:** bare-handed Rootbound style, the Groveblade (needs STR 8 and SPD 8) or the Stonebreaker (STR 12 and DEF 12; pierces armour). Each has its own string, heavy, dash attack, air attack and counter.
-- **Light string:** Sapling Palm → Bough Swing → … (left click). **Heavy:** Taproot Heel (R), also a finisher from any light strike; hold to charge through two levels and release a **Rootbreaker** with a shockwave. Heavies have hyper-armour: light hits hurt but don't interrupt.
+- **Heavies (R), one per weapon; hold R to charge into the stronger version:**
+  - **Rootbound fists:** Taproot Heel, a kick; charged, the **Rootbreaker**, a two-handed blow with a shockwave.
+  - **Groveblade:** **Crescent Sweep**, a wide wound-up cut; charged, the **Verdant Spiral**, a full spinning cut that hits everything around you.
+  - **Stonebreaker:** **Earthsplitter**, a hop into a ground slam whose shockwave hits everything near the impact and cracks armour; charged, the **Faultline**, a bigger, harder quake.
+- **Light string:** Sapling Palm → Bough Swing → … (left click). Any heavy is also a finisher from a light strike. Heavies have hyper-armour: light hits hurt but don't interrupt.
 - **Breath (stamina):** every strike and dash spends it; it recovers after a short pause. At zero you are **winded**: no attacks or dashes until Breath is back to 30.
 - **Dash:** invulnerable frames; your real-world Speed lengthens them. Dash so an attack lands in the opening frames for a **perfect evade**: time slows, Breath returns, and your next strikes count as counters.
 - **Shellbacks and thornlings** have two moves, telegraphed before they commit: a lunging bite, and a shell spin that punishes standing beside or behind them. (The rearing slam and its shockwave ring belong to the Old Shell.) Light hits never cancel a committed attack; heavies and enough damage stagger them. Below 40% health they enrage.
@@ -65,12 +69,13 @@ Weight and height choose a frame; they never lower a stat.
 
 `src/mechanics.js` turns your measurements into play, and the stats screen shows the same table:
 
-- **Strength** (push-ups, pull-ups, bench against body weight): damage.
+- **Strength** (push-ups, pull-ups, bench, as raw weight): damage.
 - **Speed** (40-yard dash, vertical): run speed, dash distance and dash invulnerability.
 - **Vertical jump:** jump height, and a double jump from 55 cm.
 - **Stamina** (mile): Breath cost and recovery.
 - **Defense** (bench, push-ups, mile): vitality and guard cost.
-- **Intelligence** (the mind check): how far away memories answer, and Rootbreaker power for mages.
+- **Discipline** (calculated automatically from the training you log): shown on the measure page and stats screen.
+- **Intelligence** (the mind check): how far away memories answer, and charged-heavy power for mages.
 
 Mycel recommends a class from your stats and your two answers about how you play; you can change it any time in CUSTOMIZE. Classes add to what you already have:
 

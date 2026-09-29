@@ -37,7 +37,8 @@ export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
 // three memory sites (their Blender set pieces sit on flat ground).
 const LEVELLED=[[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8],
   [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7]];
-export function groundY(x,z) {
+// The exact ground shape; the terrain mesh samples it on a grid.
+function surfaceY(x,z) {
   // The town square, the homestead and the arena are level gameplay spaces;
   // the land eases into each of them.
   let height=terrainY(x,z);
@@ -46,6 +47,25 @@ export function groundY(x,z) {
     if(blend>0)height=THREE.MathUtils.lerp(height,terrainY(cx,cz),blend);
   }
   return height;
+}
+// Everything that stands on the ground (the explorer, creatures, props) reads
+// the same flat triangles the terrain mesh draws, so feet never sink into the
+// visible ground or float above it between grid points.
+const TERRAIN={size:420,steps:168};
+let heights=null;
+function gridHeights(){
+  if(heights)return heights;
+  const {size,steps}=TERRAIN;heights=new Float32Array((steps+1)*(steps+1));
+  for(let z=0;z<=steps;z++)for(let x=0;x<=steps;x++)heights[z*(steps+1)+x]=surfaceY((x/steps-.5)*size,(z/steps-.5)*size);
+  return heights;
+}
+export function groundY(x,z) {
+  const {size,steps}=TERRAIN,gx=(x/size+.5)*steps,gz=(z/size+.5)*steps;
+  if(gx<0||gz<0||gx>=steps||gz>=steps)return surfaceY(x,z);
+  const h=gridHeights(),ix=Math.floor(gx),iz=Math.floor(gz),fx=gx-ix,fz=gz-iz,row=steps+1;
+  const h00=h[iz*row+ix],h10=h[iz*row+ix+1],h01=h[(iz+1)*row+ix],h11=h[(iz+1)*row+ix+1];
+  // The mesh splits each cell along the (x+1, z) to (x, z+1) diagonal.
+  return fx+fz<=1?h00+(h10-h00)*fx+(h01-h00)*fz:h11+(h01-h11)*(1-fx)+(h10-h11)*(1-fz);
 }
 function rng(seed=87122){let s=seed>>>0;return()=>{s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
 const color=(value)=>new THREE.Color(value);
@@ -194,10 +214,10 @@ export function buildWorld(scene){
   scene.add(new THREE.HemisphereLight(0xc6e9e4,0x33462b,1.8));
   const sun=new THREE.DirectionalLight(0xf6dda0,2.45);sun.position.set(-45,95,-50);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-48;sun.shadow.camera.right=48;sun.shadow.camera.top=48;sun.shadow.camera.bottom=-48;sun.shadow.camera.near=.5;sun.shadow.camera.far=230;sun.shadow.normalBias=.035;sun.shadow.bias=-.00012;scene.add(sun,sun.target);
   const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);gl_FragColor=vec4(mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h)),1.);}' }));scene.add(sky);
-  const s=420,steps=168,positions=[],colors=[],indices=[],uvs=[];
+  const s=TERRAIN.size,steps=TERRAIN.steps,positions=[],colors=[],indices=[],uvs=[];
   const cLow=color('#365333'),cMid=color('#567b46'),cHigh=color('#87966a');
   for(let z=0;z<=steps;z++)for(let x=0;x<=steps;x++){
-    const px=(x/steps-.5)*s,pz=(z/steps-.5)*s,h=groundY(px,pz);
+    const px=(x/steps-.5)*s,pz=(z/steps-.5)*s,h=gridHeights()[z*(steps+1)+x];
     positions.push(px,h,pz);
     uvs.push(px*.115,pz*.115);
     const fleck=noise(px*.22,pz*.22),tone=clamp((h+5)/17,0,1);

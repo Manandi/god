@@ -13,10 +13,12 @@ export const WEAPON_MODELS = ['groveblade', 'stonebreaker'];
 // centred at y -0.05 and the forearm continues along -Y). Rotations are
 // [tilt, roll, 0] in XZY order: roll turns the blade's flat about its own
 // length, then tilt swings it off the forearm line, the way a wrist cocks.
-// The Groveblade is held forward across the body; the Stonebreaker rests up at the shoulder.
+// `rotation` is the striking grip (attacks, charging, guarding); `carry` is how it
+// is held while standing and running, clear of the ground: the Groveblade raised
+// forward in a ready stance, the Stonebreaker held upright.
 export const GRIP = {
-  groveblade: { position: [0, -.05, -.01], rotation: [-.5, Math.PI / 2, 0] },
-  stonebreaker: { position: [0, -.05, -.01], rotation: [.5, 0, 0], shift: -.18 }
+  groveblade: { position: [0, -.05, -.01], rotation: [-.5, Math.PI / 2, 0], carry: [2, Math.PI / 2, 0] },
+  stonebreaker: { position: [0, -.05, -.01], rotation: [.5, 0, 0], carry: [2.4, 0, 0], shift: -.18 }
 };
 // First-person arms reach along -Z (the fist is at z -0.275): the same grips turned a quarter.
 export const FP_GRIP = {
@@ -45,5 +47,28 @@ export function mountWeapon(parent, model, grip) {
   m.position.y = grip.shift || 0;           // slide the haft so the fist holds it low
   group.add(m); parent.add(group);
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
-  return { group, base: m.getObjectByName('WeaponBase'), tip: m.getObjectByName('WeaponTip') };
+  // glTF names must be unique, so the second model's markers come back as WeaponBase001 etc.
+  const find = prefix => { let hit = null; m.traverse(o => { if (!hit && o.name.startsWith(prefix)) hit = o; }); return hit; };
+  const q = r => new THREE.Quaternion().setFromEuler(new THREE.Euler(...r, 'XZY'));
+  return { group, base: find('WeaponBase'), tip: find('WeaponTip'), strike: q(grip.rotation), carry: q(grip.carry || grip.rotation), blend: 0 };
+}
+
+const tip = new THREE.Vector3(), lift = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0);
+/**
+ * Hold a mounted weapon for this frame: blend between carry and strike grips
+ * (quickly into a strike, gently back), then, if any part would still dip into
+ * the ground, tilt it up just enough.
+ */
+export function holdWeapon(m, striking, dt, groundY) {
+  m.blend += ((striking ? 1 : 0) - m.blend) * Math.min(1, dt * (striking ? 22 : 7));
+  m.group.quaternion.slerpQuaternions(m.carry, m.strike, m.blend);
+  if (!groundY || !m.tip) return;
+  const clearance = () => { m.group.updateWorldMatrix(true, true); let low = 9;
+    for (const o of [m.tip, m.base]) { o.getWorldPosition(tip); low = Math.min(low, tip.y - groundY(tip.x, tip.z)); } return low; };
+  let low = clearance();
+  if (low >= .06) return;
+  // Try both ways about the grip's tilt axis; keep turning whichever way lifts it.
+  lift.setFromAxisAngle(X, .12); m.group.quaternion.multiply(lift); const up = clearance();
+  if (up < low) { lift.setFromAxisAngle(X, -.24); m.group.quaternion.multiply(lift); lift.setFromAxisAngle(X, -.12); } else lift.setFromAxisAngle(X, .12);
+  for (let i = 0; i < 8 && clearance() < .06; i++) m.group.quaternion.multiply(lift);
 }

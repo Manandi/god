@@ -17,8 +17,8 @@ const COLLISION_PAD = .32, MIN_DISTANCE = 1.1, BLEND_TIME = .6;
 const approachAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * Math.min(1, t);
 
 export class ShoulderCamera {
-  constructor(camera, { obstacles, grid }) {
-    this.camera = camera; this.obstacles = obstacles; this.grid = grid;
+  constructor(camera, { obstacles, grid, ground }) {
+    this.camera = camera; this.obstacles = obstacles; this.grid = grid; this.ground = ground;
     this.distance = 5; this.armLength = 5; this.shake = 0; this.shakeStrength = 0; this.cinematic = null; this.blend = 0;
     this.raycaster = new THREE.Raycaster();
     this.pivot = new THREE.Vector3(); this.desired = new THREE.Vector3(); this.look = new THREE.Vector3();
@@ -71,6 +71,8 @@ export class ShoulderCamera {
       this.blend = Math.max(0, this.blend - dt); const k = 1 - this.blend / BLEND_TIME, e = k * k * (3 - 2 * k);
       this.desired.lerpVectors(this.blendFrom, this.desired, e); this.look.lerpVectors(this.blendLook, this.look, e);
     }
+    // Never below the ground, even pressed against a steep slope.
+    if (this.ground) this.desired.y = Math.max(this.desired.y, this.ground(this.desired.x, this.desired.z) + .35);
     this.camera.position.copy(this.desired);
     this.camera.lookAt(this.look);
   }
