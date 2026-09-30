@@ -116,3 +116,4 @@
 .test-rows .up{border-color:#b9ce8a}.test-rows .up span{color:#bce09c}.test-rows .down span{color:#e7a88f}
 #baselineForm.locked input{opacity:.6}
 @media(max-width:700px){.ability-grid{grid-template-columns:repeat(2,1fr)}.test-rows{grid-template-columns:repeat(2,1fr)}.wt-head,.wt-row{grid-template-columns:1fr 1fr}.goal-types{grid-template-columns:1fr}}
+.metric .rank{font-style:normal;font-size:10px;letter-spacing:.1em;color:#bce09c}

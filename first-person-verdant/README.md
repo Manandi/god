@@ -88,3 +88,25 @@ Mycel recommends a class from your stats and your two answers about how you play
 The third-person camera is adapted from the CameraRig in [Rotten Souls](https://github.com/igorjohn/rotten-souls) (MIT).
 
 This is a prototype biome, not an open-world production release. Trees and substantial rocks block movement; smaller obstacles can be jumped over. The shellbacks and thornlings are 3D animated creatures; defeating them does not award XP. Weekly Quest is a week-by-week training plan you check off (home workouts with an easier version of every exercise, step days, learning); logged activity grants XP, and your level raises your damage in step with the enemies. Measurements are a monthly test: stats that rise earn a Growth bonus, and stats of 12 and 16 unlock abilities. A body goal (lose, gain or maintain) rewards healthy-paced weekly weigh-ins with a bonus to your class's stat. The other three world-map realms are level gated previews, not playable yet. The leaderboard is not connected to a shared service. The 3D profile has its own local save and does not read or modify the 2D game's save.
+
+## Stat norms
+
+Each measurement is scored against all adults (both sexes, roughly 18–65), not against athletes. `METRICS[].norms` in `src/profile.js` maps a result to the share of adults who do no better, and `SCORE_SCALE` maps that percentile to a score:
+
+| Score | 1 | 2 | 4 | 6 | 8 | 10 | 12 | 14 | 16 | 18 | 20 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Percentile of adults | 0.5 | 1 | 5 | 15 | 30 | 50 | 70 | 85 | 95 | 99 | 99.9 |
+
+So 10 is the middle of everyone, 18 is the top 1%, and 20 is the top 0.1%.
+
+| Test | Median adult (10) | Top 5% (16) | Top 1% (18) | Top 0.1% (20) | Basis |
+|---|---|---|---|---|---|
+| Push-ups | 9 | 40–45 | 60 | 100 | About 1 in 5 adults cannot do one; 36% do fewer than 5 and 54% fewer than 10 ([2,000-adult US survey](https://www.prnewswire.com/news-releases/a-new-survey-of-2-000-americans-aged-18-and-over-by-gymlessorg-found-that-the-majority-cannot-perform-more-than-10-push-ups-301367697.html)). CSEP/ACSM rate 36–39 as excellent for men aged 20–29 ([norms](https://www.topendsports.com/testing/tests/home-pushup.htm)). |
+| Pull-ups | 0 | 5 | 15 | 25 | About 17% of men and 5% of women can do one strict pull-up ([summary](https://biologyinsights.com/what-percentage-of-the-population-can-do-a-pull-up/)); no representative study exists. |
+| Bench press | 35 kg | 75 kg | 102 kg | 140 kg | Most adults never train it. Fewer than 1% of the US population can bench 102 kg / 225 lb ([Stronger](https://www.strongermobileapp.com/blog/average-bench-press)). Lifter databases such as [Strength Level](https://strengthlevel.com/strength-standards/bench-press/kg) sit far above the general population. |
+| Vertical jump | 37 cm | 56 cm | 64 cm | 75 cm | Men average about 45 cm and women about 30 cm ([norms](https://www.topendsports.com/testing/norms/vertical-jump.htm)). |
+| 40-yard dash | 6.4 s | 5.1 s | 4.75 s | 4.45 s | An estimate: NFL combine players average about 4.7 s, and no general-population study was found. |
+| Mile | 11:30 | 7:00 | 6:00 | 5:00 | Adults average 9–10 min (men) and 11–12 min (women); under 6 minutes is rare ([Marathon Handbook](https://marathonhandbook.com/is-a-6-minute-mile-good/)). |
+
+These are estimates put together from surveys, fitness-test norms and summaries, not one representative study. Age and sex are not asked for, so everyone is compared with all adults. Change a row of `norms` to retune a test.
+

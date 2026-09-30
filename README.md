@@ -94,6 +94,17 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
 
+## Latest shared state — 2026-10-01 (population norms)
+
+- **Stats are scored against real adult norms (`METRICS[].norms`, `SCORE_SCALE`, `percentile` in `src/profile.js`).** The owner asked that a 20 mean the top 0.1% of people and an 18 the top 1%.
+  - Each test now maps a result to the share of all adults who do no better, then to a score: 50th percentile = 10, 70th = 12, 85th = 14, 95th = 16, 99th = 18, 99.9th = 20, with the same steps below the middle.
+  - Examples for push-ups: 10 reps ≈ 54th percentile, 40 ≈ 93rd, 60 = top 1%, 100 = top 0.1%.
+  - The tables, their sources, and the parts that are estimates (the 40-yard dash especially) are in `first-person-verdant/README.md` under "Stat norms".
+  - Checks: a median adult scores 10 in every body stat, top 1% in every test scores 18, and top 0.1% scores 20. A regular gym-goer (35 push-ups, 8 pull-ups, 80 kg bench) scores 16 in strength.
+  - The measurement form shows a live "BETTER THAN X% OF ADULTS" (or "TOP X%") under each result. New players' default values are now the adult medians.
+- **Discipline starts at 10 and only rises**: 10 + active days in the last 4 weeks × 10/24, so 24 active days reaches 20. Before this change, logging one activity dropped it to about 3.
+- Tested: smoke, saves, weekly-page and heavies tests pass; the form's percentile hints update while typing.
+
 ## Latest shared state — 2026-10-01 (training and progression)
 
 - **Monthly tests (`testStatus`, `recordTest`, `growth` in `src/profile.js`).**
@@ -124,7 +135,6 @@ How the story uses the ChatGPT NPCs:
   - Every 2 marks from the last 12 weeks give +1 to your class's own stat (Fighter STR, Tank DEF, Ranger SPD, Mage INT, Support DIS), up to +5.
   - Reaching the target gives 2 more marks and +300 XP, then switches the goal to maintain.
 - **Tested** in a browser: checking, the once-a-day rule, undo, opening and logging a workout, setting a goal and a weigh-in (−0.6 kg of 82 kg earned a mark), the monthly test (it unlocked 3 abilities, with Growth +2 STR and +2 DEF), and the in-game numbers. Smoke, heavies, saves and story tests pass.
-- **Noticed, not changed:** discipline (`stats()` in `profile.js`) is 10 until the first activity is logged, then counts active days in the last 28, so a new player's first check drops it to about 3. Ask the owner whether it should start at 10 and rise instead.
 
 ## Latest shared state — 2026-10-01 (team fights)
 

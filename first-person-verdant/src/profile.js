@@ -7,17 +7,34 @@ export const BIOMES=[
   {id:'wraith',name:'WRAITHMOOR',short:'WRAITH',longitude:.865,latitude:.20,level:15,color:'#d5a9fa',description:'Violet ruins where the dead still wander.',creatures:'Lantern Wraiths · Hollow Knights',guardian:'The Veiled Queen'}
 ];
 // What Mycel measures. Body weight and height set your frame (FRAMES), not a stat.
-// Bench is raw weight lifted: the strongest lift, the strongest score.
+// Each test is scored against all adults (both sexes, roughly 18–65): `norms` are
+// [result, percentile of adults at or below it] points, and SCORE_SCALE turns the
+// percentile into a 1–20 score, so 20 means the top 0.1% and 18 the top 1%.
+// Sources and reasoning for each table: first-person-verdant/README.md ("Stat norms").
 export const METRICS=[
   {key:'weightKg',label:'Body weight',unit:'kg',min:30,max:250,step:.5,value:75,body:true,imperial:{unit:'lb',factor:2.20462,step:1}},
   {key:'heightCm',label:'Height',unit:'cm',min:120,max:230,step:1,value:175,body:true,imperial:{unit:'in',factor:1/2.54,step:.5}},
-  {key:'pushups',label:'Max push-ups',unit:'reps',min:0,max:300,step:1,value:15,anchors:[0,5,15,35,60],stat:'strength'},
-  {key:'pullups',label:'Max pull-ups',unit:'reps',min:0,max:100,step:1,value:5,anchors:[0,1,5,12,22],stat:'strength'},
-  {key:'verticalJumpCm',label:'Vertical jump',unit:'cm',min:0,max:150,step:1,value:40,anchors:[10,25,40,55,70],stat:'speed',imperial:{unit:'in',factor:1/2.54,step:.5}},
-  {key:'dashSeconds',label:'40-yard dash',unit:'seconds',min:3.5,max:20,step:.1,value:5.5,anchors:[7.5,6.3,5.5,4.9,4.4],stat:'speed'},
-  {key:'mileSeconds',label:'One-mile time',unit:'min:sec',min:200,max:2400,step:1,value:600,anchors:[900,720,600,480,360],stat:'stamina',clock:true},
-  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:60,anchors:[10,35,60,90,130],stat:'strength',imperial:{unit:'lb',factor:2.20462,step:5}}
+  // About 1 in 5 adults cannot do one; 36% do fewer than 5 and 54% fewer than 10 (US survey of 2,000 adults).
+  {key:'pushups',label:'Max push-ups',unit:'reps',min:0,max:300,step:1,value:10,stat:'strength',
+    norms:[[0,10],[1,20],[5,36],[10,54],[15,65],[20,74],[30,86],[40,93],[50,97],[60,99],[80,99.7],[100,99.9]]},
+  // Only about 17% of men and 5% of women can do one strict pull-up.
+  {key:'pullups',label:'Max pull-ups',unit:'reps',min:0,max:100,step:1,value:0,stat:'strength',
+    norms:[[0,44],[1,89],[2,91.5],[5,95],[10,98],[15,99],[20,99.6],[25,99.9]]},
+  // Men average about 45 cm and women about 30 cm; elite jumpers reach 75+.
+  {key:'verticalJumpCm',label:'Vertical jump',unit:'cm',min:0,max:150,step:1,value:37,stat:'speed',imperial:{unit:'in',factor:1/2.54,step:.5},
+    norms:[[15,1],[20,5],[26,15],[31,30],[37,50],[43,70],[49,85],[56,95],[64,99],[75,99.9]]},
+  // Untrained adults run about 6–7 s; NFL combine players average about 4.7 s.
+  {key:'dashSeconds',label:'40-yard dash',unit:'seconds',min:3.5,max:20,step:.1,value:6.4,stat:'speed',
+    norms:[[11,1],[9,5],[7.8,15],[7,30],[6.4,50],[5.9,70],[5.5,85],[5.1,95],[4.75,99],[4.45,99.9]]},
+  // Adults average about 9–10 min (men) and 11–12 min (women); under 6 min is rare.
+  {key:'mileSeconds',label:'One-mile time',unit:'min:sec',min:200,max:2400,step:1,value:690,stat:'stamina',clock:true,
+    norms:[[1500,1],[1320,2],[1080,8],[900,20],[780,35],[690,50],[600,68],[540,80],[480,90],[420,96],[360,99],[300,99.9]]},
+  // Most adults never train the bench; fewer than 1% of the US population can bench 102 kg (225 lb).
+  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:35,stat:'strength',imperial:{unit:'lb',factor:2.20462,step:5},
+    norms:[[5,1],[12,5],[20,15],[27,30],[35,50],[45,70],[57,85],[75,95],[102,99],[140,99.9]]}
 ];
+/** Percentile of adults → score: 50th = 10, 99th = 18, 99.9th = 20 (and the same steps below the middle). */
+export const SCORE_SCALE=[[.5,1],[1,2],[5,4],[15,6],[30,8],[50,10],[70,12],[85,14],[95,16],[99,18],[99.9,20]];
 /** Frames: every body gets something. Heavier frames are hard to move; light or tall
  *  ones are quick; balanced ones endure. Chosen from weight and height, never shown as numbers. */
 export const FRAMES={
@@ -94,17 +111,18 @@ export function loadProfile(){
     profile.name=typeof raw.name==='string'?raw.name.slice(0,24):'';
   }catch{/* New profile. */}
 }
-const score=(m,inputs=profile.inputs)=>{
-  const v=inputs[m.key],a=m.anchors,asc=a[4]>a[0],points=[1,5,10,15,20];
-  if(asc?v<=a[0]:v>=a[0])return 1;
-  if(asc?v>=a[4]:v<=a[4])return 20;
-  for(let i=0;i<4;i++)if(asc?v>=a[i]&&v<=a[i+1]:v<=a[i]&&v>=a[i+1])return Math.round(points[i]+(v-a[i])/(a[i+1]-a[i])*(points[i+1]-points[i]));
-  return 10;
+const lerp=(pts,x)=>{   // piecewise linear through [x, y] points (x ascending), flat past the ends
+  if(x<=pts[0][0])return pts[0][1];
+  for(let i=1;i<pts.length;i++)if(x<=pts[i][0]){const [x0,y0]=pts[i-1],[x1,y1]=pts[i];return y0+(x-x0)/(x1-x0)*(y1-y0);}
+  return pts.at(-1)[1];
 };
+/** The share of adults (0–100) who do no better than this result. */
+export function percentile(m,v){const pts=[...m.norms].sort((a,b)=>a[0]-b[0]);return lerp(pts,v);}
+const score=(m,inputs=profile.inputs)=>Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,percentile(m,inputs[m.key])))));
 export function level(){return 1+Math.floor(Math.sqrt(profile.xp/250));}
 /** Stats straight from a set of measurements (and the mind check and training log). */
 function rawStats(inputs=profile.inputs){
-  const s=Object.fromEntries(METRICS.filter(m=>m.anchors).map(m=>[m.key,score(m,inputs)]));
+  const s=Object.fromEntries(METRICS.filter(m=>m.norms).map(m=>[m.key,score(m,inputs)]));
   const iq=[70,90,100,115,135],points=[1,5,10,15,20];let reason=20;
   if(profile.reasoning<=70)reason=1;
   else for(let i=0;i<4;i++)if(profile.reasoning<=iq[i+1]){reason=Math.round(points[i]+(profile.reasoning-iq[i])/(iq[i+1]-iq[i])*(points[i+1]-points[i]));break;}
@@ -112,7 +130,7 @@ function rawStats(inputs=profile.inputs){
   return {
     strength:Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25),speed:Math.round(s.dashSeconds*.7+s.verticalJumpCm*.3),
     stamina:s.mileSeconds,defense:Math.round(s.benchPressKg*.45+s.pushups*.3+s.mileSeconds*.25),
-    intelligence:reason,discipline:profile.activities.length?Math.max(1,Math.min(20,10+Math.round((days/20-.5)*16))):10
+    intelligence:reason,discipline:Math.min(20,10+Math.round(days*10/24))   // starts at 10; 24 active days in 4 weeks reaches 20
   };
 }
 // ------------------------------------------------------------- monthly tests
