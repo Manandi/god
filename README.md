@@ -25,7 +25,7 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Onboarding**: the story intro with the floating Mycel (Blender), measure, mind check, how you play, class reveal | Claude (at the owner's request, 2026-09-30) | `src/shell.js` (intro to reveal), `src/narrator.js`, `tools/blender/build_mycel.py`, `src/reasoning.js`, `METRICS`/`PERSONALITY` in `src/profile.js`. The character creator that follows stays ChatGPT's design |
 | **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
 | **Mossgate Chronicles, dialogue choices**: the idea and choice UI from ChatGPT; the three chronicles were rewritten into Claude's story on 2026-10-01. The Old Shell was removed at the owner's request ("it keeps the game repetitive") | Both | `src/chronicles.js` |
-| **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: Ctrl+Shift+` then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
+| **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: F2 then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
 | **Leaderboard**: shared online board of every explorer's level and stats | Claude | `src/leaderboard.js`, `supabase/schema.sql` |
 
 How the story uses the ChatGPT NPCs:
@@ -82,7 +82,7 @@ How the story uses the ChatGPT NPCs:
 
 **Testing:**
 - `?arena` skips the menus; add `&third` for third person, `&debug` or F3 for the combat readout, and `&capture` for stepped frames.
-- **Ctrl+Shift+` then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
+- **F2 then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
 - `window.__verdant` exposes the game state and its test hooks.
 - The owner prefers to test game feel themselves. Don't run long capture or video pipelines; quick logic checks are fine.
 
@@ -111,7 +111,7 @@ How the story uses the ChatGPT NPCs:
   - Every NPC's lines, for every stage, build toward this. Nobody reveals the theft before Ysolde does at Mosswatch; afterwards Orin's wardens take off the Mosswatch leaf, Tavi explains the dead Hollow, and Halden ties it to the Heartseed.
   - The town NPC "Mycel" is renamed **Halden, Rootkeeper** (id still `mycel`), so he no longer clashes with Mycel, the floating spirit.
   - The three chronicles (Sela, Orin, Halden) follow the three memories. The intro gained two beats that set up the theft and the finale.
-- **Hidden dev mode.** The DEV button and F2 are gone. Ctrl+Shift+` asks for a password (`DEV_PASSWORD` in `src/main.js`), once per tab. This only keeps players out by accident; the password ships in the page code.
+- **Hidden dev mode.** The DEV button and the on-screen hint are gone. F2 asks for a password (simplified from Ctrl+Shift+` at the owner's request) (`DEV_PASSWORD` in `src/main.js`), once per tab. This only keeps players out by accident; the password ships in the page code.
   - New **NEW GAME · START OVER** button erases this browser's explorer and story and reloads to the intro.
   - The stat presets now use the adult norms: median, top ~5%, top 0.1%, bottom ~5%.
 - **Shared leaderboard (`src/leaderboard.js`, `supabase/schema.sql`, migration `hunters_leaderboard`).**

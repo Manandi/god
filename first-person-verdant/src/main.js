@@ -111,7 +111,7 @@ const sprintHeld=()=>shiftDownAt>=0&&(performance.now()-shiftDownAt)/1000>=SPRIN
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))e.preventDefault();
   keyState.add(e.code);
-  if(e.code===DEV_KEY&&!e.repeat&&(e.ctrlKey||e.metaKey)&&e.shiftKey){e.preventDefault();toggleDev();return;}
+  if(e.code===DEV_KEY&&!e.repeat){e.preventDefault();toggleDev();return;}
   if(e.code==='F4'&&!e.repeat){e.preventDefault();togglePerf();return;}
   if(e.code==='F3'){e.preventDefault();debug.toggle();return;}
   if(e.code==='KeyJ'&&started){toggleJournal(!journalOpen);return;}
@@ -367,7 +367,7 @@ function handleBossEvent(c,ev){
 const BOSS_CUES={tailspin:'TAIL SPIN · DASH THROUGH OR BACK OFF',tailslam:'TAIL HAMMER · SIDESTEP THE TIP',pounce:'POUNCE · DASH UNDER IT',bite:'BITE · PARRY OR DASH',stomp:'STOMP · JUMP OR DASH THROUGH THE WAVE',sweep:'TAIL SWEEP · GET CLEAR',charge:'CHARGE · DASH ASIDE',erupt:'ROOTS STIRRING · KEEP MOVING'};
 
 // ------------------------------------------------------------------ dev mode
-// Ctrl+Shift+` and the password: test any part of the map, any weapon, any class and
+// F2 and the password: test any part of the map, any weapon, any class and
 // any point in the story without playing up to it. Adapted from the ChatGPT
 // Sites developer panel.
 const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false};
@@ -394,9 +394,9 @@ function updateDevTelemetry(){
   devPanel.querySelectorAll('[data-class]').forEach(b=>b.classList.toggle('active',profile.appearance.discipline===b.dataset.class));
   $('devStage').value=story.stage;
 }
-// Dev mode is hidden: Ctrl+Shift+` (backquote) asks for the password once per tab.
+// Dev mode is hidden (no button or hint): F2 asks for the password once per tab.
 // It only keeps players out of the panel by accident; it is not real security.
-const DEV_KEY='Backquote',DEV_PASSWORD='bob';
+const DEV_KEY='F2',DEV_PASSWORD='bob';
 function devUnlocked(){
   try{if(sessionStorage.getItem('verdant-dev')==='1')return true;}catch{}
   if(document.pointerLockElement)document.exitPointerLock();

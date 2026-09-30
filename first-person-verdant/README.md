@@ -32,7 +32,7 @@ Then you make your character and select Verdant Reach from the spinning world ma
 | E | Talk / interact; 1–9 picks a dialogue choice |
 | J / M | Journal / map |
 | V | Switch first and third person (`?third` starts in third person) |
-| Ctrl+Shift+` / F3 / F4 | Hidden dev panel (password) / combat debug readout / FPS |
+| F2 / F3 / F4 | Hidden dev panel (password) / combat debug readout / FPS |
 | 1–4, 0 | Emotes (pose, sit, wave, cheer; clear) when no dialogue is open |
 | Esc | Pause |
 
