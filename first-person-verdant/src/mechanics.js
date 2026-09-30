@@ -1,5 +1,5 @@
-import { profile, stats, weaponEligibility, frame, FRAMES } from './profile.js';
-import { MOVESETS, WEAPONS } from './combat/moves.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level } from './profile.js';
+import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
 // from here, and the stats screen shows this same table, so the link between
@@ -8,6 +8,29 @@ import { MOVESETS, WEAPONS } from './combat/moves.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const devOverrides = { anyWeapon: false };
+
+// Abilities: each stat unlocks one at 12 and a stronger one at 16. Stats move
+// with the monthly test (plus Growth and the body-goal bonus), so a better test
+// can unlock the next one.
+export const ABILITIES = [
+  { id: 'crushing', stat: 'strength', at: 12, name: 'CRUSHING BLOWS', text: 'Strikes break poise 25% faster.', apply: m => { m.poise *= 1.25; } },
+  { id: 'titan', stat: 'strength', at: 16, name: "TITAN'S STRIKE", text: 'Charged heavies deal 20% more damage.', apply: m => { m.chargedDamage *= 1.2; } },
+  { id: 'fleet', stat: 'speed', at: 12, name: 'FLEET FOOT', text: 'Run 6% faster.', apply: m => { m.runSpeed *= 1.06; } },
+  { id: 'afterimage', stat: 'speed', at: 16, name: 'AFTERIMAGE', text: 'Dodges stay invulnerable 40 ms longer.', apply: m => { m.iframeBonus += .04; } },
+  { id: 'lungs', stat: 'stamina', at: 12, name: 'DEEP LUNGS', text: 'Breath returns 20% faster.', apply: m => { m.regen *= 1.2; } },
+  { id: 'tireless', stat: 'stamina', at: 16, name: 'TIRELESS', text: 'Every action costs 12% less Breath.', apply: m => { m.staminaCost *= .88; m.guardCost *= .88; } },
+  { id: 'bark', stat: 'defense', at: 12, name: 'BARKSKIN', text: '+1 vitality.', apply: m => { m.maxHealth += 1; } },
+  { id: 'rooted', stat: 'defense', at: 16, name: 'ROOTED GUARD', text: 'Guarding costs 25% less Breath.', apply: m => { m.guardCost *= .75; } },
+  { id: 'tell', stat: 'intelligence', at: 12, name: 'READ THE TELL', text: 'The parry window is 60 ms longer.', apply: m => { m.parryBonus += .06; } },
+  { id: 'alchemy', stat: 'intelligence', at: 16, name: 'SAP ALCHEMY', text: 'Sap Flasks heal 1 more.', apply: m => { m.flaskHeal += 1; } },
+  { id: 'steady', stat: 'discipline', at: 12, name: 'STEADY HANDS', text: '+1 Sap Flask.', apply: m => { m.flasks += 1; } },
+  { id: 'unbroken', stat: 'discipline', at: 16, name: 'UNBROKEN WILL', text: 'Once per rest, a blow that would drop you leaves you standing.', apply: m => { m.secondWind = true; } }
+];
+export const unlockedAbilities = (s = stats()) => ABILITIES.filter(a => s[a.stat] >= a.at);
+// Workout XP levels: enemies get 15% more health per level (creatures.js), and
+// your strikes grow in step, so you keep pace; every fourth level adds vitality.
+export const levelDamage = (lv = level()) => 1 + (lv - 1) * .15;
+export const levelVitality = (lv = level()) => Math.min(2, Math.floor(lv / 4));
 
 export function mechanics() {
   const s = stats(), klass = profile.appearance.discipline || 'fighter', jumpCm = profile.inputs.verticalJumpCm, body = frame();
@@ -36,12 +59,17 @@ export function mechanics() {
     echoReach: Math.max(0, s.intelligence - 10) * .18,
     // Discipline: a better parry reward for support.
     parryReward: klass === 'support' ? 22 : 10,
-    steadfast: false, secondWind: false
+    steadfast: false, secondWind: false,
+    poise: 1, chargedDamage: 1, parryBonus: 0, flasks: FLASK.charges, flaskHeal: FLASK.heal, abilities: []
   };
   // Frames (weight and height): every body gets a real advantage.
   if (body === 'stone') { m.maxHealth = Math.min(9, m.maxHealth + 1); m.steadfast = true; m.guardCost *= .85; }
   if (body === 'swift') { m.runSpeed *= 1.07; m.dash *= 1.15; m.iframeBonus += .02; }
   if (body === 'balanced') { m.regen *= 1.15; m.secondWind = true; }
+  // Workout level, then the abilities your stats have unlocked.
+  m.level = level(); m.damage *= levelDamage(m.level); m.maxHealth += levelVitality(m.level);
+  for (const a of unlockedAbilities(s)) { a.apply(m); m.abilities.push(a.id); }
+  m.maxHealth = Math.min(12, m.maxHealth);
   return m;
 }
 
@@ -65,6 +93,8 @@ export function mechanicsTable() {
     ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · memories answer from +${m.echoReach.toFixed(1)} m`],
     ['CLASS', `${m.klass.toUpperCase()} · parry restores ${m.parryReward} Breath`],
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
-    ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`]
+    ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],
+    ['LEVEL', `LV ${m.level} · strikes ${pct(levelDamage(m.level))} to keep pace with enemies (+15% health per level)${levelVitality(m.level) ? ` · +${levelVitality(m.level)} vitality` : ' · +1 vitality at LV 4'}`],
+    ['ABILITIES', m.abilities.length ? ABILITIES.filter(a => m.abilities.includes(a.id)).map(a => a.name).join(' · ') : 'None yet · a stat of 12 unlocks the first']
   ];
 }

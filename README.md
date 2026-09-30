@@ -62,6 +62,7 @@ How the story uses the ChatGPT NPCs:
 | `camera.js` | Third-person shoulder camera: right-drag orbit, lock-on framing, world collision, shake, boss intro shots |
 | `mechanics.js` | Real-life stats → damage, speed, dash, jump and double jump, Breath cost, vitality, class bonuses; the equipped weapon |
 | `chronicles.js` | The four Mossgate Chronicles and each NPC's dialogue topics |
+| `training.js` | The weekly training plan (tasks per week, tiers) and the home workouts with their easier versions |
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
@@ -92,6 +93,38 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: Vite/Three.js 3D game. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
+
+## Latest shared state — 2026-10-01 (training and progression)
+
+- **Monthly tests (`testStatus`, `recordTest`, `growth` in `src/profile.js`).**
+  - Measurements are now a monthly test. After the first one they lock for 30 days; a mistake can be fixed for 2 days after a test.
+  - Every body stat that rose since the last test earns a **Growth** bonus until the next test: half the gain, rounded up, capped at +4.
+  - After a test, a results screen shows each stat before and after, the Growth earned, and any abilities gained or lost.
+  - Saves from before this count as having tested 30 days ago, so the first monthly test is open now.
+- **Abilities (`ABILITIES` in `src/mechanics.js`).** Each stat unlocks one ability at 12 and a stronger one at 16:
+  - Strength: Crushing Blows (poise damage +25%), Titan's Strike (charged heavies +20%).
+  - Speed: Fleet Foot (+6% run), Afterimage (+40 ms dodge invulnerability).
+  - Stamina: Deep Lungs (+20% Breath recovery), Tireless (−12% Breath costs).
+  - Defense: Barkskin (+1 vitality), Rooted Guard (−25% guard cost).
+  - Intelligence: Read the Tell (+60 ms parry window), Sap Alchemy (flasks heal 1 more).
+  - Discipline: Steady Hands (+1 Sap Flask), Unbroken Will (a second wind once per rest).
+  - The stats screen shows all twelve and what each locked one still needs.
+- **Level keeps pace with enemies (`levelDamage`, `levelVitality`).** Level still comes only from logged workouts. Each level adds 15% strike damage, matching the 15% health per level that shellbacks and thornlings already gain, and every fourth level adds a vitality heart (up to +2). Level 1 is unchanged.
+- **Weekly quest is a clickable plan (`src/training.js`, `weeklyPlan` in `src/profile.js`).**
+  - Week 1 (beginner): reach 5,000 steps on 2 days, do the beginner home workout twice, and learn for 20 minutes twice. Each task is a row of check boxes, one per day.
+  - The plan steps up each week you finish at least half of it, and repeats the week if you don't: beginner (weeks 1–2), foundation, builder, advanced (week 7 on). Finishing a whole week gives +300 XP.
+  - Clicking a workout opens it: a 5-minute warm-up, a no-equipment full-body circuit of 30–40 minutes, and a cool-down. The easier version of every exercise sits in a column on the right. **✓ DONE · LOG THIS WORKOUT** logs it.
+  - Each task can be checked once a day, and today's check can be undone. The free-form log is still there as OTHER ACTIVITY.
+- **Body goal rewards (`setGoal`, `logWeighIn`, `goalBoon`).**
+  - Choose lose, gain, or maintain/recomp, and weigh in once a week. A weigh-in moving toward the goal at a healthy pace earns a mark (+80 XP):
+    - lose: 0.1–1% of body weight a week
+    - gain: 0.05–0.5% a week
+    - maintain: within 1% while training at least twice that week
+  - Faster changes earn nothing, and the message says to slow down.
+  - Every 2 marks from the last 12 weeks give +1 to your class's own stat (Fighter STR, Tank DEF, Ranger SPD, Mage INT, Support DIS), up to +5.
+  - Reaching the target gives 2 more marks and +300 XP, then switches the goal to maintain.
+- **Tested** in a browser: checking, the once-a-day rule, undo, opening and logging a workout, setting a goal and a weigh-in (−0.6 kg of 82 kg earned a mark), the monthly test (it unlocked 3 abilities, with Growth +2 STR and +2 DEF), and the in-game numbers. Smoke, heavies, saves and story tests pass.
+- **Noticed, not changed:** discipline (`stats()` in `profile.js`) is 10 until the first activity is logged, then counts active days in the last 28, so a new player's first check drops it to about 3. Ask the owner whether it should start at 10 and rise instead.
 
 ## Latest shared state — 2026-10-01 (team fights)
 

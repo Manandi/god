@@ -1,5 +1,6 @@
-import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,level,weeklyGoals,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility} from './profile.js';
-import {mechanicsTable} from './mechanics.js';
+import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility,weeklyPlan,checkPlanItem,uncheckPlanItem,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay} from './profile.js';
+import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
+import {WORKOUTS,WORKOUT_NOTE} from './training.js';
 import {QUESTIONS,canTakeReasoning} from './reasoning.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
@@ -22,7 +23,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator}){
-  loadProfile();let view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',quizIndex=0,quizCorrect=0,quizStarted=0,personalityIndex=0;
+  loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',quizIndex=0,quizCorrect=0,quizStarted=0,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;};
   // First time through: intro → measure → check → how you play → reveal → look.
   const onboarding=()=>!profile.customized;
@@ -30,7 +31,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   const startQuiz=()=>{quizIndex=0;quizCorrect=0;quizStarted=Date.now();show('quiz');};
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
   function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
-    if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();
+    if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();else if(view==='workout')renderWorkout();else if(view==='testResult')renderTestResult();
     else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='leaderboard')renderLeaderboard();else renderMenu();
   }
   // Returning players (measure saved) go straight to the menu; HOW YOU PLAY is on the stats screen.
@@ -58,8 +59,13 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     const imperial=profile.units==='imperial',conv=m=>imperial&&m.imperial;
     const shown=m=>{const v=profile.inputs[m.key];if(m.clock)return `${Math.floor(v/60)}:${String(Math.round(v%60)).padStart(2,'0')}`;return conv(m)?String(Math.round(v*m.imperial.factor/m.imperial.step)*m.imperial.step):String(v);};
     const input=m=>`<label class="metric"><span>${m.label} <small>${conv(m)?m.imperial.unit:m.unit}</small></span><input name="${m.key}" ${m.clock?'type="text" inputmode="numeric" placeholder="10:00"':'type="number" inputmode="decimal" step="any"'} value="${shown(m)}" data-shown="${shown(m)}" required></label>`;
-    entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">MYCEL'S MEASURE${step(1)}</span><h2>YOUR MEASURE</h2></div><div class="unit-toggle">${button('metric','METRIC',!imperial)}${button('imperial','IMPERIAL',imperial)}</div></div><p>Mycel reads your frame and what your body can do today. Use your real results; you can update them whenever they change. Every frame has a gift, so there is nothing to hide.</p><form id="baselineForm"><h3>YOUR FRAME</h3><div class="metric-grid">${METRICS.filter(m=>m.body).map(input).join('')}</div><h3>WHAT YOU CAN DO</h3><div class="metric-grid">${METRICS.filter(m=>!m.body).map(input).join('')}<div class="metric auto-metric"><span>Discipline <small>auto</small></span><strong>${stats().discipline}</strong><small>Calculated from the training you log in WEEKLY QUEST; it rises as you keep showing up.</small></div></div><div class="baseline-note">Weight and height choose your frame (Stoneframe, Swiftframe or Trueframe); they never lower a stat. Mile time as minutes:seconds. Intelligence comes from Mycel's check next; discipline is calculated automatically from the training you log.</div><div class="panel-actions">${onboarding()?'':button('back','BACK')}<button class="primary" type="submit">${onboarding()?'NEXT · MIND CHECK →':'SAVE MEASURE →'}</button></div></form></section>`;
+    // After the first test, measurements are retaken monthly (a fix is allowed for two days after a test).
+    const st=testStatus(),first=!st.count,locked=!first&&!st.due&&!st.correctable;
+    const title=first?`MYCEL'S MEASURE${step(1)}`:st.due?'MONTHLY TEST · OPEN NOW':st.correctable?'THIS MONTH’S TEST · FIXES OPEN FOR 2 DAYS':`MONTHLY TEST · NEXT IN ${st.nextIn} DAY${st.nextIn===1?'':'S'}`;
+    const lead=first?'Mycel reads your frame and what your body can do today. Use your real results. Every frame has a gift, so there is nothing to hide.':st.due?'A month has passed. Test yourself again: every stat that rises earns a Growth bonus on top, and higher stats unlock abilities.':st.correctable?'You can still fix a mistake in this month’s test.':`Your measurements lock between monthly tests so every gain is a real one. Your next test opens in ${st.nextIn} day${st.nextIn===1?'':'s'}. Until then, WEEKLY QUEST training keeps raising your level.`;
+    entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">${title}</span><h2>${first?'YOUR MEASURE':'MONTHLY TEST'}</h2></div><div class="unit-toggle">${button('metric','METRIC',!imperial)}${button('imperial','IMPERIAL',imperial)}</div></div><p>${lead}</p><form id="baselineForm" class="${locked?'locked':''}"><h3>YOUR FRAME</h3><div class="metric-grid">${METRICS.filter(m=>m.body).map(input).join('')}</div><h3>WHAT YOU CAN DO</h3><div class="metric-grid">${METRICS.filter(m=>!m.body).map(input).join('')}<div class="metric auto-metric"><span>Discipline <small>auto</small></span><strong>${stats().discipline}</strong><small>Calculated from the training you log in WEEKLY QUEST; it rises as you keep showing up.</small></div></div><div class="baseline-note">Weight and height choose your frame (Stoneframe, Swiftframe or Trueframe); they never lower a stat. Mile time as minutes:seconds. Intelligence comes from Mycel's check next; discipline is calculated automatically from the training you log.</div><div class="panel-actions">${onboarding()?'':button('back','BACK')}${locked?'':`<button class="primary" type="submit">${onboarding()?'NEXT · MIND CHECK →':st.correctable&&!first?'SAVE FIX →':'RECORD TEST →'}</button>`}</div></form></section>`;
     const form=entry.querySelector('#baselineForm');
+    if(locked)form.querySelectorAll('input').forEach(i=>{i.disabled=true;});
     const read=strict=>{
       for(const m of METRICS){
         const el=form.elements[m.key],raw=el.value.trim();let v;
@@ -75,8 +81,12 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     };
     for(const u of ['metric','imperial'])entry.querySelector(`[data-action="${u}"]`).onclick=()=>{read(false);profile.units=u;saveProfile();renderBaseline();};
     form.onsubmit=e=>{
-      e.preventDefault();if(!read(true))return;
-      profile.complete=true;saveProfile();if(onboarding())startQuiz();else show('stats');
+      e.preventDefault();if(locked)return;
+      const before=stats(),had=unlockedAbilities(before).map(a=>a.id);
+      if(!read(true))return;
+      profile.complete=true;recordTest();
+      if(onboarding()||first){if(onboarding())startQuiz();else show('stats');return;}
+      testBefore={stats:before,had};show('testResult');
     };
     entry.querySelector('[data-action="back"]')?.addEventListener('click',()=>show('stats'));
   }
@@ -96,8 +106,17 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     entry.querySelector('[data-action="keep"]')?.addEventListener('click',()=>show('stats'));
     entry.querySelector('[data-action="take"]').onclick=()=>{profile.appearance.discipline=rec;saveProfile();onAppearance();show(onboarding()?'customize':'stats');};
   }
-  function statTiles(){const values=stats();return `<div class="stat-grid">${Object.entries(values).map(([key,v])=>`<div><small>${short[key]}</small><strong>${v}</strong><span>${key.toUpperCase()}</span></div>`).join('')}</div>`;}
-  function renderStats(){const rec=recommendedClass();entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">REAL LIFE → GAMEPLAY</span><h2>EXPLORER STATS</h2></div>${button('back','BACK')}</div>${statTiles()}<div class="reveal-grid"><div class="class-recommend"><small>RECOMMENDED CLASS</small><strong>${CLASS_INFO[rec].label}</strong><span>${CLASS_INFO[rec].description}</span><p>${esc(classReason())}</p></div><div class="class-recommend frame-card"><small>YOUR FRAME</small><strong>${FRAMES[frame()].label}</strong><span>${FRAMES[frame()].description}</span><em>${FRAMES[frame()].bonus}</em></div></div><div class="impact-grid">${mechanicsTable().map(([k,v])=>`<article><b>${k}</b><span>${esc(v)}</span></article>`).join('')}</div><div class="panel-actions">${button('baseline','UPDATE MEASUREMENTS')}${button('personality','HOW YOU PLAY')}${canTakeReasoning(profile.reasoningTaken)?button('quiz','MIND CHECK'):''}${button('weekly','OPEN WEEKLY QUEST',true)}</div><small class="baseline-note">The mind check sets a game estimate, not a clinical IQ score. Retake after 30 days.</small></section>`;
+  function statTiles(){const values=stats(),raw=rawStats();return `<div class="stat-grid">${Object.entries(values).map(([key,v])=>`<div><small>${short[key]}${v>raw[key]?` <em class="bonus">+${v-raw[key]}</em>`:''}</small><strong>${v}</strong><span>${key.toUpperCase()}</span></div>`).join('')}</div>`;}
+  /** The twelve abilities: which your stats have unlocked, and what the rest need. */
+  function abilityGrid(){const s=stats(),on=new Set(unlockedAbilities(s).map(a=>a.id));
+    return `<div class="ability-grid">${ABILITIES.map(a=>`<article class="${on.has(a.id)?'on':''}"><small>${short[a.stat]} ${a.at}</small><b>${a.name}</b><span>${esc(a.text)}</span><em>${on.has(a.id)?'UNLOCKED':`${short[a.stat]} ${s[a.stat]} / ${a.at}`}</em></article>`).join('')}</div>`;}
+  function bonusNote(){
+    const gr=Object.entries(growth()),boon=goalBoon(),st=testStatus(),parts=[];
+    if(gr.length)parts.push(`Growth since your last test: ${gr.map(([k,v])=>`+${v.bonus} ${short[k]} (you rose ${v.gain})`).join(', ')}.`);
+    if(boon.points)parts.push(`Body goal: +${boon.points} ${short[boon.stat]} for your class (${boon.marks} marks in 12 weeks).`);
+    parts.push(st.due?'Your monthly test is open now.':`Next monthly test in ${st.nextIn} day${st.nextIn===1?'':'s'}.`);
+    return `<p class="bonus-note">${parts.join(' ')}</p>`;}
+  function renderStats(){const rec=recommendedClass();entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">REAL LIFE → GAMEPLAY</span><h2>EXPLORER STATS</h2></div>${button('back','BACK')}</div>${statTiles()}${bonusNote()}<h3>ABILITIES · A STAT OF 12 AND 16 UNLOCKS EACH</h3>${abilityGrid()}<div class="reveal-grid"><div class="class-recommend"><small>RECOMMENDED CLASS</small><strong>${CLASS_INFO[rec].label}</strong><span>${CLASS_INFO[rec].description}</span><p>${esc(classReason())}</p></div><div class="class-recommend frame-card"><small>YOUR FRAME</small><strong>${FRAMES[frame()].label}</strong><span>${FRAMES[frame()].description}</span><em>${FRAMES[frame()].bonus}</em></div></div><div class="impact-grid">${mechanicsTable().map(([k,v])=>`<article><b>${k}</b><span>${esc(v)}</span></article>`).join('')}</div><div class="panel-actions">${button('baseline',testStatus().due?'MONTHLY TEST · OPEN':'MONTHLY TEST')}${button('personality','HOW YOU PLAY')}${canTakeReasoning(profile.reasoningTaken)?button('quiz','MIND CHECK'):''}${button('weekly','OPEN WEEKLY QUEST',true)}</div><small class="baseline-note">The mind check sets a game estimate, not a clinical IQ score. Retake after 30 days.</small></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');entry.querySelector('[data-action="baseline"]').onclick=()=>show('baseline');entry.querySelector('[data-action="weekly"]').onclick=()=>show('weekly');
     entry.querySelector('[data-action="personality"]').onclick=()=>{personalityIndex=0;show('personality');};
     entry.querySelector('[data-action="quiz"]')?.addEventListener('click',startQuiz);}
@@ -112,12 +131,50 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     });
     entry.querySelector('[data-action="skip"]').onclick=()=>show(onboarding()?'personality':'stats');
   }
-  function renderWeekly(){const goals=weeklyGoals();
-    entry.innerHTML=`<section class="shell-card wide-card weekly-card"><div class="panel-heading"><div><span class="eyebrow">WEEK OF ${weekKey()} · RESETS MONDAY</span><h2>WEEKLY QUEST</h2></div>${button('back','BACK')}</div><div class="weekly-columns"><div><h3>REAL-WORLD GOALS</h3>${goals.map(g=>`<div class="goal ${g.claimed?'claimed':''}"><div><strong>${g.label}</strong><span>${g.claimed?'CLAIMED':`+${g.xp} XP`}</span></div><div class="goal-track"><i style="width:${Math.min(100,g.value/g.target*100)}%"></i></div><small>${Math.round(Math.min(g.value,g.target)*10)/10} / ${g.target} ${g.unit}</small></div>`).join('')}</div><div><h3>LOG YOUR EFFORT</h3><p>Only real-world activity grants XP. Workout and step days can be logged once per day.</p><form id="logForm"><label>ACTIVITY<select name="kind"><option value="workout">Workout day</option><option value="steps">Daily steps</option><option value="run">Run or walk distance (km)</option><option value="study">Learning (minutes)</option></select></label><label>AMOUNT<input name="amount" type="number" min="1" step="any" value="1" required></label><button class="primary" type="submit">RECORD ACTIVITY</button></form><small class="feedback">${esc(notice)}</small></div></div><div class="panel-actions">${button('stats','VIEW YOUR STATS')}</div></section>`;
-    entry.querySelector('[data-action="back"]').onclick=()=>show('menu');entry.querySelector('[data-action="stats"]').onclick=()=>show('stats');
-    const form=entry.querySelector('#logForm'),amount=form.elements.amount;
-    form.elements.kind.onchange=()=>{amount.value={workout:1,steps:5000,run:1,study:30}[form.elements.kind.value];};
-    form.onsubmit=e=>{e.preventDefault();notice=logActivity(form.elements.kind.value,Number(amount.value));renderWeekly();};
+  // WEEKLY QUEST: this week's step of the training plan, checked off one day at a
+  // time; the body goal and weigh-ins; and a free log for anything else.
+  function renderWeekly(){
+    const plan=weeklyPlan(),today=localDay(),imperial=profile.units==='imperial',unit=imperial?'lb':'kg';
+    const shownKg=kg=>imperial?Math.round(kg*2.20462):Math.round(kg*10)/10,toKg=v=>imperial?v/2.20462:v;
+    const item=i=>`<div class="plan-item ${i.done.length>=i.count?'done':''}"><div class="plan-main">${i.workout?`<button type="button" class="plan-open" data-open="${i.workout}">${esc(i.label)}<small>${WORKOUTS[i.workout].minutes} MIN · NO EQUIPMENT · OPEN ›</small></button>`:`<strong>${esc(i.label)}</strong>`}<small>${Math.min(i.count,i.done.length)} / ${i.count} ${i.unit}${i.count>1?'s':''}</small></div><div class="plan-checks">${Array.from({length:i.count},(_,k)=>{const d=i.done[k];return `<button type="button" class="check ${d?'on':''}" data-check="${i.id}" data-date="${d||''}" title="${d?`Logged ${d}${d===today?' · click to undo':''}`:i.workout?'Open the workout':'Check off today'}">${d?'✓':''}</button>`;}).join('')}</div></div>`;
+    const g=profile.goal,boon=goalBoon(),wait=nextWeighIn(),history=profile.weighIns.slice(-6).reverse();
+    const goalForm=`<form id="goalForm"><div class="goal-types">${Object.entries(GOALS).map(([k,v])=>`<label><input type="radio" name="type" value="${k}" ${(g.type||'lose')===k?'checked':''}><span>${v.label}</span></label>`).join('')}</div><label>WEIGHT TODAY (${unit})<input name="current" type="number" step="any" required value="${profile.weighIns.at(-1)?shownKg(profile.weighIns.at(-1).kg):shownKg(profile.inputs.weightKg)}"></label><label class="target-field">TARGET WEIGHT (${unit})<input name="target" type="number" step="any" value="${g.type&&g.type!=='recomp'?shownKg(g.targetKg):''}"></label><button class="primary" type="submit">SET GOAL</button></form>`;
+    const goalPanel=!g.type||goalEdit?goalForm:`<div class="goal-now"><strong>${GOALS[g.type].label}</strong>${g.type!=='recomp'?`<span>TARGET ${shownKg(g.targetKg)} ${unit}</span>`:''}<small>${GOALS[g.type].pace}</small><div class="boon"><b>+${boon.points} ${short[boon.stat]}</b><span>${boon.marks} mark${boon.marks===1?'':'s'} in the last 12 weeks · every 2 marks = +1 ${boon.stat.toUpperCase()} for your ${(profile.appearance.discipline||'fighter').toUpperCase()} (max +5)</span></div></div><form id="weighForm"><label>WEEKLY WEIGH-IN (${unit})<input name="kg" type="number" step="any" required ${wait?'disabled':''} placeholder="${wait?`opens in ${wait} day${wait===1?'':'s'}`:'weight today'}"></label><button class="primary" type="submit" ${wait?'disabled':''}>LOG WEIGH-IN</button></form>${history.length?`<ul class="weigh-list">${history.map(w=>`<li><span>${w.date}</span><b>${shownKg(w.kg)} ${unit}</b><em>${w.marks?'✦'.repeat(w.marks):'·'}</em></li>`).join('')}</ul>`:''}<button type="button" class="link-button" data-action="changeGoal">CHANGE GOAL</button>`;
+    entry.innerHTML=`<section class="shell-card wide-card weekly-card"><div class="panel-heading"><div><span class="eyebrow">WEEK ${plan.week} OF THE PLAN · ${plan.tier} · RESETS MONDAY</span><h2>WEEKLY QUEST</h2></div>${button('back','BACK')}</div><div class="plan-progress"><div class="goal-track"><i style="width:${plan.checked/plan.total*100}%"></i></div><small>${plan.checked} / ${plan.total} checked · ${plan.claimed?'WEEK COMPLETE · BONUS CLAIMED':`finish the week for +${plan.bonus} XP`} · finish half or more to move up next week</small></div><div class="weekly-columns"><div><h3>THIS WEEK</h3>${plan.items.map(item).join('')}<small class="feedback">${esc(notice)}</small></div><div><h3>BODY GOAL</h3>${goalPanel}<h3>OTHER ACTIVITY</h3><form id="logForm"><label>ACTIVITY<select name="kind"><option value="workout">Workout day</option><option value="steps">Daily steps</option><option value="run">Run or walk distance (km)</option><option value="study">Learning (minutes)</option></select></label><label>AMOUNT<input name="amount" type="number" min="1" step="any" value="1" required></label><button type="submit">RECORD ACTIVITY</button></form></div></div><div class="panel-actions">${button('stats','VIEW YOUR STATS')}</div></section>`;
+    entry.querySelector('[data-action="back"]').onclick=()=>{notice='';show('menu');};entry.querySelector('[data-action="stats"]').onclick=()=>show('stats');
+    entry.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{workoutId=b.dataset.open;notice='';show('workout');});
+    entry.querySelectorAll('[data-check]').forEach(b=>b.onclick=()=>{
+      const id=b.dataset.check,it=plan.items.find(i=>i.id===id);
+      if(b.dataset.date){notice=b.dataset.date===today?uncheckPlanItem(id):`Logged on ${b.dataset.date}. Only today’s check can be undone.`;}
+      else if(it.workout){workoutId=it.workout;notice='';show('workout');return;}
+      else notice=checkPlanItem(id);
+      renderWeekly();
+    });
+    const log=entry.querySelector('#logForm'),amount=log.elements.amount;
+    log.elements.kind.onchange=()=>{amount.value={workout:1,steps:5000,run:1,study:30}[log.elements.kind.value];};
+    log.onsubmit=e=>{e.preventDefault();notice=logActivity(log.elements.kind.value,Number(amount.value));renderWeekly();};
+    const gf=entry.querySelector('#goalForm');
+    if(gf){const sync=()=>{gf.querySelector('.target-field').classList.toggle('hidden',gf.elements.type.value==='recomp');};gf.querySelectorAll('[name="type"]').forEach(r=>r.onchange=sync);sync();
+      gf.onsubmit=e=>{e.preventDefault();const t=gf.elements.type.value;notice=setGoal(t,toKg(Number(gf.elements.current.value)),toKg(Number(gf.elements.target.value)));if(profile.goal.type===t)goalEdit=false;renderWeekly();};}
+    const wf=entry.querySelector('#weighForm');
+    if(wf)wf.onsubmit=e=>{e.preventDefault();notice=logWeighIn(toKg(Number(wf.elements.kg.value)));renderWeekly();};
+    entry.querySelector('[data-action="changeGoal"]')?.addEventListener('click',()=>{goalEdit=true;renderWeekly();});
+  }
+  /** A home workout: the circuit with an easier version of every exercise beside it; DONE logs it. */
+  function renderWorkout(){
+    const w=WORKOUTS[workoutId],plan=weeklyPlan(),it=plan.items.find(i=>i.workout===workoutId);
+    const canLog=it&&it.done.length<it.count&&!it.today,list=xs=>`<ul class="workout-list">${xs.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    const state=!it?'NOT IN THIS WEEK’S PLAN':it.today?'LOGGED TODAY ✓':it.done.length>=it.count?'DONE FOR THIS WEEK ✓':'';
+    entry.innerHTML=`<section class="shell-card wide-card workout-card"><div class="panel-heading"><div><span class="eyebrow">WEEK ${plan.week} · ${plan.tier} · ABOUT ${w.minutes} MIN · FULL BODY</span><h2>${w.title}</h2></div>${button('back','BACK')}</div><p>${esc(w.where)}. Do the circuit ${w.rounds} times. ${esc(w.rest)}</p><h3>WARM-UP · 5 MIN</h3>${list(w.warmup)}<h3>THE CIRCUIT · ${w.rounds} ROUNDS</h3><div class="workout-table"><div class="wt-head"><span>THE WORKOUT</span><span>EASIER VERSION</span></div>${w.exercises.map(([n,d,en,ed,cue],i)=>`<div class="wt-row"><div><b>${i+1}. ${esc(n)}</b><em>${esc(d)}</em><small>${esc(cue)}</small></div><div class="easier"><b>${esc(en)}</b><em>${esc(ed)}</em></div></div>`).join('')}</div><h3>COOL-DOWN · 5 MIN</h3>${list(w.cooldown)}<small class="baseline-note">Swap in the easier version of any exercise whenever you need to; it still counts. ${esc(WORKOUT_NOTE)}</small><div class="panel-actions">${button('week','BACK TO THE WEEK')}${canLog?button('log','✓ DONE · LOG THIS WORKOUT',true):`<span class="done-tag">${state}</span>`}</div><small class="feedback">${esc(notice)}</small></section>`;
+    for(const a of ['back','week'])entry.querySelector(`[data-action="${a}"]`).onclick=()=>show('weekly');
+    entry.querySelector('[data-action="log"]')?.addEventListener('click',()=>{notice=checkPlanItem(it.id);show('weekly');});
+  }
+  /** After a monthly test: what rose, the Growth it earned, and abilities gained (or slipped). */
+  function renderTestResult(){
+    const before=testBefore?.stats||stats(),now=stats(),gr=growth(),had=new Set(testBefore?.had||[]),has=new Set(unlockedAbilities(now).map(a=>a.id));
+    const gained=ABILITIES.filter(a=>has.has(a.id)&&!had.has(a.id)),lost=ABILITIES.filter(a=>had.has(a.id)&&!has.has(a.id));
+    entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">MONTHLY TEST · ${testStatus().last}</span><h2>THE ROOTS ANSWER</h2></div></div><div class="test-rows">${Object.keys(short).map(k=>{const d=now[k]-before[k];return `<div class="${d>0?'up':d<0?'down':''}"><small>${short[k]}</small><b>${before[k]} → ${now[k]}</b><span>${d>0?`+${d}`:d<0?d:'='}${gr[k]?` · GROWTH +${gr[k].bonus}`:''}</span></div>`;}).join('')}</div>${Object.keys(gr).length?`<p>Every stat that rose since your last test carries a Growth bonus until the next one: the bigger the gain, the bigger the bonus (up to +4).</p>`:'<p>No stat rose this month. Your level still grows with every workout you log, and next month is another chance.</p>'}${gained.length?`<h3>NEW ABILITIES</h3><div class="ability-grid">${gained.map(a=>`<article class="on"><small>${short[a.stat]} ${a.at}</small><b>${a.name}</b><span>${esc(a.text)}</span></article>`).join('')}</div>`:''}${lost.length?`<h3>SLIPPED</h3><div class="ability-grid">${lost.map(a=>`<article><small>${short[a.stat]} ${a.at}</small><b>${a.name}</b><span>Raise ${a.stat} back to ${a.at} to regain it.</span></article>`).join('')}</div>`:''}<div class="panel-actions">${button('stats','VIEW STATS',true)}</div></section>`;
+    entry.querySelector('[data-action="stats"]').onclick=()=>{testBefore=null;show('stats');};
   }
   function renderCustomize(){
     const a=profile.appearance;

@@ -223,7 +223,7 @@ function nearestInteractable(){
   if(echo)return{type:'echo',value:echo};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
-  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2)&&(player.health<maxHealth()||player.flasks<FLASK.charges))return{type:'rest'};
+  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
   return null;
 }
 function interact(){
@@ -240,7 +240,7 @@ function interact(){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=FLASK.charges;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=mech.flasks;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
 }
 
 // ----------------------------------------------------------------- dialogue
@@ -270,7 +270,7 @@ const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function applyStoryStep(d){
   if(d.applied||!d.then)return;d.applied=true;
   const from=story.stage;story.advance(d.then);
-  if(from==='trial_report'){player.flasks=FLASK.charges;player.health=maxHealth();}
+  if(from==='trial_report'){player.flasks=mech.flasks;player.health=maxHealth();}
   if(d.spawn)spawnEncounter(d.spawn);
   persist();toast('NEW OBJECTIVE',story.info.objective);playTone(620,.35,.05,'sine');
 }
@@ -439,7 +439,7 @@ devPanel.addEventListener('click',e=>{
   else switch(b.dataset.dev){
     case 'close':toggleDev(false);return;
     case 'reset':teleport(world.home.spawn.x,world.home.spawn.z,'UNSTUCK');break;
-    case 'heal':player.health=maxHealth();player.stamina=100;player.winded=false;player.flasks=FLASK.charges;player.defeated=0;toast('DEV · RESTORED');break;
+    case 'heal':player.health=maxHealth();player.stamina=100;player.winded=false;player.flasks=mech.flasks;player.defeated=0;toast('DEV · RESTORED');break;
     case 'invulnerable':dev.invulnerable=!dev.invulnerable;break;
     case 'breath':dev.breath=!dev.breath;break;
     case 'noclip':dev.noclip=!dev.noclip;break;
@@ -543,7 +543,7 @@ function hurtPlayer(from,kind='light',damage=1){
 }
 function checkDefeated(){
   // Trueframe: once per rest, a blow that would drop you leaves you standing.
-  if(player.health<=0&&mech.secondWind&&!player.secondWindUsed){player.health=1;player.secondWindUsed=true;slowMo(.3,.6);cue('SECOND WIND',1.1);toast('SECOND WIND','Your balanced frame keeps you standing · rest to renew it');return;}
+  if(player.health<=0&&mech.secondWind&&!player.secondWindUsed){player.health=1;player.secondWindUsed=true;slowMo(.3,.6);cue('SECOND WIND',1.1);toast(mech.frame==='balanced'?'SECOND WIND':'UNBROKEN WILL',`${mech.frame==='balanced'?'Your balanced frame':'Your discipline'} keeps you standing · rest to renew it`);return;}
   if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
 }
 function respawn(){
@@ -551,7 +551,7 @@ function respawn(){
   const checkpoint=story.reached('gate')&&!story.reached('end');
   if(warden?.awake&&warden.alive)warden.reset();
   player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:world.home.spawn.x;player.z=checkpoint?-147:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
-  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=FLASK.charges;player.secondWindUsed=false;
+  player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
   if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
   toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');
 }
@@ -593,7 +593,7 @@ function handleCombatEvents(){
       effects.shockwave(at,.5,ev.radius,.35);shoulderCam.punch(.35+ev.chargeLevel*.12);sound.attack('slam');
       for(const c of creatures){
         if(!c.alive||Math.hypot(c.x-ev.x,c.z-ev.z)>ev.radius+(c.radius||1))continue;
-        const res=strikeCreature(c,{damage:ev.damage*strikePower(),poise:ev.poise*strikePower(),fromX:ev.x,fromZ:ev.z,push:1.2,stagger:.8,part:c===warden?'leg':'shell',pierce:ev.pierce});
+        const res=strikeCreature(c,{damage:ev.damage*strikePower()*(ev.chargeLevel>0?mech.chargedDamage:1),poise:ev.poise*strikePower()*mech.poise,fromX:ev.x,fromZ:ev.z,push:1.2,stagger:.8,part:c===warden?'leg':'shell',pierce:ev.pierce});
         if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1,c.z),res.damage,res.effect);if(res.toppled){sound.topple();toast('TOPPLED','Its belly is exposed · strike now for a ROOT STRIKE');}}
       }
       cue(MOVES[ev.move].label.toUpperCase(),.7);
@@ -603,14 +603,15 @@ function handleCombatEvents(){
     else if(ev.type==='guardUp')sound.guardUp();
     else if(ev.type==='flask'){sound.flask();cue('SAP FLASK',.6);}
     else if(ev.type==='noFlask'){sound.tired();cue('NO SAP LEFT · REST AT THE TRAIL STONE',1.2);}
-    else if(ev.type==='heal'){player.flasks--;player.health=Math.min(maxHealth(),player.health+FLASK.heal);sound.heal();cue('RESTORED',.6);}
+    else if(ev.type==='heal'){player.flasks--;player.health=Math.min(maxHealth(),player.health+mech.flaskHeal);sound.heal();cue('RESTORED',.6);}
     else if(ev.type==='tired'){sound.tired();$('staminaFill').parentElement.classList.add('flash');setTimeout(()=>$('staminaFill').parentElement.classList.remove('flash'),300);}
     else if(ev.type==='hit'){
       const m=MOVES[ev.move],dir=ev.point.clone().sub(new THREE.Vector3(player.x,ev.point.y,player.z)).normalize();
       const power=strikePower();
       // Mages put Intelligence into charged Rootbreakers; fighters stagger harder.
       const chargePower=/rootbreaker/.test(ev.move)?mech.chargePower:1;
-      const res=strikeCreature(ev.target,{damage:ev.damage*power*chargePower,poise:ev.poise*power*chargePower,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger*mech.stagger,part:ev.part,pierce:ev.pierce});
+      const charged=ev.chargeLevel>0?mech.chargedDamage:1;   // Titan's Strike
+      const res=strikeCreature(ev.target,{damage:ev.damage*power*chargePower*charged,poise:ev.poise*power*chargePower*mech.poise,fromX:player.x,fromZ:player.z,push:ev.push,stagger:ev.stagger*mech.stagger,part:ev.part,pierce:ev.pierce});
       if(!res)continue;
       combo++;comboTimer=2;
       const heavy=ev.heavy;
@@ -781,7 +782,7 @@ function incomingStrike(c,ev){
 
 // -------------------------------------------------------------------- update
 function updateHUD(){
-  $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(FLASK.charges-player.flasks)}</em>`;
+  $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(mech.flasks-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
   const next=story.target();
@@ -865,7 +866,7 @@ function update(rawDt){
   const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
     sprinting:player.sprinting,airborne:!player.grounded,flasks:player.flasks,winded:player.winded,
-    moveset:movesetFor(equippedWeapon()),iframeBonus:mech.iframeBonus});
+    moveset:movesetFor(equippedWeapon()),iframeBonus:mech.iframeBonus,parryBonus:mech.parryBonus});
   // Speed stretches the dash (and rangers go further still).
   if(combat.state==='evade'){motion.dx*=mech.dash;motion.dz*=mech.dash;}
   if(!frozen)handleCombatEvents();

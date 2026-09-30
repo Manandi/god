@@ -79,3 +79,40 @@
 .frame-card{border-color:#d9c27a88}.frame-card strong{color:#f0d98f}
 @media(max-width:700px){.reveal-grid{grid-template-columns:1fr}}
 .auto-metric{padding:10px 12px;border:1px dashed #acd29866;display:flex;flex-direction:column;gap:4px}.auto-metric strong{font-size:22px;color:#e5f1c9}.auto-metric small{color:#91b297;font-size:10px}
+/* Weekly plan, workouts, body goal, abilities, monthly test */
+.plan-progress{margin:-6px 0 6px}.plan-progress small{color:#a6c2ab;font-size:11px}
+.plan-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid #2f4d3c}
+.plan-item.done{opacity:.72}
+.plan-main{display:grid;gap:4px;min-width:0}.plan-main strong{font-size:13px;font-weight:500}.plan-main>small{color:#a6c2ab;font-size:11px}
+.plan-open{all:unset;cursor:pointer;display:grid;gap:3px;font-size:13px;color:#f0d897}.plan-open small{font-size:10px;letter-spacing:.1em;color:#bce09c}.plan-open:hover{color:#fff1c4}
+.plan-checks{display:flex;gap:7px;flex-shrink:0}
+.check{width:30px;height:30px;border:1px solid #7fa585;background:#071b18;color:#17251c;cursor:pointer;font-size:16px;line-height:1;padding:0}
+.check:hover{border-color:#d5eab1}.check.on{background:#bce09c;border-color:#e4f5c5}
+.goal-types{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.goal-types label{display:block!important;cursor:pointer}.goal-types input{position:absolute;opacity:0;width:0!important}
+.goal-types span{display:block;padding:9px 6px;text-align:center;border:1px solid #6d9377;font-size:10px;letter-spacing:.08em}
+.goal-types input:checked+span{background:#cbe2a6;color:#17251c;border-color:#e4f5c5}
+.goal-now{display:grid;gap:5px;padding:12px 14px;border:1px solid #6d9377;background:#0c2a20;margin-bottom:12px}
+.goal-now strong{font:600 17px 'Cinzel',serif;color:#f0d897}.goal-now>span{font-size:11px;color:#d5ebac}.goal-now small{color:#a6c2ab;font-size:11px;line-height:1.5}
+.boon{display:flex;gap:10px;align-items:baseline;margin-top:4px}.boon b{font:600 20px 'Cinzel',serif;color:#e7f5c7;white-space:nowrap}.boon span{font-size:10px;color:#a6c2ab;line-height:1.5}
+.weigh-list{list-style:none;padding:0;margin:12px 0 0;font-size:11px}.weigh-list li{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid #243f31}.weigh-list em{color:#f0d897;font-style:normal;min-width:30px;text-align:right}
+.link-button{background:none;border:0;color:#bce09c;cursor:pointer;font-size:11px;letter-spacing:.1em;padding:10px 0 0}
+.workout-list{margin:0;padding-left:18px;color:#c3d3c3;line-height:1.8;font-size:13px}
+.workout-table{display:grid;border:1px solid #4d6f58}
+.wt-head,.wt-row{display:grid;grid-template-columns:1.25fr 1fr}
+.wt-head span{padding:8px 12px;font-size:10px;letter-spacing:.14em;color:#a9c996;background:#0c2a20}.wt-head span+span{color:#f0d897}
+.wt-row{border-top:1px solid #2f4d3c}.wt-row>div{display:grid;gap:3px;padding:10px 12px}
+.wt-row b{font-weight:500;font-size:13px}.wt-row em{font-style:normal;color:#bce09c;font-size:12px}.wt-row small{color:#94b19b;font-size:11px}
+.wt-row .easier{background:#0a211b;border-left:1px solid #2f4d3c}.wt-row .easier em{color:#f0d897}
+.done-tag{align-self:center;font-size:11px;letter-spacing:.12em;color:#bce09c}
+.ability-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ability-grid article{display:grid;gap:4px;align-content:start;padding:10px 12px;border:1px solid #3f5f4a;background:#0a1d18;opacity:.62}
+.ability-grid article.on{opacity:1;border-color:#b9ce8a;background:linear-gradient(110deg,#1b382de8,#172820d9)}
+.ability-grid small{font-size:9px;letter-spacing:.14em;color:#a9c996}.ability-grid b{font:600 13px 'Cinzel',serif;color:#f0d897}.ability-grid span{font-size:11px;color:#c3d3c3;line-height:1.45}.ability-grid em{font-style:normal;font-size:10px;letter-spacing:.1em;color:#bce09c}
+.stat-grid em.bonus{font-style:normal;color:#f0d897;letter-spacing:0}
+.bonus-note{font-size:12px;margin:-6px 0 0}
+.test-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.test-rows>div{display:grid;gap:3px;padding:12px;border:1px solid #3f5f4a;background:#0a1d18}.test-rows b{font:600 20px 'Cinzel',serif}.test-rows small,.test-rows span{font-size:10px;letter-spacing:.1em;color:#a6c2ab}
+.test-rows .up{border-color:#b9ce8a}.test-rows .up span{color:#bce09c}.test-rows .down span{color:#e7a88f}
+#baselineForm.locked input{opacity:.6}
+@media(max-width:700px){.ability-grid{grid-template-columns:repeat(2,1fr)}.test-rows{grid-template-columns:repeat(2,1fr)}.wt-head,.wt-row{grid-template-columns:1fr 1fr}.goal-types{grid-template-columns:1fr}}

@@ -57,7 +57,7 @@ export class PlayerCombat {
   get countering() { return this.clock < this.counterUntil; }
   get guarding() { return this.state === 'guard'; }
   /** Guard raised within the parry window: the next blocked hit is deflected. */
-  get parrying() { return this.state === 'guard' && this.clock - this.guardSince <= GUARD.parry; }
+  get parrying() { return this.state === 'guard' && this.clock - this.guardSince <= GUARD.parry + (this.parryBonus || 0); }
   /** States in which the explorer can still walk (slowly). */
   get mobile() { return this.state === 'move' || this.state === 'guard' || this.state === 'flask'; }
   raiseGuard(on) {
@@ -136,6 +136,7 @@ export class PlayerCombat {
    * Returns {dx,dz} root displacement for this frame.
    */
   update(dt, ctx) {
+    this.parryBonus = ctx.parryBonus || 0;
     this.clock += dt; this.events = [];
     const out = { dx: 0, dz: 0 };
     const t0 = this.t; this.t += dt;
