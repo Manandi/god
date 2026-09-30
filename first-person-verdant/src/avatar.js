@@ -10,7 +10,7 @@ export const SHIRTS={moss:'#476f59',ochre:'#ad8153',slate:'#576879',clay:'#a35e5
 export const TROUSERS={charcoal:'#35413c',umber:'#594c3e',olive:'#485344',indigo:'#37425e'};
 export const HAIR_COLORS={raven:'#222b24',earth:'#563b2b',copper:'#9a5638',silver:'#bdc5b9',gold:'#ba9c64'};
 export const HAIR_STYLES=['short','curly','swept','tied','braid'];
-export const OUTFITS=['ranger','warden'];
+export const OUTFITS=['ranger','warden','wanderer','sentinel'];
 export const FACE_STYLES=['soft','sharp','round'];
 const smooth=(v,target,dt)=>THREE.MathUtils.damp(v,target,12,dt);
 const sphere=(r=.2)=>new THREE.SphereGeometry(r,24,18);
@@ -29,6 +29,9 @@ export function createAvatar(scene){
   const blockTrim=new THREE.MeshStandardMaterial({color:0x9a8359,roughness:.82});
   const blockPants=new THREE.MeshStandardMaterial({color:TROUSERS.charcoal,roughness:1});
   const bootMat=new THREE.MeshStandardMaterial({color:0x202a27,roughness:1});
+  const accentMat=new THREE.MeshStandardMaterial({color:0x9a8359,roughness:.82});
+  const armorMat=new THREE.MeshStandardMaterial({color:0x4a5650,metalness:.12,roughness:.78});
+  const clothDark=new THREE.MeshStandardMaterial({color:0x2f4539,roughness:1});
   body.mesh.visible=false;
   part(body.bones.Hips,new RoundedBoxGeometry(.48,.34,.31,3,.045),blockLeather,0,.17,0);
   part(body.bones.Spine,new RoundedBoxGeometry(.57,.44,.34,3,.055),blockCloth,0,.2,0);
@@ -47,6 +50,31 @@ export function createAvatar(scene){
     part(body.bones[side+'Leg'],new RoundedBoxGeometry(.27,.48,.29,2,.03),blockPants,0,-.215,0);
     part(body.bones[side+'Foot'],new RoundedBoxGeometry(.27,.18,.42,2,.035),bootMat,0,-.03,-.12);
   }
+  // Outfit geometry is bone-mounted so every choice changes the explorer's silhouette,
+  // not just its palette. These shapes mirror the Blender customization source in
+  // tools/blender/build_customization.py and stay animation-safe on the runtime rig.
+  const outfitGroups={};
+  for(const name of OUTFITS)outfitGroups[name]=new THREE.Group();
+  for(const g of Object.values(outfitGroups))figure.add(g);
+  const mount=(group,bone,geometry,material,x=0,y=0,z=0)=>{
+    const m=part(body.bones[bone],geometry,material,x,y,z);group.add(m);return m;
+  };
+  // Ranger: light hood/scarf, diagonal harness, short split cape.
+  mount(outfitGroups.ranger,'Chest',new RoundedBoxGeometry(.67,.12,.42,3,.04),clothDark,0,.23,.02);
+  const rangerStrap=mount(outfitGroups.ranger,'Spine',new RoundedBoxGeometry(.09,.55,.04,2,.015),blockLeather,.03,.22,-.19);rangerStrap.rotation.z=-.55;
+  for(const s of [-1,1]){const tail=mount(outfitGroups.ranger,'Hips',new RoundedBoxGeometry(.22,.48,.055,2,.02),clothDark,s*.13,-.12,.17);tail.rotation.z=s*.08;}
+  // Warden: broad pauldrons, plated chest and heavier bracers.
+  for(const side of ['Left','Right']){const s=side==='Left'?-1:1;const p=mount(outfitGroups.warden,side+'Shoulder',new RoundedBoxGeometry(.34,.16,.4,3,.045),armorMat,s*.11,-.02,0);p.rotation.z=-s*.12;}
+  mount(outfitGroups.warden,'Chest',new RoundedBoxGeometry(.58,.38,.08,3,.025),armorMat,0,.08,-.2);
+  mount(outfitGroups.warden,'Spine',new RoundedBoxGeometry(.46,.12,.39,3,.035),accentMat,0,.02,0);
+  // Wanderer: layered poncho and long asymmetric coat panels.
+  mount(outfitGroups.wanderer,'Chest',new RoundedBoxGeometry(.78,.18,.48,3,.055),blockCloth,0,.17,.015);
+  for(const s of [-1,1]){const panel=mount(outfitGroups.wanderer,'Hips',new RoundedBoxGeometry(.25,.62,.08,3,.025),blockCloth,s*.14,-.19,.17);panel.rotation.z=s*.12;}
+  mount(outfitGroups.wanderer,'Neck',new RoundedBoxGeometry(.46,.16,.4,3,.04),blockLeather,0,-.01,.01);
+  // Sentinel: unmistakably armored, with a high collar, chest plate and hip guards.
+  mount(outfitGroups.sentinel,'Chest',new RoundedBoxGeometry(.7,.42,.1,3,.03),armorMat,0,.08,-.21);
+  mount(outfitGroups.sentinel,'Neck',new RoundedBoxGeometry(.48,.2,.4,3,.045),armorMat,0,-.02,.03);
+  for(const s of [-1,1]){mount(outfitGroups.sentinel,'Hips',new RoundedBoxGeometry(.2,.38,.36,3,.035),armorMat,s*.25,.02,0);mount(outfitGroups.sentinel,s<0?'LeftForeArm':'RightForeArm',new RoundedBoxGeometry(.28,.34,.3,3,.035),armorMat,s*.02,-.12,0);}
   const face=new THREE.Group();body.head.add(face);
   const eyeParts=[],brows=[],eyelids=[];
   for(const side of [-1,1]){
@@ -60,15 +88,30 @@ export function createAvatar(scene){
   const hairGroup=new THREE.Group();hairGroup.position.set(0,.23,-.025);face.add(hairGroup);
   function hairStyle(style){
     hairGroup.clear();
-    const cap=part(hairGroup,new RoundedBoxGeometry(.405,.13,.37,3,.045),hair,0,.18,.02);
-    const fringe=part(hairGroup,new RoundedBoxGeometry(.38,.1,.08,3,.025),hair,style==='swept'?-.035:0,.105,-.17);fringe.rotation.z=style==='swept'?-.16:0;
-    if(style==='curly')for(let i=0;i<24;i++){
-      const a=i*2.399,r=.06+i%4*.031;
-      const lock=part(hairGroup,sphere(.036),hair,Math.cos(a)*r,.145+i%3*.012,Math.sin(a)*r-.025);
-      lock.scale.set(.9,.72,.9);
-    }
-    else if(style==='tied'){
-      const bun=part(hairGroup,sphere(.063),hair,0,.09,.17);bun.scale.set(1,.82,.83);
+    if(style==='short'){
+      part(hairGroup,new RoundedBoxGeometry(.41,.12,.38,3,.045),hair,0,.18,.02);
+      part(hairGroup,new RoundedBoxGeometry(.34,.075,.09,3,.02),hair,0,.11,-.17);
+    }else if(style==='curly'){
+      // Full rounded curl silhouette: volume is obvious from front, side and back.
+      for(let i=0;i<38;i++){
+        const ring=i%19,a=ring/19*Math.PI*2,r=.13+(i>=19?.035:0),y=.15+(i%5)*.026;
+        const lock=part(hairGroup,sphere(.052),hair,Math.cos(a)*r,y,Math.sin(a)*r);
+        lock.scale.set(1,.88,1);
+      }
+      for(let i=0;i<9;i++)part(hairGroup,sphere(.055),hair,(i%3-1)*.09,.27+Math.floor(i/3)*.035,(i%2-.5)*.08);
+    }else if(style==='swept'){
+      const crown=part(hairGroup,new RoundedBoxGeometry(.43,.15,.38,3,.045),hair,-.015,.19,.02);crown.rotation.z=-.08;
+      for(let i=0;i<5;i++){const lock=part(hairGroup,new RoundedBoxGeometry(.13,.08,.12,3,.025),hair,-.16+i*.075,.13+i*.025,-.17);lock.rotation.z=-.38+i*.06;}
+      const side=part(hairGroup,new RoundedBoxGeometry(.1,.25,.3,3,.03),hair,-.18,.08,.035);side.rotation.z=-.08;
+    }else if(style==='tied'){
+      part(hairGroup,new RoundedBoxGeometry(.41,.12,.38,3,.045),hair,0,.18,.02);
+      for(const s of [-1,1]){const lock=part(hairGroup,new RoundedBoxGeometry(.095,.32,.1,3,.03),hair,s*.16,.035,.08);lock.rotation.z=-s*.08;}
+      const bun=part(hairGroup,sphere(.105),hair,0,.13,.2);bun.scale.set(1,.9,.8);
+    }else if(style==='braid'){
+      part(hairGroup,new RoundedBoxGeometry(.41,.12,.38,3,.045),hair,0,.18,.02);
+      part(hairGroup,new RoundedBoxGeometry(.1,.2,.09,3,.025),hair,0,.06,.18);
+      for(let i=0;i<7;i++){const bead=part(hairGroup,sphere(.058-i*.003),hair,(i%2?-.018:.018),-.04-i*.09,.19);bead.scale.set(.82,1.08,.78);}
+      part(hairGroup,new RoundedBoxGeometry(.055,.13,.055,3,.018),accentMat,0,-.64,.19);
     }
   }
   hairStyle('short');let currentEmote='idle';
@@ -100,7 +143,9 @@ export function createAvatar(scene){
     body.paint(a);
     skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
     hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
-    blockCloth.color.set(SHIRTS[a.shirt]||SHIRTS.moss);blockLeather.color.set(a.outfit==='warden'?0x414a45:0x524537);blockPants.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
+    blockCloth.color.set(SHIRTS[a.shirt]||SHIRTS.moss);blockLeather.color.set(a.outfit==='warden'||a.outfit==='sentinel'?0x414a45:0x524537);blockPants.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
+    clothDark.color.copy(blockCloth.color).multiplyScalar(.72);
+    for(const [name,g] of Object.entries(outfitGroups))g.visible=name===(OUTFITS.includes(a.outfit)?a.outfit:'ranger');
     eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
     brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
   },emote(name){currentEmote=name;},get emoteName(){return currentEmote;},
