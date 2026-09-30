@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -86,11 +86,11 @@ export function mechanicsTable() {
   const m = mechanics(), pct = v => `${v >= 1 ? '+' : ''}${Math.round((v - 1) * 100)}%`;
   return [
     ['STRENGTH', `Strike damage ${pct(m.damage)}`],
-    ['SPEED', `Run ${m.runSpeed.toFixed(1)} m/s · dash ${pct(m.dash)} · dash i-frames +${Math.round(m.iframeBonus * 1000)} ms`],
-    ['VERTICAL JUMP', `Jump ${(m.jumpVelocity ** 2 / 44).toFixed(2)} m · ${m.doubleJump ? 'DOUBLE JUMP' : `double jump at 55 cm (${profile.inputs.verticalJumpCm} cm now)`}`],
+    ['SPEED', `Run ${units.speed(m.runSpeed)} · dash ${pct(m.dash)} · dash i-frames +${Math.round(m.iframeBonus * 1000)} ms`],
+    ['VERTICAL JUMP', `Jump ${units.short(m.jumpVelocity ** 2 / 44)} · ${m.doubleJump ? 'DOUBLE JUMP' : `double jump at ${units.cm(55)} (${units.cm(profile.inputs.verticalJumpCm)} now)`}`],
     ['STAMINA', `Action cost ${pct(m.staminaCost)} · Breath recovery ${pct(m.regen)}`],
     ['DEFENSE', `${m.maxHealth} vitality · guard cost ${pct(m.guardCost)}`],
-    ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · memories answer from +${m.echoReach.toFixed(1)} m`],
+    ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · ${m.echoReach > 0 ? `memories answer from ${units.short(m.echoReach)} farther` : 'memories answer from farther at INT 11+'}`],
     ['CLASS', `${m.klass.toUpperCase()} · parry restores ${m.parryReward} Breath`],
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],

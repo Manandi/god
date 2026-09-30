@@ -49,7 +49,7 @@ How the story uses the ChatGPT NPCs:
 
 ### Next steps, in order
 
-1. **Test co-op and team fights with two real browsers.** Open `/god/verdant/?lobby=ABC234` in two tabs or devices and walk both explorers into the Canopy Gate hollow. The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
+1. **Test co-op and team fights with two real browsers.** Open `https://manandi.github.io/god/verdant/?lobby=ABC234` in two tabs or devices (both must finish setup) and walk both explorers into the Canopy Gate hollow. The status should read `ABC234 · 2 HUNTERS · HOST` in one and `· GUEST` in the other. If it stays on CO-OP OFFLINE, in the Supabase dashboard open Project Settings → Realtime and make sure public channels are allowed ("Allow public access" on). The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
 2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`; the Old Shell's in `KINDS.oldshell` in `src/creatures.js`. Headless tests only check logic.
 3. **Town features.** A shop and more Mossgate life. Build them in the ChatGPT town, with block NPCs from `src/npcs.js`, and tie any new dialogue to the story stages in `src/story.js`.
 4. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
@@ -93,6 +93,17 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: Vite/Three.js 3D game. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
+
+## Latest shared state — 2026-10-01 (US units, Supabase check)
+
+- **US units by default (`units` in `src/profile.js`).**
+  - New players, and saves that never picked a system, use pounds, inches, miles and mph. The toggle on the measurement form reads METRIC / US · LB, IN, MI, and a choice made there is remembered (`profile.unitsChosen`).
+  - US units reach the measurement form, weigh-ins and the body goal, the walk/run tasks (whole miles: 1.25, 2, 2.5, 3), the other-activity log (miles), the stats table (run mph, jump inches) and the in-game quest distance (feet, or miles past 1,000 ft).
+- **Supabase (`hollow-roots`, `gitqmiwwakaejznucxqn`) is ready for co-op.**
+  - The project is ACTIVE_HEALTHY.
+  - Realtime accepted a broadcast to `verdant-reach:PROBE1` with the game's publishable key (HTTP 202, and it shows in the edge logs).
+  - This sandbox's proxy blocks websockets, so the upgrade never reached Supabase. A real two-browser test has still not been done.
+  - Nothing to deploy on Supabase: the game connects from GitHub Pages.
 
 ## Latest shared state — 2026-10-01 (population norms)
 

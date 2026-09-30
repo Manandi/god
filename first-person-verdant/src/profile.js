@@ -77,13 +77,14 @@ export const CLASS_INFO={
   mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
-export const profile={complete:false,introSeen:false,customized:false,units:'metric',personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
     const raw=JSON.parse(localStorage.getItem(STORAGE)||'{}');
     profile.complete=raw.complete===true;profile.introSeen=raw.introSeen===true;profile.customized=raw.customized===true;
-    profile.units=raw.units==='imperial'?'imperial':'metric';
+    // US units by default; a choice made with the METRIC/IMPERIAL toggle is remembered.
+    profile.unitsChosen=raw.unitsChosen===true;profile.units=profile.unitsChosen&&raw.units==='metric'?'metric':'imperial';
     profile.personality={role:CLASSES.includes(raw.personality?.role)?raw.personality.role:'',instinct:CLASSES.includes(raw.personality?.instinct)?raw.personality.instinct:''};
     profile.inputs=cleanInputs(raw.inputs);
     profile.reasoning=Number.isFinite(raw.reasoning)?Math.max(70,Math.min(135,raw.reasoning)):100;
@@ -119,6 +120,14 @@ const lerp=(pts,x)=>{   // piecewise linear through [x, y] points (x ascending),
 /** The share of adults (0–100) who do no better than this result. */
 export function percentile(m,v){const pts=[...m.norms].sort((a,b)=>a[0]-b[0]);return lerp(pts,v);}
 const score=(m,inputs=profile.inputs)=>Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,percentile(m,inputs[m.key])))));
+/** Distances and speeds in the player's units (US by default). */
+export const units={
+  get us(){return profile.units==='imperial';},
+  dist(m){if(!this.us)return `${Math.round(m)} m`;const ft=m*3.28084;return ft<1000?`${Math.round(ft)} ft`:`${(m/1609.34).toFixed(1)} mi`;},
+  short(m){return this.us?`${Math.round(m*39.37)} in`:`${m.toFixed(2)} m`;},
+  cm(cm){return this.us?`${Math.round(cm/2.54)} in`:`${Math.round(cm)} cm`;},
+  speed(ms){return this.us?`${(ms*2.23694).toFixed(1)} mph`:`${ms.toFixed(1)} m/s`;}
+};
 export function level(){return 1+Math.floor(Math.sqrt(profile.xp/250));}
 /** Stats straight from a set of measurements (and the mind check and training log). */
 function rawStats(inputs=profile.inputs){
@@ -231,7 +240,7 @@ export function checkPlanItem(id){
   if(!item)return 'Not in this week’s plan.';
   if(item.done.length>=item.count)return 'Already complete this week.';
   if(item.today)return 'One check per day for each task.';
-  return logActivity(item.kind,item.amount,item.id);
+  return logActivity(item.kind,profile.units==='imperial'&&item.amountUS?item.amountUS:item.amount,item.id);
 }
 /** Undo today's check (a mis-click). */
 export function uncheckPlanItem(id){

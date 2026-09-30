@@ -16,7 +16,7 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides } from './
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile } from './profile.js';
+import { profile,stats,saveProfile,units } from './profile.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
@@ -787,7 +787,7 @@ function updateHUD(){
   $('staminaFill').style.width=`${player.stamina}%`;
   const next=story.target();
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
-  $('distance').textContent=`${next.title||'CANOPY GATE'} · ${distance} m`;
+  $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
   updateWaypoint(next,distance);
   $('objective').textContent=story.info.objective;
   const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
@@ -830,7 +830,7 @@ function updateWaypoint(target,distance){
     sx=innerWidth/2+dx*k;sy=innerHeight/2+dy*k;wp.querySelector('i').style.transform=`rotate(${Math.atan2(dy,dx)+Math.PI/2}rad)`;
   }else wp.querySelector('i').style.transform='';
   wp.classList.toggle('edge',off);wp.classList.toggle('hidden',!!dialogue||distance<3);
-  wp.style.transform=`translate(${sx}px,${sy}px) translate(-50%,-50%)`;wp.querySelector('small').textContent=off?'':`${distance} m`;
+  wp.style.transform=`translate(${sx}px,${sy}px) translate(-50%,-50%)`;wp.querySelector('small').textContent=off?'':units.dist(distance);
   beacon.position.set(target.x,groundY(target.x,target.z)+35,target.z);
   beacon.material.opacity=THREE.MathUtils.clamp((distance-8)/30,0,1)*.24;beacon.visible=distance>8;
 }

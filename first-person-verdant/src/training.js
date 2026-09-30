@@ -71,16 +71,17 @@ export const WORKOUT_NOTE = 'Stop if anything hurts (not the burn of effort, rea
 // Each step of the plan. Items: id, kind (the activity it logs), how many days, and what one check logs.
 const steps = (n, count) => ({ id: 'steps', kind: 'steps', label: `Reach ${n.toLocaleString('en-US')} steps`, amount: n, count, unit: 'day' });
 const home = (w, count) => ({ id: 'home', kind: 'workout', workout: w, label: `${WORKOUTS[w].title[0]}${WORKOUTS[w].title.slice(1).toLowerCase()} · home workout`, amount: 1, count, unit: 'session' });
-const move = (km, count = 1) => ({ id: 'run', kind: 'run', label: `Walk or run ${km} km in one go`, amount: km, count, unit: 'outing' });
+// Distances come in round numbers for both systems: km for metric, miles for US units.
+const move = (km, mi, count = 1) => ({ id: 'run', kind: 'run', label: `Walk or run ${km} km in one go`, labelUS: `Walk or run ${mi} mile${mi === 1 ? '' : 's'} in one go`, amount: km, amountUS: mi * 1.609, count, unit: 'outing' });
 const learn = (min, count) => ({ id: 'study', kind: 'study', label: `Learn something for ${min} minutes`, amount: min, count, unit: 'session' });
 export const PLAN = [
   { tier: 'BEGINNER', items: [steps(5000, 2), home('A', 2), learn(20, 2)] },
   { tier: 'BEGINNER', items: [steps(5000, 3), home('A', 2), learn(20, 2)] },
-  { tier: 'FOUNDATION', items: [steps(6000, 3), home('B', 3), move(2), learn(20, 2)] },
-  { tier: 'FOUNDATION', items: [steps(7000, 3), home('B', 3), move(3), learn(30, 2)] },
-  { tier: 'BUILDER', items: [steps(8000, 4), home('C', 3), move(3), learn(30, 2)] },
-  { tier: 'BUILDER', items: [steps(8000, 4), home('C', 3), move(4), learn(30, 3)] },
-  { tier: 'ADVANCED', items: [steps(10000, 4), home('D', 3), move(5), learn(30, 3)] }
+  { tier: 'FOUNDATION', items: [steps(6000, 3), home('B', 3), move(2, 1.25), learn(20, 2)] },
+  { tier: 'FOUNDATION', items: [steps(7000, 3), home('B', 3), move(3, 2), learn(30, 2)] },
+  { tier: 'BUILDER', items: [steps(8000, 4), home('C', 3), move(3, 2), learn(30, 2)] },
+  { tier: 'BUILDER', items: [steps(8000, 4), home('C', 3), move(4, 2.5), learn(30, 3)] },
+  { tier: 'ADVANCED', items: [steps(10000, 4), home('D', 3), move(5, 3), learn(30, 3)] }
 ];
 export const PLAN_BONUS = 300;   // XP for finishing a whole week
 export const planStep = n => PLAN[Math.max(0, Math.min(PLAN.length - 1, n - 1))];
