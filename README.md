@@ -94,6 +94,12 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Customization update — 2026-09-30
+
+- Character customization was rebuilt so choices change silhouette, not just color. The active block explorer now has five visibly distinct hairstyles (short, curly, swept, tied, braid) and four outfits (ranger, warden, wanderer, sentinel) with bone-mounted geometry in `first-person-verdant/src/avatar.js`.
+- Added `first-person-verdant/tools/blender/build_customization.py` as the Blender source/concept generator for those hair and outfit designs. Blender is not installed in the GitHub connector runtime, so the script is committed for Blender generation/export rather than falsely claiming a generated .blend/.glb was verified here.
+- Runtime commits: `c2ab760` (distinct hair/outfit meshes), `0ded2e2` (Blender source generator). Preserve the newer combat/onboarding work when iterating on these assets.
+
 ## Latest shared state — 2026-10-01 (story rewrite, Old Shell and 2D game removed, leaderboard, hidden dev mode)
 
 - **The 2D game is removed** (owner's request). Its root files, the 2D Site config (`.openai/`) and `ASSETS.md` are deleted; they remain in git history.
