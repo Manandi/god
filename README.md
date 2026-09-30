@@ -24,35 +24,35 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Stats → mechanics**: what each real-life stat does in play, and frames (weight and height) | Claude | `src/mechanics.js`, `FRAMES`/`frame()` in `src/profile.js` (the stats screen shows the same table) |
 | **Onboarding**: the story intro with the floating Mycel (Blender), measure, mind check, how you play, class reveal | Claude (at the owner's request, 2026-09-30) | `src/shell.js` (intro to reveal), `src/narrator.js`, `tools/blender/build_mycel.py`, `src/reasoning.js`, `METRICS`/`PERSONALITY` in `src/profile.js`. The character creator that follows stays ChatGPT's design |
 | **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
-| **Mossgate Chronicles, dialogue choices, the Old Shell**: quest text and boss look from ChatGPT; wired into Claude's story, dialogue and creature AI | Both | `src/chronicles.js`, `oldshell` in `src/creatures.js`, `HUNT` in `src/world.js` |
-| **Dev panel (F2) and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
+| **Mossgate Chronicles, dialogue choices**: the idea and choice UI from ChatGPT; the three chronicles were rewritten into Claude's story on 2026-10-01. The Old Shell was removed at the owner's request ("it keeps the game repetitive") | Both | `src/chronicles.js` |
+| **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: Ctrl+Shift+` then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
+| **Leaderboard**: shared online board of every explorer's level and stats | Claude | `src/leaderboard.js`, `supabase/schema.sql` |
 
 How the story uses the ChatGPT NPCs:
-- In Mossgate, **Sela** (Wayfinder) starts the story, **Orin** (Warden-Captain) reviews the trial and sends you to the Rootwell, and **Mycel** and **Tavi** have story lines for every stage.
+- In Mossgate, **Sela** (Wayfinder) starts the story, **Orin** (Warden-Captain) reviews the trial and sends you to the Rootwell, and **Halden** (Rootkeeper; the NPC id is still `mycel` for old saves) and **Tavi** have story lines for every stage. The town NPC was renamed so it no longer clashes with Mycel, the floating spirit who narrates the intro.
 - The site keepers **Brannoch, Ysolde and Pip** are block NPCs in the same style.
 
-**Brought over from the Sites version (2026-09-29):** classes, weapons and their stat gates, the Rootbreaker, the double jump, the Mossgate quest (now the four Mossgate Chronicles), the Old Shell boss, dialogue choices, the F2 dev panel and F4 FPS readout, and a co-op lobby. The Sites lobby used its D1 worker, which GitHub Pages can't run, so co-op now runs on Supabase Realtime with the same lobby codes and `?lobby=CODE` links.
+**Brought over from the Sites version (2026-09-29):** classes, weapons and their stat gates, the Rootbreaker, the double jump, the Mossgate quest (now the Mossgate Chronicles), the Old Shell boss (removed 2026-10-01), dialogue choices, the dev panel and F4 FPS readout, and a co-op lobby. The Sites lobby used its D1 worker, which GitHub Pages can't run, so co-op now runs on Supabase Realtime with the same lobby codes and `?lobby=CODE` links.
 
-**Still not taken:** the KayKit legacy models. They remain on the `box-characters` branch. **Do not merge that branch wholesale:** its last commit moves the Sites project to the repo root and deletes the 2D game.
+**Still not taken:** the KayKit legacy models. They remain on the `box-characters` branch. **Do not merge that branch wholesale:** its last commit moves the Sites project to the repo root.
 
 ### Do not touch
 
 - **Character, NPC and town design.** Do not restyle, remodel, re-rig or re-proportion the block explorer, the first-person hands, the block NPCs, Mossgate or the Homestead. Town props may be added (`src/sites.js`); the ChatGPT houses, square, stalls and palisade stay as they are. The old rounded Blender explorer is kept only behind `?legacyCharacters`; never make it the default again.
-- **The root 2D Phaser game and its save data.** Do not change its behaviour or the localStorage keys it uses. Removing unused files is fine only after checking that nothing references them, including map JSON.
+- **The 2D game is gone.** The owner asked for it to be removed on 2026-10-01; it is in git history (before that date's commits) if ever needed. Don't bring it back without asking.
 - **3D save data.** Keep the `verdant-reach-3d-v1` and `hollow-roots-verdant-3d-profile-v1` keys. Any change to the save format must migrate older saves; see `createStory` in `first-person-verdant/src/story.js`. It already maps the old `meet_wren` stage to `meet_sela`.
-- **The ChatGPT Site.** `first-person-verdant/.openai/hosting.json` and its separate source must not be overwritten wholesale with this tree. The root `.openai/hosting.json` belongs to the 2D Site.
+- **The ChatGPT Site.** `first-person-verdant/.openai/hosting.json` and its separate source must not be overwritten wholesale with this tree. The 2D Site's `.openai/hosting.json` was removed with the 2D game.
 - **Secrets.** Never ask the owner to paste tokens or keys in chat. Never commit a Supabase `service_role` key. The publishable key in the Pages workflow is meant to be public.
 - **Branches and history.** Work on `claude/practical-babbage-tbonr1`. Never force-push, and never merge `box-characters` wholesale.
 - **Scope.** Don't change things the owner didn't ask for. Adding things is fine.
-- **Intentional duplicates.** `AGENTS.md` and `CLAUDE.md` are identical on purpose. Each game keeps its own `world-surface-v2.webp` on purpose.
+- **Intentional duplicates.** `AGENTS.md` and `CLAUDE.md` are identical on purpose. 
 - **Unity.** It is not usable here: it needs a licensed, signed-in editor, and the game is Three.js. Make 3D assets with the Blender scripts in `first-person-verdant/tools/blender/`.
 
 ### Next steps, in order
 
-1. **Test co-op and team fights with two real browsers.** Open `https://manandi.github.io/god/verdant/?lobby=ABC234` in two tabs or devices (both must finish setup) and walk both explorers into the Canopy Gate hollow. The status should read `ABC234 · 2 HUNTERS · HOST` in one and `· GUEST` in the other. If it stays on CO-OP OFFLINE, in the Supabase dashboard open Project Settings → Realtime and make sure public channels are allowed ("Allow public access" on). The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
-2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`; the Old Shell's in `KINDS.oldshell` in `src/creatures.js`. Headless tests only check logic.
+1. **Test co-op and team fights with two real browsers.** Open `https://manandi.github.io/god/?lobby=ABC234` in two tabs or devices (both must finish setup) and walk both explorers into the Canopy Gate hollow. The status should read `ABC234 · 2 HUNTERS · HOST` in one and `· GUEST` in the other. If it stays on CO-OP OFFLINE, in the Supabase dashboard open Project Settings → Realtime and make sure public channels are allowed ("Allow public access" on). The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
+2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`. Headless tests only check logic.
 3. **Town features.** A shop and more Mossgate life. Build them in the ChatGPT town, with block NPCs from `src/npcs.js`, and tie any new dialogue to the story stages in `src/story.js`.
-4. **Owner decision needed:** the 2D `canRetakeQuiz` (the monthly reasoning-quiz retake) is written but never called. Ask before wiring it in or deleting it.
 
 ### Map of the 3D game (`first-person-verdant/src/`)
 
@@ -61,12 +61,13 @@ How the story uses the ChatGPT NPCs:
 | `main.js` | Input, the game loop, HUD, quest waypoint, dialogue and choices, encounter spawning, boss wiring, dev panel |
 | `camera.js` | Third-person shoulder camera: right-drag orbit, lock-on framing, world collision, shake, boss intro shots |
 | `mechanics.js` | Real-life stats → damage, speed, dash, jump and double jump, Breath cost, vitality, class bonuses; the equipped weapon |
-| `chronicles.js` | The four Mossgate Chronicles and each NPC's dialogue topics |
+| `chronicles.js` | The three Mossgate Chronicles and each NPC's dialogue topics |
 | `training.js` | The weekly training plan (tasks per week, tiers) and the home workouts with their easier versions |
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
-| `creatures.js` | Shellbacks, thornlings and the Old Shell (AI, poise, topple, shell armour, quake) |
+| `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
+| `leaderboard.js` | The shared online leaderboard (Supabase table `hunters`, see `supabase/schema.sql`) |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
 | `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
 | `narrator.js` | The intro's 3D glade and the floating, animated Mycel |
@@ -81,7 +82,7 @@ How the story uses the ChatGPT NPCs:
 
 **Testing:**
 - `?arena` skips the menus; add `&third` for third person, `&debug` or F3 for the combat readout, and `&capture` for stepped frames.
-- **F2 opens the dev panel:** no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
+- **Ctrl+Shift+` then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
 - `window.__verdant` exposes the game state and its test hooks.
 - The owner prefers to test game feel themselves. Don't run long capture or video pipelines; quick logic checks are fine.
 
@@ -89,10 +90,39 @@ How the story uses the ChatGPT NPCs:
 
 - Repository: `https://github.com/Manandi/god`
 - Active branch: `claude/practical-babbage-tbonr1`. Fetch it and inspect `git status` before editing. Integrate newer commits without force pushing or discarding local changes.
-- Root project: Phaser 2D game. Preserve its code and save data while working on the separate 3D prototype.
-- `first-person-verdant/`: Vite/Three.js 3D game. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
-- GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes the 2D game at `https://manandi.github.io/god/` and this branch's 3D game at `https://manandi.github.io/god/verdant/`.
-- The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree. The root `.openai/hosting.json` belongs to the separate 2D Site.
+- `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
+- GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
+- The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (story rewrite, Old Shell and 2D game removed, leaderboard, hidden dev mode)
+
+- **The 2D game is removed** (owner's request). Its root files, the 2D Site config (`.openai/`) and `ASSETS.md` are deleted; they remain in git history.
+  - The Pages workflow now builds `first-person-verdant/` to the site root: **https://manandi.github.io/god/**.
+  - `/god/verdant/` is a small redirect page that keeps `?lobby=` codes and `#` fragments.
+  - `CLAUDE.md` and `AGENTS.md` no longer say to preserve the 2D game.
+- **The Old Shell is removed** (the owner: "it keeps the game repetitive"). Orrun is the only boss.
+  - Removed: the creature, its chronicle, its boss bar, its co-op sharing and its save flag.
+  - The Scorched Hollow stays as a place in the world and in the story.
+  - Unused `isBoss`/quake code paths remain in `creatures.js`.
+- **Story rewrite (`src/story.js`, `src/chronicles.js`, the intro in `src/shell.js`, `RELEASE_LINES` and the ending in `main.js`/`index.html`).** One thread that pays off the game's premise ("strength you did not earn, you cannot keep"):
+  - The Heartseed grows the Reach from honest effort. Orrun hatched in the Rootwell, grew by carrying the Canopy Gate's stones with the Waymakers, and swore at Mosswatch to keep the gate "until the forest forgets me".
+  - The Crown of Ashmere wanted that strength without the work. Mosswatch's wardens cut the Heartseed's roots in the Scorched Hollow and drank. Borrowed strength hollowed them out, and its rot is the Hollowing.
+  - As the forest forgets Orrun, it roots into the gate to hold on, and spreads the rot. Only earned strength (you, one of the Built) and its true name (Orrun, "the one who carries") can release it. The Heartseed takes root in the gate at the end.
+  - Every NPC's lines, for every stage, build toward this. Nobody reveals the theft before Ysolde does at Mosswatch; afterwards Orin's wardens take off the Mosswatch leaf, Tavi explains the dead Hollow, and Halden ties it to the Heartseed.
+  - The town NPC "Mycel" is renamed **Halden, Rootkeeper** (id still `mycel`), so he no longer clashes with Mycel, the floating spirit.
+  - The three chronicles (Sela, Orin, Halden) follow the three memories. The intro gained two beats that set up the theft and the finale.
+- **Hidden dev mode.** The DEV button and F2 are gone. Ctrl+Shift+` asks for a password (`DEV_PASSWORD` in `src/main.js`), once per tab. This only keeps players out by accident; the password ships in the page code.
+  - New **NEW GAME · START OVER** button erases this browser's explorer and story and reloads to the intro.
+  - The stat presets now use the adult norms: median, top ~5%, top 0.1%, bottom ~5%.
+- **Shared leaderboard (`src/leaderboard.js`, `supabase/schema.sql`, migration `hunters_leaderboard`).**
+  - Table `public.hunters`. Anyone can read name, class, level, XP and the six stats; `secret_hash` is not readable.
+  - Rows are written only through `submit_hunter`/`remove_hunter`, which check a random secret each browser makes and stores in `hollow-roots-hunter-v1`.
+  - The game submits when the menu or the board opens (at most once a minute). **HIDE ME FROM THE BOARD** removes your row.
+  - Probed from outside: the wrong secret can't overwrite, direct inserts are denied, the secret hash can't be read, and stats are clamped to 1–30. The browser test posted, showed and hid a row, and left nothing behind.
+  - Supabase's advisor warns that the two SECURITY DEFINER functions are callable by anyone; that is intended, since they are the write path and check the secret.
+- **Supabase had paused the project** (status INACTIVE, which also stopped co-op). It was restored on 2026-10-01 and is ACTIVE_HEALTHY. Free projects pause after about a week without activity; if co-op or the board says offline, check the dashboard and press Restore.
+- The 2D game's old tables `explorers` and `friendships` (0 rows) are still in the database. Delete them only if the owner agrees.
+- Tested: story, smoke, saves, boss, team and heavies tests pass. The hidden key test passed (F2 does nothing, a wrong password is refused, the right one opens the panel), and NEW GAME clears both saves and lands on the intro.
 
 ## Latest shared state — 2026-10-01 (US units, Supabase check)
 

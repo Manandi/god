@@ -1,6 +1,6 @@
 # Verdant Reach · 3D prototype
 
-Standalone 3D exploration experiment for **The Hollow Roots**. It has its own package, build, save key, and deployment. The 2D game is untouched.
+The 3D game **The Hollow Roots**, published at https://manandi.github.io/god/. (The earlier 2D game was retired on 2026-10-01.)
 
 ## Play
 
@@ -32,11 +32,11 @@ Then you make your character and select Verdant Reach from the spinning world ma
 | E | Talk / interact; 1–9 picks a dialogue choice |
 | J / M | Journal / map |
 | V | Switch first and third person (`?third` starts in third person) |
-| F2 / F3 / F4 | Dev panel / combat debug readout / FPS |
+| Ctrl+Shift+` / F3 / F4 | Hidden dev panel (password) / combat debug readout / FPS |
 | 1–4, 0 | Emotes (pose, sit, wave, cheer; clear) when no dialogue is open |
 | Esc | Pause |
 
-Mossgate's people start the story (three memories, then the Canopy Gate and Orrun) and the Mossgate Chronicles side quests, including the hunt for the Old Shell in the Scorched Hollow. Press CO-OP LOBBY to create or join a lobby by code, or share a `?lobby=CODE` link. Everyone in a lobby fights the same enemies and bosses: the host's game runs them, each story nest has two more hollowed per extra player (two for each of you), and bosses get 50% more health per extra player. Add `&net=local` to test a lobby between tabs of one browser. Progress saves in this browser.
+Mossgate's people start the story (three memories, then the Canopy Gate and Orrun) and the Mossgate Chronicles side quests. The story: a distant crown's wardens stole the forest's strength instead of earning it, and the rot they left, the Hollowing, has driven Orrun, the guardian who built the Canopy Gate, to hold on until it drags the forest down. Only earned strength and Orrun's true name can release it. Orrun is the only boss. Press CO-OP LOBBY to create or join a lobby by code, or share a `?lobby=CODE` link. Everyone in a lobby fights the same enemies and bosses: the host's game runs them, each story nest has two more hollowed per extra player (two for each of you), and bosses get 50% more health per extra player. Add `&net=local` to test a lobby between tabs of one browser. Progress saves in this browser.
 
 ## The explorer
 
@@ -52,10 +52,9 @@ The player is the Roblox-style block explorer from the ChatGPT Sites design: squ
 - **Light string:** Sapling Palm → Bough Swing → … (left click). Any heavy is also a finisher from a light strike. Heavies have hyper-armour: light hits hurt but don't interrupt.
 - **Breath (stamina):** every strike and dash spends it; it recovers after a short pause. At zero you are **winded**: no attacks or dashes until Breath is back to 30.
 - **Dash:** invulnerable frames; your real-world Speed lengthens them. Dash so an attack lands in the opening frames for a **perfect evade**: time slows, Breath returns, and your next strikes count as counters.
-- **Shellbacks and thornlings** have two moves, telegraphed before they commit: a lunging bite, and a shell spin that punishes standing beside or behind them. (The rearing slam and its shockwave ring belong to the Old Shell.) Light hits never cancel a committed attack; heavies and enough damage stagger them. Below 40% health they enrage.
+- **Shellbacks and thornlings** have two moves, telegraphed before they commit: a lunging bite, and a shell spin that punishes standing beside or behind them. Light hits never cancel a committed attack; heavies and enough damage stagger them. Below 40% health they enrage.
 - **Hitting low creatures:** their hurt volumes reach up a little, so a punch or swing thrown at chest height still lands on a turtle's shell or head.
 - **Poise:** hits wear down footing. At zero the turtle flips onto its back — its belly takes double damage and you can land a **Root Strike**. The head is a weak point (orange numbers); the shell is armoured (grey numbers, clank).
-- **The Old Shell** is a boss. Its shell halves damage until enough hits break it, which exposes the head and enrages it. When it rears, dash through the quake or guard it.
 Timing lives in `src/combat/moves.js`; each clip is keyed to the same timeline, and hits are tested against the posed limb, so first and third person land identically. Press **F3** (or add `?debug`) for a combat readout that draws the collision capsule, strike and hurt volumes and the creature's damage volumes, and logs why each strike hit, missed or was blocked. `?arena` skips the menus and starts beside the first shellback. `/lab.html?clips=palm,swing` renders any clip from several angles during development.
 
 ## Frames: every body gets something
@@ -87,7 +86,7 @@ Mycel recommends a class from your stats and your two answers about how you play
 
 The third-person camera is adapted from the CameraRig in [Rotten Souls](https://github.com/igorjohn/rotten-souls) (MIT).
 
-This is a prototype biome, not an open-world production release. Trees and substantial rocks block movement; smaller obstacles can be jumped over. The shellbacks and thornlings are 3D animated creatures; defeating them does not award XP. Weekly Quest is a week-by-week training plan you check off (home workouts with an easier version of every exercise, step days, learning); logged activity grants XP, and your level raises your damage in step with the enemies. Measurements are a monthly test: stats that rise earn a Growth bonus, and stats of 12 and 16 unlock abilities. A body goal (lose, gain or maintain) rewards healthy-paced weekly weigh-ins with a bonus to your class's stat. The other three world-map realms are level gated previews, not playable yet. The leaderboard is not connected to a shared service. The 3D profile has its own local save and does not read or modify the 2D game's save.
+This is a prototype biome, not an open-world production release. Trees and substantial rocks block movement; smaller obstacles can be jumped over. The shellbacks and thornlings are 3D animated creatures; defeating them does not award XP. Weekly Quest is a week-by-week training plan you check off (home workouts with an easier version of every exercise, step days, learning); logged activity grants XP, and your level raises your damage in step with the enemies. Measurements are a monthly test: stats that rise earn a Growth bonus, and stats of 12 and 16 unlock abilities. A body goal (lose, gain or maintain) rewards healthy-paced weekly weigh-ins with a bonus to your class's stat. The other three world-map realms are level gated previews, not playable yet. The leaderboard is shared online (Supabase): everyone sees each explorer's level and stats. The 3D profile has its own local save and does not read or modify the 2D game's save.
 
 ## Stat norms
 

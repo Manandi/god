@@ -6,13 +6,20 @@ import { SITES, GATE } from './world.js';
 // and every line of dialogue depends on the stage, so talking to anyone at
 // any time tells you something true about where the story stands.
 //
-// The lore in one breath: the Waymakers raised a shellback hatched in the
-// Rootwell, and at Mosswatch it swore to keep the Canopy Gate "until the
-// forest forgets me". Now the Hollowing rots the forest's memory; as the
-// forest forgets it, the Warden roots itself into the gate to stay
-// remembered, draining its kin (the shellbacks and thornlings) into savagery.
-// Its true name, hidden in the Canopy Shrine, is the only thing that can
-// release the oath.
+// The lore in one breath. In Built, the Heartseed grows the Verdant Reach out
+// of effort: whatever is done honestly feeds its roots. A shellback hatched in
+// the Rootwell, Orrun, grew vast working beside the Waymakers, carried the
+// stones of the Canopy Gate, and at Mosswatch swore to keep it "until the
+// forest forgets me". Then the Crown of Ashmere wanted the Reach's strength
+// without the work. Its wardens at Mosswatch cut the Heartseed's roots in what
+// is now the Scorched Hollow and drank. Borrowed strength never holds: it
+// hollowed them out, and the rot it left, the Hollowing, spread through the
+// roots, eating strength and memory alike. As the forest forgets Orrun, its
+// oath runs thin, so it roots itself into the gate and drinks the forest's
+// memory to stay remembered, which only spreads the rot. Only strength that
+// was earned can mend what stolen strength broke: an explorer from outside,
+// whose power comes from real effort, who wakes the three memories and speaks
+// Orrun's true name.
 
 const site = id => SITES.find(s => s.id === id);
 const titleCase = text => text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -28,7 +35,8 @@ export const NPCS = {
     look: { skin: 0xe0ad7f, hair: 0xb29b73, iris: 0x355468, cloth: 0x9a7451, braid: true, mouthTilt: .06 } },
   orin: { name: 'ORIN', title: 'WARDEN-CAPTAIN', x: 6.4, z: 53.6, facing: Math.PI * .92,
     look: { skin: 0x8f624a, hair: 0x76513b, iris: 0x523d2a, cloth: 0x526b79, browTilt: .12, armTilt: .13 } },
-  mycel: { name: 'MYCEL', title: 'ROOTKEEPER', x: -3.2, z: 48.2, facing: Math.PI * .12,
+  // The id stays 'mycel' for old saves; he tends the Heartseed's roots and hears Mycel through them.
+  mycel: { name: 'HALDEN', title: 'ROOTKEEPER', x: -3.2, z: 48.2, facing: Math.PI * .12,
     look: { skin: 0xc48f68, hair: 0x29302b, iris: 0x385342, cloth: 0x6f8f63, beard: true } },
   tavi: { name: 'TAVI', title: 'HERBALIST', x: 9.1, z: 43.9, facing: Math.PI * .92,
     look: { skin: 0xb97959, hair: 0x3b2925, iris: 0x4d382d, cloth: 0x7d596f, browTilt: .12, armTilt: .13 } },
@@ -49,24 +57,24 @@ export const CHAPTERS = [
     mobs: [[-68, -50, 'shellback'], [-57, -55, 'shellback'], [-71, -37, 'thornling']],
     fight: 'Clear the hollowed nest at the Rootwell', memory: 'Recover the memory in the Rootwell', report: 'Tell Brannoch what the spring remembered',
     memoryTitle: 'THE FIRST MEMORY · A HATCHLING IN THE SPRING',
-    memoryText: 'In the first spring a shellback hatched in the Rootwell. The Waymakers knelt in the water around it, and it followed them up the trail.' },
+    memoryText: 'In the first spring a shellback hatched in the Rootwell. The Waymakers did not tame it; they worked beside it. It carried the first stones of the Canopy Gate on its back, and it grew as they grew.' },
   { id: 'ruins', npc: 'ysolde', site: site('ruins'),
     mobs: [[67, -91, 'thornling'], [68, -86, 'thornling'], [58, -99, 'shellback']],
     fight: 'Drive the thornlings from the Mosswatch arches', memory: 'Listen to the oath-stone at Mosswatch', report: 'Tell Ysolde the words of the oath',
     memoryTitle: 'THE OATH · MOSSWATCH',
-    memoryText: 'Grown vast, the shellback bowed before the Sentinels on these stones and swore: “I will keep the gate until the forest forgets me.”' },
+    memoryText: 'Grown vast from honest work, the shellback bowed before the Sentinels on these stones and swore: “I will keep the gate until the forest forgets me.” Behind it, the Sentinels were already reading a letter from the Crown of Ashmere.' },
   { id: 'shrine', npc: 'pip', site: site('shrine'),
     mobs: [[-24, -145, 'thornling'], [-19, -163, 'shellback'], [-3, -163, 'thornling'], [-26, -157, 'thornling']],
     fight: 'Clear the thornlings from the Canopy Shrine', memory: 'Find the carving in the Canopy Shrine', report: 'Tell Pip the name you found',
     memoryTitle: 'THE NAME · ORRUN',
-    memoryText: 'High in the crown the Waymakers carved the name they gave it, so that it could never be lost: ORRUN.' }
+    memoryText: 'High in the crown the Waymakers carved the name they gave it, so that it could never be lost: ORRUN, which in their tongue meant “the one who carries”.' }
 ];
 const chapter = id => CHAPTERS.find(c => c.id === id);
 
 // Ordered stages. `target` is an NPC id, a chapter's site, or a point.
 export const STAGES = [
   { id: 'meet_sela', objective: 'Speak with Sela in Mossgate', target: 'sela' },
-  { id: 'trial', objective: 'Drive back the shellback past Mossgate\'s north gate', target: { x: 1, z: 27, title: 'NORTH OF MOSSGATE' } },
+  { id: 'trial', objective: 'Break the hollowed shellback past Mossgate\'s north gate', target: { x: 1, z: 27, title: 'NORTH OF MOSSGATE' } },
   { id: 'trial_report', objective: 'Report to Captain Orin', target: 'orin' },
   ...CHAPTERS.flatMap(c => [
     { id: c.id, chapter: c.id, step: 'find', objective: `Find ${keeperName(c.npc)} at ${titleCase(c.site.title).replace(/^The /, 'the ')}`, target: c.npc },
@@ -87,9 +95,10 @@ const DIALOGUE = {
   sela: {
     main: {
       meet_sela: { then: 'trial', lines: [
-        'Easy, {name}. You came up from the Homestead. Welcome to Mossgate. I am Sela, the Wayfinder; I keep the lantern road lit so the forest remembers where it leads.',
-        'It is forgetting anyway. There is a rot in the roots, the Hollowing. It eats memory, and anything that forgets what it is turns savage.',
-        'Even the shellbacks. They used to follow us up the lantern road like dogs. The one past the north gate doesn’t know me anymore.',
+        'Easy, {name}. You came up from the Homestead on your own two feet; I watched your lantern the whole way. Welcome to Mossgate. I am Sela, the Wayfinder.',
+        'I keep the lantern road lit so the forest remembers where it leads. Lately that is harder. There is a rot in the roots. We call it the Hollowing.',
+        'It eats strength and memory together. A shellback that forgets what it is turns savage. They used to follow us up this road like dogs; the one past the north gate doesn’t know me any more.',
+        'Mycel says you are one of the Built: whatever you earn out there, you carry in here. The Reach has waited a long time for strength that was earned.',
         'Captain Orin lets no one down my road who can’t stand their ground. Go out the north gate and break that shellback’s footing. Watch the glow in its shell: that is its tell.'
       ] }
     },
@@ -97,9 +106,9 @@ const DIALOGUE = {
       ['<trial_report', 'Out the north gate, past the ward posts. Watch the glow in its shell before it moves. Dash into the strike, or hold C and meet it head on.'],
       ['<rootwell', 'Orin watched that from the wall. Go and tell him; he decides where the road starts for you.'],
       ['<ruins', 'Brannoch is as stubborn as bark. If he has gone quiet, it is because he is too busy to talk. I tell myself that, anyway.'],
-      ['<shrine', 'Ysolde was a Sentinel of Mosswatch when I was a girl. If anyone still knows the Warden’s oath word for word, it is her.'],
+      ['<shrine', 'A hatchling that carried stone. My grandmother’s lullaby had a shellback in it who “built the door and kept the key”. I thought it was only a song.'],
       ['<gate', 'Pip went up to the Shrine? Of course they did. That child has been hunting the Warden’s name since they could climb.'],
-      ['<end', 'Three memories. My lanterns are burning steadier already. Go, {name}, and say its name when it matters.'],
+      ['<end', 'Three memories. My lanterns are burning steadier already. Go, {name}. Say its name, and mean it.'],
       ['>=end', 'The lanterns haven’t burned this bright since I was an apprentice. The road goes on past the gate now, and so will you.']
     ]
   },
@@ -107,7 +116,7 @@ const DIALOGUE = {
     main: {
       trial_report: { then: 'rootwell', lines: [
         'I saw that from the wall. You read it instead of just swinging. The deeper roots will ask the same of you.',
-        'Here is what the wardens know. Something sleeps beneath the Canopy Gate at the end of Sela’s road. The old songs call it the Warden. The Hollowing began there.',
+        'Here is what the wardens know. Something holds the Canopy Gate at the end of Sela’s road. The old songs call it the Warden. Every year its roots reach further, and every year the Hollowing follows them.',
         'The forest kept three memories of the Warden: one in the Rootwell, one at Mosswatch, one in the crown of the Canopy Shrine. If the forest remembers it, perhaps it will remember itself.',
         'Start at the Rootwell, west along the lanterns. Brannoch keeps the spring there. He hasn’t sent word in nine days.',
         'And see Tavi before you go. Her Sap Flasks will keep you standing, and the brazier in the square refills them.'
@@ -116,7 +125,10 @@ const DIALOGUE = {
     idle: [
       ['<trial', 'Sela decides who walks her road. Speak with her first.'],
       ['<trial_report', 'The shellback past the north gate. Break its footing, then come back to me.'],
-      ['<gate', 'The ward posts are holding while you push the Hollowing back. Every memory you wake makes them glow brighter.'],
+      ['<rootwell_report', 'Brannoch is west along the lanterns. If he is alive, he is swearing. Follow the swearing.'],
+      ['<ruins', 'The ward posts glow brighter already. Whatever you woke in that spring, the roots felt it.'],
+      ['<shrine', 'Mosswatch. My wardens still wear its leaf on their shoulders. If Ysolde tells you what I think she will, I will be taking mine off.'],
+      ['<gate', 'Ashmere’s crown bought strength it never earned, and my order carried out the purchase. Mossgate’s wardens will not make that trade again. Not while I lead them.'],
       ['<end', 'If the Warden kept that gate for a thousand years, it has earned a warden’s respect. End it cleanly.'],
       ['>=end', 'The wards are quiet. First time in my command. Don’t tell anyone I said thank you.']
     ]
@@ -124,21 +136,23 @@ const DIALOGUE = {
   mycel: {
     main: {},
     idle: [
-      ['<rootwell', 'The city remembers your footsteps, even when the forest does not. Listen to Sela; the Hollowing is older than her lanterns.'],
-      ['<ruins', 'The Rootwell was the forest’s first spring. If its memory is fouled, everything downstream forgets a little.'],
-      ['<shrine', 'Mosswatch’s wardens swore their oaths on stone so the words would outlast them. Stone forgets too, only slowly.'],
-      ['<gate', 'An oath is a root: it holds, and it binds. The Warden has held on so long that it cannot let go.'],
-      ['<end', 'Names are the deepest roots. Carry that one carefully.'],
-      ['>=end', 'Orrun sleeps, and the roots are warm again. You did not only win a fight, {name}. You helped the forest remember.']
+      ['<rootwell', 'I am Halden. I tend the Heartseed’s roots beneath the square, and sometimes Mycel speaks through them. Today they say your name.'],
+      ['<ruins', 'The Rootwell was the forest’s first spring. If its memory is fouled, everything downstream forgets a little. Everything, and everyone.'],
+      ['<shrine', 'Mosswatch’s Sentinels swore their oaths on stone so the words would outlast them. Stone forgets too, only slowly. Ask Ysolde what else those stones heard.'],
+      ['<gate', 'Now you know why the Hollowing hurts the strong first: it feeds on strength that was taken. And an oath is a root; the Warden has held on so long it cannot let go. It needs its name, and a hand whose strength is its own.'],
+      ['<end', 'Names are the deepest roots. Carry that one carefully. The Heartseed will follow you to the gate.'],
+      ['>=end', 'The Heartseed has taken root in the gate. You did not only win a fight, {name}. You gave the forest something it could keep.']
     ]
   },
   tavi: {
     main: {},
     idle: [
       ['<rootwell', 'Rest beside the green brazier in the square and I’ll bind your wounds. Stand by it and press E.'],
-      ['<gate', 'Three Sap Flasks, and the brazier refills them. Drink when it hurts, not when it’s hopeless: a flask takes a moment to go down.'],
-      ['<end', 'Whatever sleeps under that gate has been sick a long time. Hit it where the shell cracks, and don’t stand in front of it when it rears.'],
-      ['>=end', 'Sunmoss for wounds, bellcap for fever, and ghostfern for mistakes best left unnamed. You’ll need less of all three now.']
+      ['<ruins', 'Three Sap Flasks, and the brazier refills them. Drink when it hurts, not when it’s hopeless: a flask takes a moment to go down.'],
+      ['<shrine', 'Nothing grows in the Scorched Hollow east of the road. Not since before my grandmother’s time, and she never would say why. Just shook her head and said “Mosswatch.”'],
+      ['<gate', 'Stolen sap is sweet for a season, then it rots you from the root. That is the whole Hollowing, in an herbalist’s words.'],
+      ['<end', 'Whatever holds that gate has been sick a long time. Hit it where the shell cracks, and don’t stand in front of it when it rears.'],
+      ['>=end', 'Sunmoss is sprouting at the edge of the Scorched Hollow. First green there in my lifetime.']
     ]
   },
   brannoch: {
@@ -155,8 +169,8 @@ const DIALOGUE = {
       ] },
       rootwell_report: { then: 'ruins', lines: [
         'You have that look. The spring showed you something.',
-        'A hatchling in the water, and the first Waymakers kneeling around it. So that is where the Warden came from. It was born here, in my spring.',
-        'My grandmother used to say the Warden never guarded the gate for the Waymakers. It guarded it because it loved this forest, and it swore an oath to it at Mosswatch.',
+        'A hatchling in the water, and the Waymakers working beside it, stone by stone. So the Warden was born here, in my spring, and it built the very gate it guards.',
+        'My grandmother said it never guarded the gate for the Waymakers. It guarded it because it had built it, and you don’t abandon what you built. It swore as much at Mosswatch.',
         'Ysolde keeps the oath-stones there, east along the lanterns. Mind the thornlings. Mosswatch was always theirs, but they never used to bite.'
       ] }
     },
@@ -165,7 +179,7 @@ const DIALOGUE = {
       ['<rootwell_memory', 'Keep one of them in front of you. They take turns if you let them; the clever ones wait for your back.'],
       ['<rootwell_report', 'The spring has gone quiet. The memory is yours to carry. Touch the light over the pool.'],
       ['<gate', 'The pool is clearing. I saw a fish this morning, the first in nine days. Tell Sela.'],
-      ['<end', 'If you face the Warden, remember it hatched in this water. Tell it the spring still remembers.'],
+      ['<end', 'If you face the Warden, remember it hatched in this water and hauled stone for us. Tell it the spring still remembers.'],
       ['>=end', 'The spring is running sweet again. Whatever you said to that old shell, it listened.']
     ]
   },
@@ -182,19 +196,19 @@ const DIALOGUE = {
       ] },
       ruins_report: { then: 'shrine', lines: [
         '“Until the forest forgets me.” I had lost those words. I kept them for sixty years and lost them.',
-        'Don’t you see? That is the Hollowing. As the forest forgets the Warden, its oath runs out. So it roots itself into the gate to hold on, and drinks the forest’s memory to stay remembered.',
-        'It isn’t cruel. It is frightened, and it is taking the whole forest down with it.',
-        'Only its true name can release an oath like that. The Waymakers hid the name in the crown of the Canopy Shrine.',
-        'A young scout went up there already. Pip. Sela’s stories got into their head. North along the lanterns.'
+        'And the letter. I had forgotten that too, or wanted to. The Crown of Ashmere wanted the Reach’s strength without the labour. Our wardens obeyed. They cut the Heartseed’s roots in the Hollow east of Mossgate and drank.',
+        'Borrowed strength never holds. It hollowed them out, all of them, and the rot it left behind is the Hollowing. Mosswatch did this. We did this.',
+        'As the forest forgets the Warden, its oath runs out. So it roots itself into the gate to hold on, and drinks the forest’s memory to stay remembered. It isn’t cruel. It is frightened.',
+        'Only its true name can release an oath like that. The Waymakers carved it in the crown of the Canopy Shrine. A young scout went up there already. Pip. North along the lanterns.'
       ] }
     },
     idle: [
       ['<ruins', 'Mosswatch isn’t for wanderers. If Sela sent you, you will have news from the Rootwell first.'],
       ['<ruins_memory', 'Thornlings are quicker than shellbacks but lighter. Let the lunge land beside you, then answer.'],
       ['<ruins_report', 'Go to the oath-stone and listen closely. I have been forgetting the words myself.'],
-      ['<gate', 'The words are coming back to me, all of them. Go on, the Shrine.'],
-      ['<end', 'When you face it, don’t only fight. Remind it.'],
-      ['>=end', 'The oath is fulfilled. The stones feel lighter for it.']
+      ['<gate', 'The words are coming back to me, all of them, even the ones I would rather lose. Go on, the Shrine.'],
+      ['<end', 'What we took by force, you have earned by sweat. That is the only thing that can pay the debt. When you face it, don’t only fight. Remind it.'],
+      ['>=end', 'The oath is fulfilled, and the debt with it. The stones feel lighter for it.']
     ]
   },
   pip: {
@@ -210,15 +224,15 @@ const DIALOGUE = {
         'I’m Pip, apprentice scout. The Warden’s name is carved in the crown, just above the light. Go on, find it.'
       ] },
       shrine_report: { then: 'gate', lines: [
-        'Orrun. It’s called Orrun. I have said “the Warden” my whole life and it had a name the entire time.',
-        'You know what that means? It isn’t a monster. It’s someone who got forgotten.',
-        'The gate is just north-east of here. Say its name and maybe it stops. Or maybe it hits you really hard. Honestly, could go either way.',
+        'Orrun. “The one who carries.” I have said “the Warden” my whole life and it had a name the entire time.',
+        'It carried the gate stones. It carried the oath. And now it’s carrying the whole forest’s rot so the gate doesn’t fall. That’s why it can’t let go.',
+        'It isn’t a monster. It’s someone who got forgotten. The gate is just north-east of here. Knock it down, then say its name.',
         'I’m going back to tell Sela. She will be so angry I came up here, and then so proud. In that order.'
       ] }
     },
     idle: [
       ['<shrine', 'Shh! Thornlings, everywhere. Come back with somebody who knows what they’re doing. Or be that somebody.'],
-      ['<shrine_memory', 'When a shellback rears up, jump or dash through the ring. Through! I learned that the hard way. My ribs learned it.'],
+      ['<shrine_memory', 'When something big rears up, jump or dash through the ring. Through! I learned that the hard way. My ribs learned it.'],
       ['<shrine_report', 'The carving is just above the light. Go on, touch it. I would, but I’m supervising.'],
       ['<end', 'Orrun. Say it like you mean it. Don’t let it be forgotten again.'],
       ['>=end', 'You did it! Sela says I can be a real scout now. On probation. Heavy probation.']
@@ -304,12 +318,12 @@ export function createStory(saved, memories) {
     },
     /** Journal pages: the story so far, in order, up to the current stage. */
     journal() {
-      const pages = [{ title: 'PROLOGUE · THE WAYFINDER', text: 'Sela, the Wayfinder of Mossgate, keeps the lantern road. A rot called the Hollowing is eating the forest’s memory, and the creatures that forget turn savage.', open: true }];
-      pages.push({ title: 'THE WARDEN', text: 'Something sleeps beneath the Canopy Gate. The forest kept three memories of it: at the Rootwell, at Mosswatch, and in the Canopy Shrine.', open: story.reached('rootwell') });
+      const pages = [{ title: 'PROLOGUE · THE WAYFINDER', text: 'Sela, the Wayfinder of Mossgate, keeps the lantern road. A rot called the Hollowing is eating the forest’s strength and memory, and the creatures that forget turn savage. She says you are one of the Built: what you earn out there, you carry in here.', open: true }];
+      pages.push({ title: 'THE WARDEN', text: 'Something holds the Canopy Gate at the end of the road, and the Hollowing follows its roots. The forest kept three memories of it: at the Rootwell, at Mosswatch, and in the Canopy Shrine.', open: story.reached('rootwell') });
       for (const c of CHAPTERS) pages.push({ title: c.memoryTitle, text: c.memoryText, open: memories.has(c.id) });
-      pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'As the forest forgets the Warden, its oath runs out. It has rooted itself into the gate and drinks the forest’s memory to stay remembered. Only its name can release it.', open: story.reached('shrine') });
-      pages.push({ title: 'ORRUN', text: 'The Warden has a name. Carry it to the Canopy Gate.', open: story.reached('gate') });
-      pages.push({ title: 'THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Canopy Gate stands open.', open: story.reached('end') });
+      pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'The Crown of Ashmere wanted the Reach’s strength without the labour. Mosswatch’s wardens cut the Heartseed’s roots in the Scorched Hollow and drank. Borrowed strength never holds: it hollowed them out, and its rot is the Hollowing. As the forest forgets the Warden, it roots into the gate to hold on, and spreads the rot further.', open: story.reached('shrine') });
+      pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Only earned strength and its true name can release it. Carry both to the Canopy Gate.', open: story.reached('gate') });
+      pages.push({ title: 'THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. What was taken by force has been paid back by effort.', open: story.reached('end') });
       return pages;
     },
     serialize() { return { v: 2, stage, cleared: [...cleared] }; }

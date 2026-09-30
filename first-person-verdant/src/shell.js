@@ -1,6 +1,7 @@
 import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility,weeklyPlan,checkPlanItem,uncheckPlanItem,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
 import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
 import {WORKOUTS,WORKOUT_NOTE} from './training.js';
+import {leaderboard} from './leaderboard.js';
 import {QUESTIONS,canTakeReasoning} from './reasoning.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
@@ -15,7 +16,9 @@ const INTRO=[
   {mood:'warm',text:'But Built does not only reward the strongest. Every body has a gift here.'},
   {mood:'hopeful',text:'A heavy frame stands like stone: hard to hurt, harder to knock down. A light or tall frame moves like wind. A balanced frame finds a second wind when others fall.',chips:['STONEFRAME · MORE VITALITY · STEADFAST','SWIFTFRAME · FASTER · LONGER DASH','TRUEFRAME · MORE BREATH · SECOND WIND']},
   {mood:'stern',text:'And you will not grow by slaying monsters. Cut down every creature in the forest and your arms will be exactly as they were this morning. Here, you grow when you grow.'},
-  {mood:'serious',text:'The forest is sick. Its memories have been drained, and its old guardian has turned. It needs someone real.'},
+  {mood:'serious',text:'Long ago, a crown far from here wanted this forest’s strength without the work. Its wardens cut the Heartseed’s roots and drank. Borrowed strength never holds: it hollowed them out, and the rot they left still spreads. We call it the Hollowing.'},
+  {mood:'thoughtful',text:'It eats strength and memory together. The shellbacks forget what they are. And the old guardian who built the Canopy Gate is holding on so hard that it is dragging the whole forest down with it.'},
+  {mood:'hopeful',text:'Only strength that was earned can mend what stolen strength broke. That is why the forest needs someone real. That is why it needs you.'},
   {mood:'welcoming',text:'I am Mycel, keeper of the Heartseed. Before you step in, I must take your measure: your body, your mind, and the way you fight.'},
   {mood:'warm',text:'Be honest. The roots always know, and nobody here judges where you start. Only that you start.'}
 ];
@@ -54,6 +57,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   function renderMenu(){
     entry.innerHTML=`<section class="shell-card menu-card"><span class="eyebrow">REAL EFFORT · IN-GAME POWER</span><h1>THE HOLLOW<br>ROOTS</h1><p class="shell-subtitle">What you build outside, you carry inside.</p><div class="level-strip"><strong>LV ${level()} EXPLORER</strong><span>${profile.xp} real-world XP</span><button data-action="stats">VIEW STATS ↗</button></div><div class="menu-actions">${button('map','CONTINUE · WORLD MAP',true)}${button('customize','CUSTOMIZE')}${button('weekly','WEEKLY QUEST + LOG')}${button('leaderboard','LEADERBOARD')}</div><small class="save-caption">AUTOSAVE ON · YOUR 3D PROTOTYPE HAS ITS OWN PROFILE</small></section>`;
     for(const name of ['map','customize','weekly','leaderboard','stats'])entry.querySelector(`[data-action="${name}"]`).onclick=()=>show(name);
+    submitSoon();
   }
   function renderBaseline(){
     const imperial=profile.units==='imperial',conv=m=>imperial&&m.imperial;
@@ -198,7 +202,26 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     };
     entry.querySelectorAll('[data-feature]').forEach(b=>b.onclick=()=>{const key=b.dataset.feature;profile.appearance[key]=key==='skinIndex'?Number(b.dataset.value):b.dataset.value;saveProfile();onAppearance();renderCustomize();});
   }
-  function renderLeaderboard(){entry.innerHTML=`<section class="shell-card wide-card"><div class="panel-heading"><div><span class="eyebrow">THE HOLLOW ROOTS</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div><p>The 3D prototype does not have an online leaderboard connection yet. Other players' scores and islands cannot be shown accurately until a shared service is configured.</p><div class="stat-grid"><div><small>YOUR LEVEL</small><strong>${level()}</strong><span>EXPLORER</span></div><div><small>YOUR XP</small><strong>${profile.xp}</strong><span>REAL EFFORT</span></div></div></section>`;entry.querySelector('[data-action="back"]').onclick=()=>show('menu');}
+  // The shared board (leaderboard.js): everyone's level and stats. Your row is sent when you open it,
+  // and quietly whenever the menu shows (at most once a minute).
+  let lastSubmit=0;
+  const submitSoon=()=>{if(Date.now()-lastSubmit<60000)return Promise.resolve();lastSubmit=Date.now();return leaderboard.submit().catch(()=>{lastSubmit=0;});};
+  function renderLeaderboard(){
+    const head=`<div class="panel-heading"><div><span class="eyebrow">EVERY EXPLORER · RANKED BY LEVEL</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div>`;
+    const hide=`<div class="panel-actions"><button type="button" data-action="hide">${leaderboard.hidden?'SHOW ME ON THE BOARD':'HIDE ME FROM THE BOARD'}</button>${button('refresh','REFRESH',true)}</div>`;
+    entry.innerHTML=`<section class="shell-card wide-card board-card">${head}<p>Levels come only from real training you log; stats come from your monthly test. Your name, class, level and stats are shared here${leaderboard.hidden?' (you are hidden right now)':''}.</p><div class="board-wrap"><p class="board-note">Loading the board…</p></div>${hide}</section>`;
+    const wire=()=>{entry.querySelector('[data-action="back"]').onclick=()=>show('menu');
+      entry.querySelector('[data-action="refresh"]').onclick=()=>{lastSubmit=0;renderLeaderboard();};
+      entry.querySelector('[data-action="hide"]').onclick=async e=>{e.target.disabled=true;try{await leaderboard.setHidden(!leaderboard.hidden);}catch{}renderLeaderboard();};};
+    wire();
+    lastSubmit=0;
+    submitSoon().then(()=>leaderboard.top()).then(rows=>{
+      if(view!=='leaderboard')return;
+      const me=leaderboard.id,cols=['strength','speed','stamina','defense','intelligence','discipline'];
+      const table=rows.length?`<table class="board"><thead><tr><th>#</th><th>EXPLORER</th><th>CLASS</th><th>LV</th><th>XP</th>${cols.map(c=>`<th>${short[c]}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.id===me?'me':''}"><td>${i+1}</td><td>${esc(r.name)}${r.id===me?' <em>YOU</em>':''}</td><td>${esc(CLASS_INFO[r.klass]?.label||r.klass)}</td><td>${r.level}</td><td>${r.xp}</td>${cols.map(c=>`<td>${r.stats?.[c]??'–'}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="board-note">No explorers yet. Finish your measure and you will be the first.</p>';
+      entry.querySelector('.board-wrap').innerHTML=table;
+    }).catch(()=>{if(view==='leaderboard')entry.querySelector('.board-wrap').innerHTML='<p class="board-note">The board could not be reached. Check your connection and press REFRESH.</p>';});
+  }
   function renderMap(){
     entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd></dl>${button('enter',selected.id==='grove'?'ENTER VERDANT REACH →':level()<selected.level?`LOCKED · LEVEL ${selected.level}`:'REALM IN DEVELOPMENT',true)}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${level()<b.level?`LV ${b.level}`:b.id==='grove'?'OPEN':'SOON'}</small></button>`).join('')}</div></div></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');

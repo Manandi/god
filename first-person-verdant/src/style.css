@@ -56,3 +56,4 @@
 #dialogueChoices button{display:flex;gap:10px;align-items:baseline;text-align:left;padding:9px 12px;border:1px solid #6f8f6b;background:#10251fcc;color:#e8f1df;font:14px/1.4 'Cinzel',serif;cursor:pointer}
 #dialogueChoices button:hover{background:#c6de9e;color:#142018}#dialogueChoices b{font:700 11px 'DM Mono',monospace;color:#f0d98f}#dialogueChoices button:hover b{color:#142018}
 #sideObjective{color:#f0d98f}
+.dev-panel button.danger{border-color:#a4553f;color:#f3c2b3}.dev-panel button.danger:hover{background:#a4553f;color:#fff}

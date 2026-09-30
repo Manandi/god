@@ -23,8 +23,8 @@ const damp = THREE.MathUtils.damp;
 const KINDS = {
   shellback: { size: .64, pace: 1, health: 45, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
   thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
-  // The Old Shell (ChatGPT Sites boss): a charred giant with breakable armour and a quake.
-  oldshell: { size: 1.48, pace: 1.08, health: 900, poise: 48, walk: .72, chase: 1.9, turn: 2.25, notice: 24, spacing: 4.4, cooldown: [1.1, 2.1], biteRadius: .75 }
+  // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
+  // from the game on the owner's request; its isBoss / quake code paths below are unused.
 };
 // The moveset. Each attack: wind-up (the telegraph), active, recovery (the
 // punish window). `track` is how long the wind-up keeps turning toward the
@@ -572,7 +572,7 @@ export class Creature {
   }
 }
 
-export function createCreatures(scene, chapters = [], hunt = null) {
+export function createCreatures(scene, chapters = []) {
   // The first shellback waits on the open slope below the camp so the first
   // fight (Wren's trial) happens on readable ground. It returns after defeat.
   const list = [new Creature(scene, 1, 27, 'shellback', { respawn: 6, id: 'trial' })];
@@ -581,8 +581,6 @@ export function createCreatures(scene, chapters = [], hunt = null) {
   for (const c of chapters) for (const [x, z, type] of c.mobs) {
     const m = new Creature(scene, x, z, type, { chapter: c.id }); m.sleep(); list.push(m);
   }
-  // The Old Shell nests in the Scorched Hollow: a standing hunt, not part of any chapter.
-  if (hunt) list.push(new Creature(scene, hunt.x, hunt.z - 3, 'oldshell', { id: 'oldshell' }));
   return list;
 }
 

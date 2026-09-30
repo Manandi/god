@@ -1,4 +1,4 @@
-# Builds the game and publishes it to GitHub Pages, so friends can play (and
+# Builds the 3D game and publishes it to GitHub Pages, so friends can play (and
 # join the leaderboard) at https://manandi.github.io/god/.
 #
 # One-time: Settings → Pages → Build and deployment → Source: "GitHub Actions".
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Supabase's publishable key is built to ship in the browser bundle;
-      # row-level security in supabase/schema.sql is what limits it.
+      # row-level security and the functions in supabase/schema.sql limit it.
       VITE_SUPABASE_URL: https://gitqmiwwakaejznucxqn.supabase.co
       VITE_SUPABASE_ANON_KEY: sb_publishable_uRC4vHHdHUnrdsqV2cSajA_HWrPTmZK
     steps:
@@ -32,15 +32,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx vite build --base=./ --sourcemap false
-      # The 3D prototype is a separate project; it is published alongside the
-      # 2D game at /god/verdant/ without touching the 2D build.
+          cache-dependency-path: first-person-verdant/package-lock.json
+      # The 3D game is the whole site (the 2D game was retired on 2026-10-01).
       - run: npm ci
         working-directory: first-person-verdant
-      - run: npx vite build --base=./ --outDir ../dist/verdant --emptyOutDir
+      - run: npx vite build --base=./ --outDir ../dist --emptyOutDir
         working-directory: first-person-verdant
+      # Old links (/god/verdant/, including ?lobby= codes) land on the game at /god/.
+      - run: |
+          mkdir -p dist/verdant
+          cat > dist/verdant/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>The Hollow Roots</title>
+          <script>location.replace('../' + location.search + location.hash);</script>
+          <a href="../">The Hollow Roots has moved. Continue →</a>
+          HTML
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
