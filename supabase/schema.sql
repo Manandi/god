@@ -6,7 +6,8 @@
 -- Each browser makes a random hunter id and secret (first-person-verdant/src/
 -- identity.js). Rows are only written through the functions below, by whoever
 -- holds the secret; the secret itself is stored only as a SHA-256 hash.
--- (The shared leaderboard, table `hunters`, was removed on 2026-10-01.)
+-- The leaderboard (`hunters`, with stat caps) was removed and then brought back
+-- on 2026-10-01 at the owner's request; it never holds weight or height.
 
 create extension if not exists pgcrypto with schema extensions;
 
@@ -120,3 +121,88 @@ revoke all on function public.create_device_link(uuid,text) from public;
 revoke all on function public.claim_device_link(text) from public;
 grant execute on function public.create_device_link(uuid,text) to anon,authenticated;
 grant execute on function public.claim_device_link(text) to anon,authenticated;
+
+
+-- Leaderboard: name, class, level, XP and the six game stats only (never weight,
+-- height or raw test numbers). Applied as migrations leaderboard_with_caps and
+-- caps_survive_hiding.
+create table if not exists public.hunters (
+  id uuid primary key,
+  secret_hash text not null,
+  name text not null check (char_length(btrim(name)) between 1 and 24),
+  level int not null default 1 check (level between 1 and 999),
+  xp int not null default 0 check (xp between 0 and 10000000),
+  klass text not null default 'fighter' check (klass in ('fighter','tank','ranger','mage','support')),
+  stats jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.hunters enable row level security;
+revoke all on public.hunters from anon, authenticated;
+grant select (id, name, level, xp, klass, stats, updated_at) on public.hunters to anon, authenticated;
+drop policy if exists "hunters are public" on public.hunters;
+create policy "hunters are public" on public.hunters for select to anon, authenticated using (true);
+
+create or replace function public.submit_hunter(p_id uuid, p_secret text, p_name text, p_level int, p_xp int, p_klass text, p_stats jsonb)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare
+  h text := encode(extensions.digest(p_secret, 'sha256'), 'hex');
+  clean jsonb := '{}'::jsonb;
+  k text;
+begin
+  if p_secret is null or char_length(p_secret) < 20 then raise exception 'bad secret'; end if;
+  if exists (select 1 from public.weekly_hunters where hunter_id = p_id and secret_hash <> h) then raise exception 'not your hunter'; end if;
+  foreach k in array array['strength','speed','stamina','defense','intelligence','discipline'] loop
+    if jsonb_typeof(p_stats -> k) = 'number' then
+      clean := clean || jsonb_build_object(k, greatest(1, least(30, round((p_stats ->> k)::numeric)::int)));
+    end if;
+  end loop;
+  insert into public.hunters (id, secret_hash, name, level, xp, klass, stats, updated_at)
+  values (p_id, h, left(btrim(p_name), 24), p_level, p_xp, p_klass, clean, now())
+  on conflict (id) do update
+    set name = excluded.name, level = excluded.level, xp = excluded.xp, klass = excluded.klass, stats = excluded.stats, updated_at = now()
+    where public.hunters.secret_hash = h;
+end;$$;
+
+create or replace function public.remove_hunter(p_id uuid, p_secret text)
+returns void language sql security definer set search_path = public, extensions as $$
+  delete from public.hunters where id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex');
+$$;
+
+-- Caps (🧢): a player on the board marks a friend's stat as doubtful. The stat
+-- counts as invalid (held at 10 in play) while any cap stands; only the player
+-- who placed a cap can lift it. Caps outlive hiding from the board (no foreign
+-- keys), so hiding can't be used to shake them off. Who capped what is public.
+create table if not exists public.stat_caps (
+  target uuid not null,
+  flagger uuid not null,
+  stat text not null check (stat in ('strength','speed','stamina','defense','intelligence','discipline')),
+  created_at timestamptz not null default now(),
+  primary key (target, flagger, stat),
+  check (target <> flagger)
+);
+alter table public.stat_caps enable row level security;
+revoke all on public.stat_caps from anon, authenticated;
+grant select (target, flagger, stat, created_at) on public.stat_caps to anon, authenticated;
+drop policy if exists "caps are public" on public.stat_caps;
+create policy "caps are public" on public.stat_caps for select to anon, authenticated using (true);
+
+create or replace function public.toggle_stat_cap(p_id uuid, p_secret text, p_target uuid, p_stat text)
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
+declare h text := encode(extensions.digest(p_secret, 'sha256'), 'hex');
+begin
+  if not exists (select 1 from public.hunters where id = p_id and secret_hash = h) then raise exception 'join the board first'; end if;
+  if p_id = p_target then raise exception 'you cannot cap your own stats'; end if;
+  if p_stat not in ('strength','speed','stamina','defense','intelligence','discipline') then raise exception 'unknown stat'; end if;
+  if not exists (select 1 from public.hunters where id = p_target) then raise exception 'no such explorer'; end if;
+  delete from public.stat_caps where target = p_target and flagger = p_id and stat = p_stat;
+  if found then return false; end if;
+  insert into public.stat_caps (target, flagger, stat) values (p_target, p_id, p_stat);
+  return true;
+end;$$;
+
+revoke all on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) from public;
+revoke all on function public.remove_hunter(uuid, text) from public;
+revoke all on function public.toggle_stat_cap(uuid, text, uuid, text) from public;
+grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) to anon, authenticated;
+grant execute on function public.remove_hunter(uuid, text) to anon, authenticated;
+grant execute on function public.toggle_stat_cap(uuid, text, uuid, text) to anon, authenticated;

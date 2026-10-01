@@ -26,7 +26,8 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
 | **Mossgate Chronicles, dialogue choices**: the idea and choice UI from ChatGPT; the three chronicles were rewritten into Claude's story on 2026-10-01. The Old Shell was removed at the owner's request ("it keeps the game repetitive") | Both | `src/chronicles.js` |
 | **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: F2 then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
-| **Link this device**: one-time codes that carry an explorer and its cloud save to another browser (the leaderboard was removed 2026-10-01) | Claude | `src/identity.js`, `supabase/schema.sql` |
+| **Link this device**: one-time codes that carry an explorer and its cloud save to another browser | Claude | `src/identity.js`, `supabase/schema.sql` |
+| **Leaderboard with 🧢 caps**: stats only (never weight or height); friends can cap a doubtful stat until shown proof | Claude | `src/leaderboard.js`, `supabase/schema.sql` |
 
 How the story uses the ChatGPT NPCs:
 - In Mossgate, **Sela** (Wayfinder) starts the story, **Orin** (Warden-Captain) reviews the trial and sends you to the Rootwell, and **Halden** (Rootkeeper; the NPC id is still `mycel` for old saves) and **Tavi** have story lines for every stage. The town NPC was renamed so it no longer clashes with Mycel, the floating spirit who narrates the intro.
@@ -69,6 +70,7 @@ How the story uses the ChatGPT NPCs:
 | `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
 | `dressingRoom.js` | The character screen's live 3D preview of the real avatar |
 | `identity.js` | This browser's hunter id and secret (the cloud save key) and LINK DEVICE codes |
+| `leaderboard.js` | The shared leaderboard and 🧢 stat caps |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
 | `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
 | `narrator.js` | The intro's 3D glade and the floating, animated Mycel |
@@ -94,6 +96,27 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (leaderboard back, with 🧢 caps)
+
+- **Everything ships to the one link people have: https://manandi.github.io/god/** (Pages builds every push to this branch). Don't change the URL or the `HROOTS` lobby during the 90-day challenge.
+- **Leaderboard is back** (owner's request; `src/leaderboard.js`; LEADERBOARD in the menu).
+  - It shows name, class, level, XP and the six game stats only. **Weight, height and raw test numbers are never sent**: the `hunters` table has no columns for them, and `submit_hunter` keeps only the six stat keys, clamped to 1–30.
+  - Cloud saves (which do hold measurements) can't be read through the API.
+  - The game submits when the menu or the board opens (at most once a minute). HIDE ME removes your row.
+- **Caps 🧢** (table `stat_caps`, `toggle_stat_cap`):
+  - Next to every stat of every other player is a 🧢 button. Pressing it marks that stat as doubtful; pressing it again lifts your cap once they've shown proof in person or on video.
+  - On the board a capped stat is struck through, with a 🧢 count, and hovering shows who capped it.
+  - In play, a capped stat counts as **at most 10** (`stats()` in `profile.js`; `claimedStats()` is the uncapped value the board shows). The player's own stats screen shows "🧢 CAPPED · CAPPED BY NAME · SHOW THEM PROOF".
+  - Caps on you are fetched at load and every 3 minutes, and cached (`hollow-roots-caps-v1`).
+  - **Rules enforced by the database:**
+    - you must be on the board to cap
+    - you can't cap yourself or write caps directly
+    - only the player who placed a cap can lift it
+    - caps survive hiding from the board (no foreign keys), so hiding can't shake them off
+  - Probed from outside: an outsider's cap is refused ("join the board first"); secret hashes can't be read; direct inserts and deletes are refused.
+  - Two-player browser test against live Supabase: Bravo capped Alpha's strength, Alpha's stats screen showed ~~18~~ 10 "capped by Bravo"; after Bravo lifted it, back to 18. All test rows were deleted afterwards.
+- **Two real saves exist** (unnamed, still in the intro, 2026-10-01 04:48 and 04:54 UTC), probably friends opening the link. Left untouched.
 
 ## Latest shared state — 2026-10-01 (one permanent lobby)
 

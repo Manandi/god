@@ -1,7 +1,8 @@
-import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility,weeklyPlan,checkPlanItem,uncheckPlanItem,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
+import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility,caps,claimedStats,weeklyPlan,checkPlanItem,uncheckPlanItem,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
 import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
 import {WORKOUTS,WORKOUT_NOTE} from './training.js';
 import {createLinkCode,claimLinkCode} from './identity.js';
+import {leaderboard,STAT_KEYS} from './leaderboard.js';
 import {createMindCheck,iqFromTheta,canTakeReasoning,TEST_ITEMS,TIME_LIMIT,TEST_VERSION} from './reasoning.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
@@ -35,7 +36,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
   function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
     if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();else if(view==='workout')renderWorkout();else if(view==='testResult')renderTestResult();
-    else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='link')renderLink();else renderMenu();
+    else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='link')renderLink();else if(view==='leaderboard')renderLeaderboard();else renderMenu();
   }
   // Returning players (measure saved) go straight to the menu; HOW YOU PLAY is on the stats screen.
   function start(){show(profile.complete?'menu':profile.introSeen?'baseline':'intro');}
@@ -56,8 +57,9 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   }
   addEventListener('keydown',e=>{if(view==='intro'&&(e.code==='Space'||e.code==='Enter')){e.preventDefault();entry.querySelector('[data-action="next"]')?.click();}});
   function renderMenu(){
-    entry.innerHTML=`<section class="shell-card menu-card"><span class="eyebrow">REAL EFFORT · IN-GAME POWER</span><h1>THE HOLLOW<br>ROOTS</h1><p class="shell-subtitle">What you build outside, you carry inside.</p><div class="level-strip"><strong>LV ${level()} EXPLORER</strong><span>${profile.xp} real-world XP</span><button data-action="stats">VIEW STATS ↗</button></div><div class="menu-actions">${button('map','CONTINUE · WORLD MAP',true)}${button('customize','CUSTOMIZE')}${button('weekly','WEEKLY QUEST + LOG')}${button('link','LINK DEVICE')}</div><small class="save-caption">AUTOSAVE ON · YOUR 3D PROTOTYPE HAS ITS OWN PROFILE</small></section>`;
-    for(const name of ['map','customize','weekly','link','stats'])entry.querySelector(`[data-action="${name}"]`).onclick=()=>show(name);
+    entry.innerHTML=`<section class="shell-card menu-card"><span class="eyebrow">REAL EFFORT · IN-GAME POWER</span><h1>THE HOLLOW<br>ROOTS</h1><p class="shell-subtitle">What you build outside, you carry inside.</p><div class="level-strip"><strong>LV ${level()} EXPLORER</strong><span>${profile.xp} real-world XP</span><button data-action="stats">VIEW STATS ↗</button></div><div class="menu-actions">${button('map','CONTINUE · WORLD MAP',true)}${button('customize','CUSTOMIZE')}${button('weekly','WEEKLY QUEST + LOG')}${button('leaderboard','LEADERBOARD')}${button('link','LINK DEVICE')}</div><small class="save-caption">AUTOSAVE ON · YOUR 3D PROTOTYPE HAS ITS OWN PROFILE</small></section>`;
+    for(const name of ['map','customize','weekly','leaderboard','link','stats'])entry.querySelector(`[data-action="${name}"]`).onclick=()=>show(name);
+    syncBoard();
   }
   function renderBaseline(){
     const imperial=profile.units==='imperial',conv=m=>imperial&&m.imperial;
@@ -117,7 +119,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     entry.querySelector('[data-action="keep"]')?.addEventListener('click',()=>show('stats'));
     entry.querySelector('[data-action="take"]').onclick=()=>{profile.appearance.discipline=rec;saveProfile();onAppearance();show(onboarding()?'customize':'stats');};
   }
-  function statTiles(){const values=stats(),raw=rawStats();return `<div class="stat-grid">${Object.entries(values).map(([key,v])=>`<div><small>${short[key]}${v>raw[key]?` <em class="bonus">+${v-raw[key]}</em>`:''}</small><strong>${v}</strong><span>${key.toUpperCase()}</span></div>`).join('')}</div>`;}
+  function statTiles(){const values=stats(),claimed=claimedStats(),raw=rawStats();return `<div class="stat-grid">${Object.entries(values).map(([key,v])=>{const capped=caps.get(key);return `<div class="${capped?'capped':''}"><small>${short[key]}${claimed[key]>raw[key]?` <em class="bonus">+${claimed[key]-raw[key]}</em>`:''}${capped?' <em class="cap">🧢 CAPPED</em>':''}</small><strong>${capped&&claimed[key]>v?`<s>${claimed[key]}</s> ${v}`:v}</strong><span>${capped?`CAPPED BY ${esc(capped.join(', ').toUpperCase())} · SHOW THEM PROOF`:key.toUpperCase()}</span></div>`;}).join('')}</div>`;}
   /** The twelve abilities: which your stats have unlocked, and what the rest need. */
   function abilityGrid(){const s=stats(),on=new Set(unlockedAbilities(s).map(a=>a.id));
     return `<div class="ability-grid">${ABILITIES.map(a=>`<article class="${on.has(a.id)?'on':''}"><small>${short[a.stat]} ${a.at}</small><b>${a.name}</b><span>${esc(a.text)}</span><em>${on.has(a.id)?'UNLOCKED':`${short[a.stat]} ${s[a.stat]} / ${a.at}`}</em></article>`).join('')}</div>`;}
@@ -214,6 +216,36 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
       show('menu');
     };
     entry.querySelectorAll('[data-feature]').forEach(b=>b.onclick=()=>{const key=b.dataset.feature;profile.appearance[key]=key==='skinIndex'?Number(b.dataset.value):b.dataset.value;saveProfile();onAppearance();renderCustomize();});
+  }
+  // The shared leaderboard (leaderboard.js): class, level, XP and the six stats,
+  // never weight or height. 🧢 caps a friend's stat you think is fake; press it
+  // again to lift your cap once they've shown you proof.
+  let lastSync=0;
+  function syncBoard(force=false){
+    if(!force&&Date.now()-lastSync<60000)return Promise.resolve();lastSync=Date.now();
+    return leaderboard.submit().catch(()=>{}).then(()=>leaderboard.refreshMyCaps()).catch(()=>{lastSync=0;});
+  }
+  function renderLeaderboard(){
+    entry.innerHTML=`<section class="shell-card wide-card board-card"><div class="panel-heading"><div><span class="eyebrow">THE HOMIES · RANKED BY LEVEL</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div><p>Levels come only from training you log; stats come from real tests. Only class, level, XP and stats are shown, never weight or height. Think a stat is fake? Press 🧢 to cap it: it stops counting until they show you proof in person or on video, then press 🧢 again to lift it.</p><div class="board-wrap"><p class="board-note">Loading the board…</p></div><small class="feedback">${esc(notice)}</small><div class="panel-actions"><button type="button" data-action="hide">${leaderboard.hidden?'SHOW ME ON THE BOARD':'HIDE ME FROM THE BOARD'}</button>${button('refresh','REFRESH',true)}</div></section>`;
+    entry.querySelector('[data-action="back"]').onclick=()=>{notice='';show('menu');};
+    entry.querySelector('[data-action="refresh"]').onclick=()=>{notice='';renderLeaderboard();};
+    entry.querySelector('[data-action="hide"]').onclick=async e=>{e.target.disabled=true;try{await leaderboard.setHidden(!leaderboard.hidden);}catch{}renderLeaderboard();};
+    syncBoard(true).then(()=>leaderboard.load()).then(({rows,caps:all})=>{
+      if(view!=='leaderboard')return;
+      const me=leaderboard.id,names=new Map(rows.map(r=>[r.id,r.name]));
+      const capsOn=(id,stat)=>all.filter(c=>c.target===id&&c.stat===stat);
+      const cell=(r,stat)=>{const list=capsOn(r.id,stat),mine=list.some(c=>c.flagger===me),v=r.stats?.[stat]??'–';
+        const who=list.map(c=>names.get(c.flagger)||'someone').join(', ');
+        return `<td class="${list.length?'capped':''}" title="${list.length?`Capped by ${esc(who)}`:''}"><span class="stat-v">${v}</span>${r.id===me?(list.length?' <em class="cap-n">🧢'+list.length+'</em>':''):`<button type="button" class="cap ${mine?'on':''}" data-target="${r.id}" data-stat="${stat}" title="${mine?'Lift your cap (they showed proof)':'Cap this stat (you think it is fake)'}">🧢${list.length?`<b>${list.length}</b>`:''}</button>`}</td>`;};
+      const table=rows.length?`<table class="board"><thead><tr><th>#</th><th>EXPLORER</th><th>CLASS</th><th>LV</th><th>XP</th>${STAT_KEYS.map(k=>`<th>${short[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.id===me?'me':''}"><td>${i+1}</td><td>${esc(r.name)}${r.id===me?' <em>YOU</em>':''}</td><td>${esc(CLASS_INFO[r.klass]?.label||r.klass)}</td><td>${r.level}</td><td>${r.xp}</td>${STAT_KEYS.map(k=>cell(r,k)).join('')}</tr>`).join('')}</tbody></table>`:'<p class="board-note">No explorers yet. Finish your measure and you will be the first.</p>';
+      entry.querySelector('.board-wrap').innerHTML=table;
+      entry.querySelectorAll('button.cap').forEach(b=>b.onclick=async()=>{
+        b.disabled=true;
+        try{const on=await leaderboard.toggleCap(b.dataset.target,b.dataset.stat);notice=on?`Capped ${names.get(b.dataset.target)}’s ${b.dataset.stat}. It won’t count until you lift it.`:`Cap lifted from ${names.get(b.dataset.target)}’s ${b.dataset.stat}.`;}
+        catch(err){notice=/join the board/.test(err.message||'')?'You need to be on the board yourself to cap someone.':'Could not reach the board. Try again.';}
+        renderLeaderboard();
+      });
+    }).catch(()=>{if(view==='leaderboard')entry.querySelector('.board-wrap').innerHTML='<p class="board-note">The board could not be reached. Check your connection and press REFRESH.</p>';});
   }
   // Link this device (identity.js): move this explorer to another browser, or take one over here.
   function renderLink(){

@@ -135,3 +135,16 @@
 .quiz-clock{height:5px;background:#213b2c;margin:0 0 6px}
 .quiz-clock i{display:block;height:100%;width:100%;background:#bce09c;transition:width .2s linear}
 .quiz-clock i.low{background:#e7a88f}
+/* Leaderboard with caps */
+.board-wrap{overflow-x:auto;margin-top:10px}
+.board{width:100%;border-collapse:collapse;font-size:12px}
+.board th{font-size:10px;letter-spacing:.12em;color:#a9c996;text-align:left;padding:8px 6px;border-bottom:1px solid #4d6f58;white-space:nowrap}
+.board td{padding:7px 6px;border-bottom:1px solid #243f31;white-space:nowrap}
+.board tr.me td{background:#1b382d;color:#f0d897}.board td>em{font-style:normal;font-size:9px;letter-spacing:.12em;color:#bce09c}
+.board td.capped .stat-v{text-decoration:line-through;color:#e7a88f}
+#entry .board button.cap{border:1px solid #3f5f4a;background:transparent;cursor:pointer;font-size:12px;opacity:.45;line-height:1.2}
+#entry .board button.cap:hover{opacity:1;border-color:#bce09c}#entry .board button.cap.on{opacity:1;border-color:#e7a88f;background:#3a2620}
+.board button.cap b{font-size:9px;color:#e7a88f;margin-left:2px}.board .cap-n{font-style:normal;font-size:11px;color:#e7a88f}
+.board-note{color:#a6c2ab;font-size:12px}
+.stat-grid>div.capped{border-color:#a4553f}.stat-grid em.cap{font-style:normal;color:#e7a88f;letter-spacing:.05em}.stat-grid s{color:#e7a88f;font-size:.6em}
+#entry .board button.cap{width:auto;min-width:0;min-height:0;height:auto;padding:1px 5px;margin:0 0 0 4px;font-size:12px;letter-spacing:0;display:inline-block;vertical-align:middle}

@@ -214,10 +214,24 @@ export function logWeighIn(kg){
   return reached?`GOAL REACHED · +${marks} marks · +${marks*80+300} XP. Your goal is now to hold it.`:`${note}${marks?` +1 mark · +80 XP.`:''}`;
 }
 /** Stats as the game uses them: measured, plus Growth and the body goal's class bonus. */
-export function stats(){
+/** Stats as claimed: measured, plus Growth and the body goal's class bonus (what the leaderboard shows). */
+export function claimedStats(){
   const s=rawStats(),gr=growth(),boon=goalBoon();
   for(const [k,v] of Object.entries(gr))s[k]=Math.min(24,s[k]+v.bonus);
   if(boon.points)s[boon.stat]=Math.min(24,s[boon.stat]+boon.points);
+  return s;
+}
+// Caps (leaderboard.js): a friend who thinks one of your stats is fake can cap
+// it. While any cap stands, that stat counts as at most 10 (the adult average)
+// in play, until whoever capped it lifts the cap after seeing proof.
+// stat -> [names of who capped it]; cached so it also holds offline.
+const CAPS='hollow-roots-caps-v1';
+export const caps=new Map((()=>{try{return JSON.parse(localStorage.getItem(CAPS)||'[]');}catch{return [];}})());
+export function setCaps(list){caps.clear();for(const [stat,who] of list)caps.set(stat,who);try{localStorage.setItem(CAPS,JSON.stringify([...caps]));}catch{}}
+/** Stats as the game uses them: claimed stats, with capped ones held at 10. */
+export function stats(){
+  const s=claimedStats();
+  for(const k of caps.keys())if(k in s)s[k]=Math.min(s[k],10);
   return s;
 }
 export {rawStats};

@@ -19,6 +19,7 @@ import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile,units } from './profile.js';
 import {LINK_PENDING} from './identity.js';
+import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
@@ -33,6 +34,8 @@ const params=new URLSearchParams(location.search);
 // the cloud schema is unavailable, the existing local save remains authoritative.
 let cloudHunter=null,cloudWorld={boss_defeated:false};
 loadWeeklyWorld().then(v=>cloudWorld=v).catch(()=>{});
+// Caps friends placed on this explorer's stats hold them at 10 in play (profile.js); check now and every few minutes.
+const refreshCaps=()=>leaderboard.refreshMyCaps().catch(()=>{});refreshCaps();setInterval(refreshCaps,180000);
 loadWeeklySave().then(v=>{
   cloudHunter=v;
   try{localStorage.removeItem(LINK_PENDING);}catch{}   // the linked explorer's save is here (or there is none): uploads may resume
