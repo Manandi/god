@@ -85,7 +85,7 @@ How the story uses the ChatGPT NPCs:
 
 **Testing:**
 - `?arena` skips the menus; add `&third` for third person, `&debug` or F3 for the combat readout, and `&capture` for stepped frames.
-- **F2 then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
+- **F2 then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, REDO MY TESTS to retake your measurements now, stat presets (MY REAL STATS undoes them), no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
 - `window.__verdant` exposes the game state and its test hooks.
 - The owner prefers to test game feel themselves. Don't run long capture or video pipelines; quick logic checks are fine.
 
@@ -96,6 +96,15 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (flicker fix, stat refresh)
+
+- **Background flicker fixed** (`frame()` in `src/main.js`). Since the live character preview went in (b557c81), a broken `else if` chain drew the paused game world over the intro and map backgrounds every 0.15 s. Now each view draws only its own scene: one clear per frame on the intro, against three before. The intro also runs much smoother.
+- **Stat refresh (dev panel, F2 + password):**
+  - **REDO MY TESTS** clears the monthly-test lock and history and reopens the measurements, then the mind check (from the stats screen). Level, XP, story and the lift log stay.
+  - **MY REAL STATS:** stat presets (DEFAULT, ATHLETE, MAX TEST, UNTRAINED) now set your real measurements aside (`hollow-roots-dev-real-inputs`) and this puts them back. Before, a preset overwrote them for good, and the fake numbers went to the cloud save and the leaderboard.
+  - **NEW GAME** now really starts fresh. It used to delete the local save, so the cloud copy counted as newer and the old explorer (with old stats) came back on reload. It now stamps an empty save as newest, and the fresh explorer replaces the cloud copy when it first saves.
+- Tested: presets, then MY REAL STATS restores the exact numbers; REDO MY TESTS opens an unlocked form and records one fresh test while keeping XP; NEW GAME leads to the intro; story, saves, combat smoke and dressing room regressions pass. Supabase was blocked in these tests, so nothing was written live.
 
 ## Latest shared state — 2026-10-01 (lift log, cosmetic titles, NPC tutorials)
 

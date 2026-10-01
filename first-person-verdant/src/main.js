@@ -463,6 +463,7 @@ function teleport(x,z,label){
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
   ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
 // Real-life stat presets on the adult norms (profile.js): median adult, top ~5%, top 0.1%, and bottom ~5%.
+const DEV_REAL_INPUTS='hollow-roots-dev-real-inputs';
 const STAT_PRESETS={
   weak:{pushups:1,pullups:0,dashSeconds:8.8,verticalJumpCm:20,mileSeconds:1100,benchPressKg:12},
   default:{pushups:10,pullups:0,dashSeconds:6.4,verticalJumpCm:37,mileSeconds:690,benchPressKg:35},
@@ -490,7 +491,12 @@ devPanel.addEventListener('click',e=>{
     equipWeapon();
   }
   else if(b.dataset.class){profile.appearance.discipline=b.dataset.class;saveProfile();mech=mechanics();player.health=Math.min(player.health,maxHealth());toast('DEV · CLASS',b.dataset.class.toUpperCase());}
-  else if(b.dataset.preset){Object.assign(profile.inputs,STAT_PRESETS[b.dataset.preset]);saveProfile();mech=mechanics();player.health=maxHealth();player.stamina=100;equipWeapon();toast('DEV · STAT PRESET',b.dataset.preset.toUpperCase());}
+  else if(b.dataset.preset){
+    // Presets are for testing: the real measurements are kept aside and MY REAL STATS puts them back.
+    let real=null;try{real=JSON.parse(localStorage.getItem(DEV_REAL_INPUTS)||'null');}catch{}
+    if(b.dataset.preset==='mine'){if(!real){toast('DEV · REAL STATS','Already using your real measurements.');return;}Object.assign(profile.inputs,real);try{localStorage.removeItem(DEV_REAL_INPUTS);}catch{}}
+    else{if(!real)try{localStorage.setItem(DEV_REAL_INPUTS,JSON.stringify(profile.inputs));}catch{}Object.assign(profile.inputs,STAT_PRESETS[b.dataset.preset]);}
+    saveProfile();mech=mechanics();player.health=maxHealth();player.stamina=100;equipWeapon();toast('DEV · STAT PRESET',b.dataset.preset==='mine'?'YOUR REAL STATS':b.dataset.preset.toUpperCase());}
   else switch(b.dataset.dev){
     case 'close':toggleDev(false);return;
     case 'reset':teleport(world.home.spawn.x,world.home.spawn.z,'UNSTUCK');break;
@@ -512,10 +518,18 @@ devPanel.addEventListener('click',e=>{
       memories.clear();story.cleared.clear();resetEncounters();story.advance('meet_sela');
       for(const e of world.echoes)e.crystal.visible=e.ring.visible=e.light.visible=true;
       warden?.reset();if(gateRoots){gateRoots.visible=true;gateRoots.scale.set(1,1,1);}witherT=-1;chronicles.reset();persist();toast('DEV · STORY RESET');break;
+    case 'retest':
+      // A fresh measure for this explorer: the monthly lock and test history are cleared and the
+      // measurements and mind check open now. Level, XP, story and the lift log stay.
+      if(!confirm('Redo your tests? Your measurements and mind check open again now. Level, XP and story stay.'))break;
+      try{localStorage.removeItem(DEV_REAL_INPUTS);}catch{}
+      profile.tests=[];profile.reasoningTaken='';saveProfile();dev.open=false;devPanel.classList.add('hidden');keyState.clear();shell.pause();shell.show('baseline');return;
     case 'new-game':
       // Erase this browser's explorer and story, then start from the intro as a new player would.
-      if(!confirm('Start a new game? This erases the explorer, measurements, training log and story saved in this browser.'))break;
-      try{localStorage.removeItem('hollow-roots-verdant-3d-profile-v1');localStorage.removeItem('verdant-reach-3d-v1');}catch{}
+      if(!confirm('Start a new game? This erases the explorer, measurements, training log and story saved in this browser and in the cloud.'))break;
+      // An empty save stamped now counts as newer than the cloud copy, so the old explorer is not
+      // restored on reload; the fresh one replaces it in the cloud on its first save.
+      try{localStorage.removeItem('hollow-roots-verdant-3d-profile-v1');localStorage.removeItem(DEV_REAL_INPUTS);localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({savedAt:Date.now()}));}catch{}
       location.href=location.pathname;return;
   }
   updateDevTelemetry();
@@ -1144,7 +1158,7 @@ function frame(){
   if(!paused)update(dt);
   if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}
   else if(shell.view==='intro'){narrator.update(rawDt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(narrator.scene,narrator.camera);}
-  if(shell.view==='customize')dressingRoom.update(rawDt);
+  else if(shell.view==='customize')dressingRoom.update(rawDt);
   else if(!paused||((pausedRender+=rawDt)>.15)){pausedRender=0;renderer.render(scene,camera);}
 }frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a
