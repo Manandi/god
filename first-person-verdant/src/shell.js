@@ -1,7 +1,7 @@
 import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,weekKey,logActivity,CLASS_INFO,recommendedClass,classReason,frame,weaponEligibility,weeklyPlan,checkPlanItem,uncheckPlanItem,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
 import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
 import {WORKOUTS,WORKOUT_NOTE} from './training.js';
-import {leaderboard} from './leaderboard.js';
+import {createLinkCode,claimLinkCode} from './identity.js';
 import {QUESTIONS,canTakeReasoning} from './reasoning.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
@@ -25,7 +25,7 @@ const INTRO=[
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
-export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon}){
+export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
   loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',quizIndex=0,quizCorrect=0,quizStarted=0,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;};
   // First time through: intro → measure → check → how you play → reveal → look.
@@ -35,13 +35,13 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
   function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
     if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();else if(view==='workout')renderWorkout();else if(view==='testResult')renderTestResult();
-    else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='leaderboard')renderLeaderboard();else renderMenu();
+    else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='link')renderLink();else renderMenu();
   }
   // Returning players (measure saved) go straight to the menu; HOW YOU PLAY is on the stats screen.
   function start(){show(profile.complete?'menu':profile.introSeen?'baseline':'intro');}
   function renderIntro(){
     const beat=INTRO[line];
-    entry.innerHTML=`<div class="story-stage"><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS · ${line+1} / ${INTRO.length}</span><h2>MYCEL</h2><p id="spoken"></p>${beat.chips?`<div class="story-chips">${beat.chips.map((c,i)=>`<span style="animation-delay:${.4+i*.18}s">${esc(c)}</span>`).join('')}</div>`:''}<div class="story-actions">${button('skip','SKIP INTRO')}${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Click NEXT or press Space to reveal a line, then again to continue.</small></div></div>`;
+    entry.innerHTML=`<div class="story-stage"><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS · ${line+1} / ${INTRO.length}</span><h2>MYCEL</h2><p id="spoken"></p>${beat.chips?`<div class="story-chips">${beat.chips.map((c,i)=>`<span style="animation-delay:${.4+i*.18}s">${esc(c)}</span>`).join('')}</div>`:''}<div class="story-actions">${button('skip','SKIP INTRO')}${line===0?button('link','PLAYED BEFORE? LINK DEVICE'):''}${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Click NEXT or press Space to reveal a line, then again to continue.</small></div></div>`;
     const target=entry.querySelector('#spoken'),phrase=beat.text;let cursor=0;
     if(narrator){narrator.say(beat.mood,line>0);narrator.talking=true;}
     typing=setInterval(()=>{target.textContent=phrase.slice(0,++cursor);if(cursor>=phrase.length)stopTyping();},26);
@@ -52,12 +52,12 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
       renderIntro();
     };
     entry.querySelector('[data-action="skip"]').onclick=finish;
+    entry.querySelector('[data-action="link"]')?.addEventListener('click',()=>show('link'));
   }
   addEventListener('keydown',e=>{if(view==='intro'&&(e.code==='Space'||e.code==='Enter')){e.preventDefault();entry.querySelector('[data-action="next"]')?.click();}});
   function renderMenu(){
-    entry.innerHTML=`<section class="shell-card menu-card"><span class="eyebrow">REAL EFFORT · IN-GAME POWER</span><h1>THE HOLLOW<br>ROOTS</h1><p class="shell-subtitle">What you build outside, you carry inside.</p><div class="level-strip"><strong>LV ${level()} EXPLORER</strong><span>${profile.xp} real-world XP</span><button data-action="stats">VIEW STATS ↗</button></div><div class="menu-actions">${button('map','CONTINUE · WORLD MAP',true)}${button('customize','CUSTOMIZE')}${button('weekly','WEEKLY QUEST + LOG')}${button('leaderboard','LEADERBOARD')}</div><small class="save-caption">AUTOSAVE ON · YOUR 3D PROTOTYPE HAS ITS OWN PROFILE</small></section>`;
-    for(const name of ['map','customize','weekly','leaderboard','stats'])entry.querySelector(`[data-action="${name}"]`).onclick=()=>show(name);
-    submitSoon();
+    entry.innerHTML=`<section class="shell-card menu-card"><span class="eyebrow">REAL EFFORT · IN-GAME POWER</span><h1>THE HOLLOW<br>ROOTS</h1><p class="shell-subtitle">What you build outside, you carry inside.</p><div class="level-strip"><strong>LV ${level()} EXPLORER</strong><span>${profile.xp} real-world XP</span><button data-action="stats">VIEW STATS ↗</button></div><div class="menu-actions">${button('map','CONTINUE · WORLD MAP',true)}${button('customize','CUSTOMIZE')}${button('weekly','WEEKLY QUEST + LOG')}${button('link','LINK DEVICE')}</div><small class="save-caption">AUTOSAVE ON · YOUR 3D PROTOTYPE HAS ITS OWN PROFILE</small></section>`;
+    for(const name of ['map','customize','weekly','link','stats'])entry.querySelector(`[data-action="${name}"]`).onclick=()=>show(name);
   }
   function renderBaseline(){
     const imperial=profile.units==='imperial',conv=m=>imperial&&m.imperial;
@@ -203,25 +203,28 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     };
     entry.querySelectorAll('[data-feature]').forEach(b=>b.onclick=()=>{const key=b.dataset.feature;profile.appearance[key]=key==='skinIndex'?Number(b.dataset.value):b.dataset.value;saveProfile();onAppearance();renderCustomize();});
   }
-  // The shared board (leaderboard.js): everyone's level and stats. Your row is sent when you open it,
-  // and quietly whenever the menu shows (at most once a minute).
-  let lastSubmit=0;
-  const submitSoon=()=>{if(Date.now()-lastSubmit<60000)return Promise.resolve();lastSubmit=Date.now();return leaderboard.submit().catch(()=>{lastSubmit=0;});};
-  function renderLeaderboard(){
-    const head=`<div class="panel-heading"><div><span class="eyebrow">EVERY EXPLORER · RANKED BY LEVEL</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div>`;
-    const hide=`<div class="panel-actions"><button type="button" data-action="hide">${leaderboard.hidden?'SHOW ME ON THE BOARD':'HIDE ME FROM THE BOARD'}</button>${button('refresh','REFRESH',true)}</div>`;
-    entry.innerHTML=`<section class="shell-card wide-card board-card">${head}<p>Levels come only from real training you log; stats come from your monthly test. Your name, class, level and stats are shared here${leaderboard.hidden?' (you are hidden right now)':''}.</p><div class="board-wrap"><p class="board-note">Loading the board…</p></div>${hide}</section>`;
-    const wire=()=>{entry.querySelector('[data-action="back"]').onclick=()=>show('menu');
-      entry.querySelector('[data-action="refresh"]').onclick=()=>{lastSubmit=0;renderLeaderboard();};
-      entry.querySelector('[data-action="hide"]').onclick=async e=>{e.target.disabled=true;try{await leaderboard.setHidden(!leaderboard.hidden);}catch{}renderLeaderboard();};};
-    wire();
-    lastSubmit=0;
-    submitSoon().then(()=>leaderboard.top()).then(rows=>{
-      if(view!=='leaderboard')return;
-      const me=leaderboard.id,cols=['strength','speed','stamina','defense','intelligence','discipline'];
-      const table=rows.length?`<table class="board"><thead><tr><th>#</th><th>EXPLORER</th><th>CLASS</th><th>LV</th><th>XP</th>${cols.map(c=>`<th>${short[c]}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.id===me?'me':''}"><td>${i+1}</td><td>${esc(r.name)}${r.id===me?' <em>YOU</em>':''}</td><td>${esc(CLASS_INFO[r.klass]?.label||r.klass)}</td><td>${r.level}</td><td>${r.xp}</td>${cols.map(c=>`<td>${r.stats?.[c]??'–'}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="board-note">No explorers yet. Finish your measure and you will be the first.</p>';
-      entry.querySelector('.board-wrap').innerHTML=table;
-    }).catch(()=>{if(view==='leaderboard')entry.querySelector('.board-wrap').innerHTML='<p class="board-note">The board could not be reached. Check your connection and press REFRESH.</p>';});
+  // Link this device (identity.js): move this explorer to another browser, or take one over here.
+  function renderLink(){
+    entry.innerHTML=`<section class="shell-card wide-card link-card"><div class="panel-heading"><div><span class="eyebrow">ONE EXPLORER · ANY DEVICE</span><h2>LINK DEVICE</h2></div>${button('back','BACK')}</div><p>Your explorer and story are saved online. Use a code to carry them to another computer or phone.</p><div class="link-columns"><div><h3>USE THIS EXPLORER ON ANOTHER DEVICE</h3><p class="link-note">Get a code here, then on the other device open the game, choose LINK DEVICE and enter it. Codes work once and last 10 minutes.</p><div class="link-code" aria-live="polite"></div>${button('make','GET A CODE',true)}</div><div><h3>BRING AN EXPLORER TO THIS DEVICE</h3><p class="link-note">Enter the code from your other device. <b>This replaces the explorer and progress on this device.</b></p><form id="linkForm"><input name="code" autocomplete="off" spellcheck="false" maxlength="12" placeholder="ABCD 2345" required><button class="primary" type="submit">LINK THIS DEVICE</button></form></div></div><small class="feedback">${esc(notice)}</small></section>`;
+    entry.querySelector('[data-action="back"]').onclick=()=>{notice='';if(profile.complete)show('menu');else{line=0;start();}};
+    const out=entry.querySelector('.link-code');
+    entry.querySelector('[data-action="make"]').onclick=async e=>{
+      e.target.disabled=true;out.textContent='Saving your progress…';
+      try{await saveNow?.();const code=await createLinkCode();out.innerHTML=`<strong>${code.slice(0,4)} ${code.slice(4)}</strong><small>Expires in 10 minutes · works once</small>`;}
+      catch(err){console.warn('link failed',err);out.textContent='Could not reach the save service. Check your connection and try again.';}
+      e.target.disabled=false;e.target.textContent='GET A NEW CODE';
+    };
+    entry.querySelector('#linkForm').onsubmit=async e=>{
+      e.preventDefault();const code=e.target.elements.code.value;
+      if(!confirm('Link this device? The explorer and progress on this device will be replaced by the linked one.'))return;
+      try{
+        if(!await claimLinkCode(code)){notice='That code is wrong or has expired. Get a new one on your other device.';renderLink();return;}
+        // Clear this device's saves; the linked explorer's cloud save loads on the reload.
+        localStorage.removeItem('hollow-roots-verdant-3d-profile-v1');localStorage.removeItem('verdant-reach-3d-v1');
+        for(const k of Object.keys(sessionStorage))if(k.startsWith('hollow-roots-cloud-restored-'))sessionStorage.removeItem(k);
+        location.href=location.pathname;
+      }catch{notice='Could not reach the save service. Check your connection and try again.';renderLink();}
+    };
   }
   function renderMap(){
     entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd></dl>${button('enter',selected.id==='grove'?'ENTER VERDANT REACH →':level()<selected.level?`LOCKED · LEVEL ${selected.level}`:'REALM IN DEVELOPMENT',true)}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${level()<b.level?`LV ${b.level}`:b.id==='grove'?'OPEN':'SOON'}</small></button>`).join('')}</div></div></section>`;

@@ -1,9 +1,11 @@
-import {hunterIdentity} from './leaderboard.js';
+import {hunterIdentity} from './identity.js';
 import {weekKey} from './profile.js';
-import {supabase} from './supabase.js';
+import {supabase,rpc} from './supabase.js';
 
 export const worldWeek=()=>weekKey();
-export const weeklyLobbyCode=()=>`ROOT${worldWeek().replaceAll('-','').slice(-2)}`.slice(0,6).toUpperCase();
+// The week's lobby: HR + the Monday's month and day (HR0928). Changed from ROOTdd on
+// 2026-10-01 to start everyone in a fresh lobby; it also no longer repeats each month.
+export const weeklyLobbyCode=()=>`HR${worldWeek().slice(5).replace('-','')}`;
 export function bossWindow(now=new Date()){
   const day=now.getUTCDay(),hour=now.getUTCHours();
   const open=day===6||day===0; // Saturday 00:00 UTC through Sunday 23:59 UTC.
@@ -17,11 +19,11 @@ export function bossWindowLabel(){
   return w.open?`ORRUN OPEN · ${days?`${days}D `:''}${tail}H LEFT`:`ORRUN SEALED · OPENS IN ${days?`${days}D `:''}${tail}H`;
 }
 export async function loadWeeklySave(){
-  const me=hunterIdentity(),{data,error}=await supabase.rpc('load_weekly_hunter',{p_week:worldWeek(),p_id:me.id,p_secret:me.secret});
+  const me=hunterIdentity(),{data,error}=await rpc('load_weekly_hunter',{p_week:worldWeek(),p_id:me.id,p_secret:me.secret});
   if(error)throw error;return data||null;
 }
 export async function saveWeeklyHunter(profile,world){
-  const me=hunterIdentity(),{error}=await supabase.rpc('save_weekly_hunter',{p_week:worldWeek(),p_id:me.id,p_secret:me.secret,p_profile:profile,p_world:world});
+  const me=hunterIdentity(),{error}=await rpc('save_weekly_hunter',{p_week:worldWeek(),p_id:me.id,p_secret:me.secret,p_profile:profile,p_world:world});
   if(error)throw error;
 }
 export async function loadWeeklyWorld(){
@@ -29,6 +31,6 @@ export async function loadWeeklyWorld(){
   if(error)throw error;return data||{boss_defeated:false};
 }
 export async function markWeeklyBossDefeated(){
-  const {error}=await supabase.rpc('defeat_weekly_boss',{p_week:worldWeek()});if(error)throw error;
+  const {error}=await rpc('defeat_weekly_boss',{p_week:worldWeek()});if(error)throw error;
 }
 

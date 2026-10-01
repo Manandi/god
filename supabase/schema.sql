@@ -1,74 +1,14 @@
--- The Hollow Roots · shared leaderboard (3D game)
+-- The Hollow Roots · Supabase schema (3D game)
 --
--- Applied to the `hollow-roots` Supabase project as the migration
--- `hunters_leaderboard`. To set up a new project, run this whole file in the
--- SQL editor; no auth settings are needed.
+-- Applied to the `hollow-roots` project as migrations. To set up a new project,
+-- run this whole file in the SQL editor; no auth settings are needed.
 --
--- Each browser makes a random id and a random secret (first-person-verdant/
--- src/leaderboard.js). Anyone can read the board; a row can only be written
--- through submit_hunter()/remove_hunter() by whoever holds its secret, and the
--- secret itself (stored only as a SHA-256 hash) is never readable.
+-- Each browser makes a random hunter id and secret (first-person-verdant/src/
+-- identity.js). Rows are only written through the functions below, by whoever
+-- holds the secret; the secret itself is stored only as a SHA-256 hash.
+-- (The shared leaderboard, table `hunters`, was removed on 2026-10-01.)
 
 create extension if not exists pgcrypto with schema extensions;
-
-create table if not exists public.hunters (
-  id uuid primary key,
-  secret_hash text not null,
-  name text not null check (char_length(btrim(name)) between 1 and 24),
-  level int not null default 1 check (level between 1 and 999),
-  xp int not null default 0 check (xp between 0 and 10000000),
-  klass text not null default 'fighter' check (klass in ('fighter', 'tank', 'ranger', 'mage', 'support')),
-  stats jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
-alter table public.hunters enable row level security;
-
--- Readable by everyone, but only these columns (never secret_hash).
-revoke all on public.hunters from anon, authenticated;
-grant select (id, name, level, xp, klass, stats, updated_at) on public.hunters to anon, authenticated;
-drop policy if exists "hunters are public" on public.hunters;
-create policy "hunters are public" on public.hunters for select to anon, authenticated using (true);
-
-create or replace function public.submit_hunter(p_id uuid, p_secret text, p_name text, p_level int, p_xp int, p_klass text, p_stats jsonb)
-returns void
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  h text := encode(extensions.digest(p_secret, 'sha256'), 'hex');
-  clean jsonb := '{}'::jsonb;
-  k text;
-begin
-  if p_secret is null or char_length(p_secret) < 20 then raise exception 'bad secret'; end if;
-  -- Keep only the six stats, as whole numbers 1–30.
-  foreach k in array array['strength', 'speed', 'stamina', 'defense', 'intelligence', 'discipline'] loop
-    if jsonb_typeof(p_stats -> k) = 'number' then
-      clean := clean || jsonb_build_object(k, greatest(1, least(30, round((p_stats ->> k)::numeric)::int)));
-    end if;
-  end loop;
-  insert into public.hunters (id, secret_hash, name, level, xp, klass, stats, updated_at)
-  values (p_id, h, left(btrim(p_name), 24), p_level, p_xp, p_klass, clean, now())
-  on conflict (id) do update
-    set name = excluded.name, level = excluded.level, xp = excluded.xp, klass = excluded.klass, stats = excluded.stats, updated_at = now()
-    where public.hunters.secret_hash = h;
-end;
-$$;
-
-create or replace function public.remove_hunter(p_id uuid, p_secret text)
-returns void
-language sql
-security definer
-set search_path = public, extensions
-as $$
-  delete from public.hunters where id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex');
-$$;
-
-revoke all on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) from public;
-revoke all on function public.remove_hunter(uuid, text) from public;
-grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) to anon, authenticated;
-grant execute on function public.remove_hunter(uuid, text) to anon, authenticated;
 
 -- One asynchronous weekly world, with personal quest saves. The browser-held
 -- hunter secret protects each personal row; the public weekly row contains
@@ -134,3 +74,49 @@ grant execute on function public.load_weekly_hunter(text,uuid,text) to anon,auth
 grant execute on function public.save_weekly_hunter(text,uuid,text,jsonb,jsonb) to anon,authenticated;
 grant execute on function public.defeat_weekly_boss(text) to anon,authenticated;
 
+
+-- Link this device: a short one-time code that moves a hunter identity (and so
+-- its cloud save) to another browser. Codes last 10 minutes and work once.
+-- The table is not readable through the API.
+create table if not exists public.device_links (
+  code text primary key,
+  hunter_id uuid not null,
+  secret text not null,
+  expires_at timestamptz not null
+);
+alter table public.device_links enable row level security;
+revoke all on public.device_links from anon,authenticated;
+
+create or replace function public.create_device_link(p_id uuid,p_secret text)
+returns text language plpgsql security definer set search_path=public,extensions as $$
+declare
+  h text:=encode(extensions.digest(p_secret,'sha256'),'hex');
+  alphabet text:='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  c text; b bytea; i int;
+begin
+  if p_secret is null or char_length(p_secret)<20 then raise exception 'bad secret'; end if;
+  -- Only the holder of a hunter's secret can hand that hunter on.
+  if exists(select 1 from public.weekly_hunters where hunter_id=p_id and secret_hash<>h) then raise exception 'not your hunter'; end if;
+  delete from public.device_links where expires_at<now() or hunter_id=p_id;
+  loop
+    b:=extensions.gen_random_bytes(8); c:='';
+    for i in 0..7 loop c:=c||substr(alphabet,(get_byte(b,i)%32)+1,1); end loop;
+    exit when not exists(select 1 from public.device_links where code=c);
+  end loop;
+  insert into public.device_links(code,hunter_id,secret,expires_at) values(c,p_id,p_secret,now()+interval '10 minutes');
+  return c;
+end;$$;
+
+create or replace function public.claim_device_link(p_code text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare r public.device_links;
+begin
+  delete from public.device_links where code=upper(regexp_replace(coalesce(p_code,''),'[^A-Za-z0-9]','','g')) and expires_at>now() returning * into r;
+  if r.code is null then return null; end if;
+  return jsonb_build_object('id',r.hunter_id,'secret',r.secret);
+end;$$;
+
+revoke all on function public.create_device_link(uuid,text) from public;
+revoke all on function public.claim_device_link(text) from public;
+grant execute on function public.create_device_link(uuid,text) to anon,authenticated;
+grant execute on function public.claim_device_link(text) to anon,authenticated;

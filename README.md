@@ -26,7 +26,7 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
 | **Mossgate Chronicles, dialogue choices**: the idea and choice UI from ChatGPT; the three chronicles were rewritten into Claude's story on 2026-10-01. The Old Shell was removed at the owner's request ("it keeps the game repetitive") | Both | `src/chronicles.js` |
 | **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: F2 then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
-| **Leaderboard**: shared online board of every explorer's level and stats | Claude | `src/leaderboard.js`, `supabase/schema.sql` |
+| **Link this device**: one-time codes that carry an explorer and its cloud save to another browser (the leaderboard was removed 2026-10-01) | Claude | `src/identity.js`, `supabase/schema.sql` |
 
 How the story uses the ChatGPT NPCs:
 - In Mossgate, **Sela** (Wayfinder) starts the story, **Orin** (Warden-Captain) reviews the trial and sends you to the Rootwell, and **Halden** (Rootkeeper; the NPC id is still `mycel` for old saves) and **Tavi** have story lines for every stage. The town NPC was renamed so it no longer clashes with Mycel, the floating spirit who narrates the intro.
@@ -68,7 +68,7 @@ How the story uses the ChatGPT NPCs:
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
 | `dressingRoom.js` | The character screen's live 3D preview of the real avatar |
-| `leaderboard.js` | The shared online leaderboard (Supabase table `hunters`, see `supabase/schema.sql`) |
+| `identity.js` | This browser's hunter id and secret (the cloud save key) and LINK DEVICE codes |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
 | `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
 | `narrator.js` | The intro's 3D glade and the floating, animated Mycel |
@@ -94,6 +94,25 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (link device, leaderboard removed, fresh lobby)
+
+- **Link this device** (`src/identity.js`; LINK DEVICE in the menu, and PLAYED BEFORE? LINK DEVICE on the first intro line for a brand-new device).
+  - **GET A CODE** uploads the save, then shows an 8-character code (`ABCD 2345`). It lasts 10 minutes and works once.
+  - On the other device, entering the code makes that browser the same hunter (`hollow-roots-hunter-v1`), clears its local saves, and reloads into the linked explorer's cloud save.
+  - **Database** (`create_device_link`/`claim_device_link`, table `device_links`, migration `remove_leaderboard_add_device_links`):
+    - The table isn't readable through the API.
+    - A code can only be made for a hunter whose secret matches.
+    - Claiming deletes the code, and lower case and spaces are accepted.
+  - **Safety:** after linking, `hollow-roots-link-pending` stops the new device from uploading anything until the linked save has loaded, so a failed load can't overwrite real progress with a blank one.
+  - Link, save and load calls retry twice on a dropped connection (`rpc` in `src/supabase.js`).
+  - Tested 3 of 3 with separate browsers against live Supabase: the explorer, name and story stage moved across, and the new device opened at the menu. Wrong and reused codes were refused. The test saves were deleted.
+- **Leaderboard removed** (owner's request): the menu entry, `leaderboard.js`, its styles, and the `hunters` table with its two functions. The browser identity key keeps its old name so existing players keep their cloud saves. The keep-alive workflow now reads `weekly_worlds`.
+- **Fresh lobby.**
+  - The weekly lobby code is now `HR` plus the week's Monday as MMDD (`HR0928` this week); it was `ROOTdd`, which also repeated every month.
+  - The online data is empty: no saves, no boss results, no link codes.
+  - Players' local progress in their own browsers is untouched; use dev mode → NEW GAME to start a browser over.
+- The 2D game's empty `explorers`/`friendships` tables are still in the database.
 
 ## Latest shared state — 2026-10-01 (review of the weekly world; live preview; cute Mycel; Supabase live)
 

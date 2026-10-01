@@ -1,5 +1,5 @@
 # Keeps the free Supabase project awake. Free projects pause after about a week
-# without activity, which takes co-op, the leaderboard and cloud saves offline.
+# without activity, which takes co-op and cloud saves offline.
 # A small read every three days counts as activity. Uses only the public
 # (publishable) key, the same one the game ships with.
 name: Keep Supabase awake
@@ -16,9 +16,9 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Read the leaderboard once
+      - name: Read the weekly world once
         run: |
           curl --fail --silent --show-error --max-time 30 \
             -H "apikey: sb_publishable_uRC4vHHdHUnrdsqV2cSajA_HWrPTmZK" \
-            "https://gitqmiwwakaejznucxqn.supabase.co/rest/v1/hunters?select=id&limit=1" > /dev/null
+            "https://gitqmiwwakaejznucxqn.supabase.co/rest/v1/weekly_worlds?select=week_id&limit=1" > /dev/null
           echo "Supabase answered."

@@ -1,5 +1,5 @@
-# Builds the 3D game and publishes it to GitHub Pages, so friends can play (and
-# join the leaderboard) at https://manandi.github.io/god/.
+# Builds the 3D game and publishes it to GitHub Pages, so friends can play at
+# https://manandi.github.io/god/.
 #
 # One-time: Settings → Pages → Build and deployment → Source: "GitHub Actions".
 name: Deploy to GitHub Pages

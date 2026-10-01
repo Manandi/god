@@ -18,6 +18,7 @@ import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile,units } from './profile.js';
+import {LINK_PENDING} from './identity.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
@@ -34,6 +35,7 @@ let cloudHunter=null,cloudWorld={boss_defeated:false};
 loadWeeklyWorld().then(v=>cloudWorld=v).catch(()=>{});
 loadWeeklySave().then(v=>{
   cloudHunter=v;
+  try{localStorage.removeItem(LINK_PENDING);}catch{}   // the linked explorer's save is here (or there is none): uploads may resume
   const restored=`hollow-roots-cloud-restored-${weeklyLobbyCode()}`;
   if(!v||sessionStorage.getItem(restored))return;
   // Keep whichever copy is newer: a save that failed to upload (offline, or the
@@ -110,8 +112,14 @@ let cloudSaveTimer=0;
 function persist(){
   const state={memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize(),savedAt:Date.now()};
   try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify(state));}catch{/* No storage available. */}
-  clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>saveWeeklyHunter(JSON.parse(JSON.stringify(profile)),state).catch(()=>{}),650);
+  // Just after linking this device, never upload until the linked save has loaded.
+  let pending=false;try{pending=!!localStorage.getItem(LINK_PENDING);}catch{}
+  if(!pending){clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>saveWeeklyHunter(JSON.parse(JSON.stringify(profile)),state).catch(()=>{}),650);}
+  return state;
 }
+/** Upload the save right now (before handing this explorer to another device). */
+function cloudSaveNow(){const state=persist();clearTimeout(cloudSaveTimer);let pending=false;try{pending=!!localStorage.getItem(LINK_PENDING);}catch{}
+  return pending?Promise.resolve():saveWeeklyHunter(JSON.parse(JSON.stringify(profile)),state);}
 window.addEventListener('hollow-roots-profile-saved',()=>persist());
 function updateJournal(){
   const chronicleEntries=CHRONICLES.map((q,i)=>{const done=chronicles.completed.has(q.id),active=chronicles.active?.id===q.id;
@@ -1092,7 +1100,7 @@ function update(rawDt){
   updateHUD();
 }
 const dressingRoom=createDressingRoom();
-shell=createShell(entry,canvas,globe,{narrator,dressingRoom,weapon:()=>equippedWeapon(),enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
+shell=createShell(entry,canvas,globe,{narrator,dressingRoom,saveNow:cloudSaveNow,weapon:()=>equippedWeapon(),enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
