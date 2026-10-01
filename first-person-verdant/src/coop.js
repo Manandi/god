@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { createClient } from '@supabase/supabase-js';
 import { makeNpc } from './npcs.js';
 import { SKIN_TONES, SHIRTS, TROUSERS, HAIR_COLORS } from './avatar.js';
+import {supabase} from './supabase.js';
 
 // Co-op lobby and team fights. The ChatGPT Sites version synced through its own
 // server; GitHub Pages has none, so this uses Supabase Realtime: a channel per
@@ -16,9 +16,6 @@ import { SKIN_TONES, SHIRTS, TROUSERS, HAIR_COLORS } from './avatar.js';
 // ?lobby=CODE&net=local runs the same protocol between tabs of one browser
 // (BroadcastChannel), for testing without a network.
 
-const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://gitqmiwwakaejznucxqn.supabase.co';
-// The publishable key is meant to ship in browser bundles (it is also in the Pages workflow).
-const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_uRC4vHHdHUnrdsqV2cSajA_HWrPTmZK';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
 const clean = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -36,15 +33,14 @@ const lookFrom = a => ({ skin: SKIN_TONES[a?.skinIndex] || SKIN_TONES[2], hair: 
 
 /** Supabase Realtime: presence plus broadcasts on `verdant-reach:CODE`. */
 function supabaseTransport(code, id, on) {
-  const client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false }, realtime: { params: { eventsPerSecond: 30 } } });
-  const channel = client.channel(`verdant-reach:${code}`, { config: { presence: { key: id }, broadcast: { self: false } } });
+  const channel = supabase.channel(`verdant-reach:${code}`, { config: { presence: { key: id }, broadcast: { self: false } } });
   channel.on('presence', { event: 'sync' }, () => on.presence(Object.fromEntries(Object.entries(channel.presenceState()).map(([k, m]) => [k, m[0]]))));
   for (const e of EVENTS) channel.on('broadcast', { event: e }, ({ payload }) => payload && on.event(e, payload));
   channel.subscribe(s => on.status(s === 'SUBSCRIBED' ? 'up' : s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' ? 'down' : 'wait'));
   return {
     track: meta => channel.track(meta),
     send: (event, payload) => channel.send({ type: 'broadcast', event, payload }),
-    close: () => client.removeChannel(channel)
+    close: () => supabase.removeChannel(channel)
   };
 }
 /** Tabs of one browser: BroadcastChannel, with a heartbeat standing in for presence. */
@@ -69,7 +65,7 @@ function localTransport(code, id, on) {
   };
 }
 
-export function createCoop(scene, { player, groundY, getName, getAppearance, getShared, onShared, onWorld, onHit, onSpawn }) {
+export function createCoop(scene, { player, groundY, getName, getAppearance, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, defaultCode='' }) {
   const button = document.getElementById('lobbyButton'), status = document.getElementById('lobbyStatus');
   const params = new URLSearchParams(location.search), local = params.get('net') === 'local';
   // Each tab is its own player (sessionStorage), so two tabs can share a lobby.
@@ -144,7 +140,9 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     if (requested !== null) join(requested);
   });
   const fromUrl = clean(params.get('lobby'));
-  if (fromUrl) join(fromUrl);
+  // The normal game is one persistent weekly world. A URL lobby remains an
+  // explicit override for private testing, but returning players auto-join.
+  if (fromUrl || defaultCode) join(fromUrl || defaultCode);
 
   return {
     id, get code() { return code; }, get connected() { return connected; }, get remotes() { return remotes; }, join, leave, sendShared,
@@ -180,3 +178,4 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     }
   };
 }
+

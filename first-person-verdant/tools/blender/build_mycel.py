@@ -30,8 +30,8 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
 M = {
-    'cap': material('MY_Cap', color=hexc('#1f4a40'), rough=.55),
-    'rim': material('MY_Rim', color=hexc('#7fa878'), rough=.6),
+    'cap': material('MY_Cap', color=hexc('#376d63'), rough=.6),
+    'rim': material('MY_Rim', color=hexc('#b3cf9b'), rough=.68),
     'spots': material('MY_Spots', color=hexc('#d9ffb0'), emission=hexc('#c6f48a'), strength=3, rough=.4),
     'gills': material('MY_Gills', color=hexc('#8fe8c8'), emission=hexc('#5fe0b8'), strength=1.4, rough=.5),
     'stem': material('MY_Stem', color=hexc('#d6cfae'), rough=.75),
@@ -40,6 +40,8 @@ M = {
     'eye': material('MY_Eye', color=hexc('#e8ffd8'), emission=hexc('#c8f7a8'), strength=4, rough=.2),
     'dark': material('MY_Mouth', color=hexc('#15241d'), rough=.8),
     'brow': material('MY_Brow', color=hexc('#9fd488'), rough=.6),
+    'blush': material('MY_Blush', color=hexc('#eaa08e'), emission=hexc('#c86e63'), strength=.18, rough=.82),
+    'pupil': material('MY_Pupil', color=hexc('#24372f'), rough=.25),
     'seed': material('MY_Heartseed', color=hexc('#fff0b8'), emission=hexc('#ffd774'), strength=6, rough=.2),
 }
 
@@ -57,7 +59,7 @@ def ellipsoid(rx, ry, rz, u=20, v=12):
 root = link(bpy.data.objects.new('Mycel', None))
 
 # --- the stem-body: a lathe with a soft belly, narrowing into the tendrils.
-b = bmesh.new(); prof = [(.36, .15), (.28, .2), (.15, .225), (0, .235), (-.15, .22), (-.3, .19), (-.42, .15), (-.5, .09)]
+b = bmesh.new(); prof = [(.32, .18), (.23, .255), (.08, .285), (-.08, .29), (-.24, .255), (-.38, .19), (-.48, .105)]
 rings = []
 for z, r in prof:
     ring = []
@@ -91,7 +93,7 @@ for k, t in enumerate(np.linspace(0, 1, 14)):
     phi = t * math.pi * .5; ring = []
     for i in range(40):
         a = i / 40 * math.tau; wave = 1 + .045 * math.sin(a * 7) * t ** 3
-        r = math.sin(phi) * .62 * wave; z = math.cos(phi) * .36
+        r = math.sin(phi) * .68 * wave; z = math.cos(phi) * .30
         if t > .88: z -= (t - .88) * .5; r *= 1 - (t - .88) * .25                                   # the rim rolls under
         ring.append(b.verts.new((math.cos(a) * r, math.sin(a) * r, z)))
     rings.append(ring)
@@ -125,16 +127,18 @@ gl = obj_from(gills, 'Gills', 'gills', (0, 0, CAP_Z), False); parent(gl, cap)
 
 # --- the face (on the front of the stem, -Y), each part at its pivot.
 for s, name in ((1, 'L'), (-1, 'R')):
-    eye = obj_from(ellipsoid(.052, .03, .075, 16, 10), f'Eye{name}', 'eye', (s * .085, -.212, .17)); parent(eye, body)
+    eye = obj_from(ellipsoid(.072, .032, .092, 16, 10), f'Eye{name}', 'eye', (s * .10, -.267, .10)); parent(eye, body)
+    pupil = obj_from(ellipsoid(.027, .009, .04, 12, 8), f'Pupil{name}', 'pupil', (s * .10, -.298, .095)); parent(pupil, body)
+    cheek = obj_from(ellipsoid(.052, .009, .025, 12, 8), f'Cheek{name}', 'blush', (s * .19, -.286, .005)); parent(cheek, body)
     bb = bmesh.new(); bmesh.ops.create_cube(bb, size=1); bmesh.ops.scale(bb, vec=(.085, .025, .022), verts=bb.verts[:])
-    brow = obj_from(bb, f'Brow{name}', 'brow', (s * .085, -.214, .275)); parent(brow, body)
-mouth = obj_from(ellipsoid(.045, .015, .022, 14, 8), 'Mouth', 'dark', (0, -.226, .06)); parent(mouth, body)
+    brow = obj_from(bb, f'Brow{name}', 'brow', (s * .10, -.275, .225)); parent(brow, body)
+mouth = obj_from(ellipsoid(.05, .012, .026, 14, 8), 'Mouth', 'dark', (0, -.296, -.015)); parent(mouth, body)
 
 # --- root arms, pivoting at the shoulder; three rootlet fingers each.
 for s, name in ((1, 'L'), (-1, 'R')):
     shoulder = Vector((s * .2, -.02, .02))
-    pts = [Vector((0, 0, 0)), Vector((s * .1, -.02, -.05)), Vector((s * .2, -.05, -.14)), Vector((s * .26, -.08, -.25))]
-    arm = tube(pts, [.045, .04, .035, .03], f'arm{name}'); arm.data.materials.append(M['root'])
+    pts = [Vector((0, 0, 0)), Vector((s * .08, -.02, -.03)), Vector((s * .15, -.05, -.10)), Vector((s * .19, -.08, -.17))]
+    arm = tube(pts, [.052, .047, .04, .034], f'arm{name}'); arm.data.materials.append(M['root'])
     fingers = []
     for k, off in enumerate((-.03, 0, .03)):
         tip = pts[-1] + Vector((s * .05 + off * .5, -.03 + off, -.07 - abs(off)))
@@ -165,3 +169,4 @@ if PREVIEW:
     cam.location = (.9, -3.2, .5); d = Vector((0, 0, .05)) - cam.location; cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
     scene.render.engine = 'CYCLES'; scene.cycles.samples = 32; scene.render.resolution_x, scene.render.resolution_y = 700, 800
     scene.render.filepath = PREVIEW; bpy.ops.render.render(write_still=True); print('PREVIEW', PREVIEW)
+

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {createHumanoid} from './humanoid.js';
 import {Animator,solveLeg} from './anim/animator.js';
 import {buildClips} from './anim/clips.js';
@@ -14,6 +15,9 @@ export const OUTFITS=['ranger','warden','wanderer','sentinel'];
 export const FACE_STYLES=['soft','sharp','round'];
 const smooth=(v,target,dt)=>THREE.MathUtils.damp(v,target,12,dt);
 const sphere=(r=.2)=>new THREE.SphereGeometry(r,24,18);
+const BASE=import.meta.env?.BASE_URL||'/';
+let customizationPromise;
+const loadCustomization=()=>customizationPromise||=(new GLTFLoader().loadAsync(`${BASE}characters/customization/customization.glb`));
 function part(parent,geometry,material,x=0,y=0,z=0){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 
 export function createAvatar(scene){
@@ -53,11 +57,9 @@ export function createAvatar(scene){
   // Outfit geometry is bone-mounted so every choice changes the explorer's silhouette,
   // not just its palette. These shapes mirror the Blender customization source in
   // tools/blender/build_customization.py and stay animation-safe on the runtime rig.
-  const outfitGroups={};
-  for(const name of OUTFITS)outfitGroups[name]=new THREE.Group();
-  for(const g of Object.values(outfitGroups))figure.add(g);
+  const outfitGroups=Object.fromEntries(OUTFITS.map(name=>[name,[]]));
   const mount=(group,bone,geometry,material,x=0,y=0,z=0)=>{
-    const m=part(body.bones[bone],geometry,material,x,y,z);group.add(m);return m;
+    const m=part(body.bones[bone],geometry,material,x,y,z);group.push(m);return m;
   };
   // Ranger: light hood/scarf, diagonal harness, short split cape.
   mount(outfitGroups.ranger,'Chest',new RoundedBoxGeometry(.67,.12,.42,3,.04),clothDark,0,.23,.02);
@@ -114,7 +116,39 @@ export function createAvatar(scene){
       part(hairGroup,new RoundedBoxGeometry(.055,.13,.055,3,.018),accentMat,0,-.64,.19);
     }
   }
-  hairStyle('short');let currentEmote='idle';
+  hairStyle('short');let currentEmote='idle',appearance={hairStyle:'short',outfit:'ranger'};
+  // Replace the code-built fallback pieces with meshes authored and exported by
+  // Blender. Every outfit piece names its target bone (`Chest__Plate`, etc.),
+  // so it follows the combat rig instead of floating around the figure root.
+  loadCustomization().then(({scene:asset})=>{
+    for(const style of HAIR_STYLES){
+      const source=asset.getObjectByName(`Hair_${style}`);if(!source)continue;
+      const group=source.clone(true);group.name=`BlenderHair_${style}`;group.visible=false;
+      group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.material=hair;}});
+      hairGroup.add(group);
+    }
+    for(const outfit of OUTFITS){
+      const source=asset.getObjectByName(`Outfit_${outfit}`);if(!source)continue;
+      source.children.forEach(piece=>{
+        const boneName=piece.name.split('__')[0],bone=body.bones[boneName];if(!bone)return;
+        const clone=piece.clone(true);clone.name=`Blender_${outfit}_${piece.name}`;clone.visible=false;
+        clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});bone.add(clone);outfitGroups[outfit].push(clone);
+      });
+    }
+    applyAppearance();
+  }).catch(e=>console.warn('Blender customization pack failed to load; using procedural fallback.',e));
+  function applyAppearance(){
+    const a=appearance;
+    body.paint(a);
+    skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
+    const authored=hairGroup.getObjectByName(`BlenderHair_${a.hairStyle}`);
+    if(authored){hairGroup.children.forEach(o=>o.visible=o===authored);}else hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
+    blockCloth.color.set(SHIRTS[a.shirt]||SHIRTS.moss);blockLeather.color.set(a.outfit==='warden'||a.outfit==='sentinel'?0x414a45:0x524537);blockPants.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
+    clothDark.color.copy(blockCloth.color).multiplyScalar(.72);
+    for(const [name,pieces] of Object.entries(outfitGroups))for(const piece of pieces)piece.visible=name===(OUTFITS.includes(a.outfit)?a.outfit:'ranger');
+    eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
+    brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
+  }
   const animator=new Animator(figure,buildClips()),bones=body.bones;
   let blinkTimer=2,mood='calm';
   // Weapons (ChatGPT Sites models) ride in the right hand; the equipped one shows.
@@ -139,16 +173,7 @@ export function createAvatar(scene){
   /** Attacking, charging or guarding: the striking grip; otherwise the carry grip. */
   setWeaponStance(strike){striking=strike;},
   /** After posing: hold the weapon, and keep it out of the ground. */
-  holdWeapon(dt,groundAt){if(mounted[current])holdWeapon(mounted[current],striking,dt,groundAt);},setAppearance(a){
-    body.paint(a);
-    skin.color.set(SKIN_TONES[a.skinIndex]||SKIN_TONES[2]);hair.color.set(HAIR_COLORS[a.hairColor]||HAIR_COLORS.raven);
-    hairStyle(HAIR_STYLES.includes(a.hairStyle)?a.hairStyle:'short');
-    blockCloth.color.set(SHIRTS[a.shirt]||SHIRTS.moss);blockLeather.color.set(a.outfit==='warden'||a.outfit==='sentinel'?0x414a45:0x524537);blockPants.color.set(TROUSERS[a.pants]||TROUSERS.charcoal);
-    clothDark.color.copy(blockCloth.color).multiplyScalar(.72);
-    for(const [name,g] of Object.entries(outfitGroups))g.visible=name===(OUTFITS.includes(a.outfit)?a.outfit:'ranger');
-    eyeParts.forEach(p=>p.scale.setScalar(a.face==='round'?1.14:a.face==='sharp'?.87:1));
-    brows.forEach((b,i)=>b.rotation.z=(i?1:-1)*(a.face==='sharp'?.17:.04));
-  },emote(name){currentEmote=name;},get emoteName(){return currentEmote;},
+  holdWeapon(dt,groundAt){if(mounted[current])holdWeapon(mounted[current],striking,dt,groundAt);},setAppearance(a){appearance={...a};applyAppearance();},emote(name){currentEmote=name;},get emoteName(){return currentEmote;},
   /** mood: 'calm' | 'focus' | 'strain' | 'hurt' | 'cheer' drives the face. */
   setMood(next){mood=next;},
   /** Pose the body for this frame, then plant the feet on the terrain. */
@@ -259,3 +284,4 @@ export function createFirstPersonHands(camera){
       animator.update(dt);
     }};
 }
+

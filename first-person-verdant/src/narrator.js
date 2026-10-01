@@ -51,7 +51,7 @@ export function createNarrator() {
   const spores = new THREE.Points(sporeGeo, new THREE.PointsMaterial({ color: 0xc6f48a, size: .035, transparent: true, opacity: .7, depthWrite: false }));
   scene.add(spores);
 
-  const holder = new THREE.Group(); holder.scale.setScalar(.75); scene.add(holder);
+  const holder = new THREE.Group(); holder.scale.setScalar(.82); scene.add(holder);
   let parts = null, mood = MOODS.welcoming, talking = false, spot = 0, blinkAt = 2, blink = 0;
   const at = new THREE.Vector3(0, 1.45, 0), want = new THREE.Vector3(0, 1.45, 0);
   new GLTFLoader().loadAsync(`${BASE}characters/mycel/mycel.glb`).then(gltf => {
@@ -79,6 +79,10 @@ export function createNarrator() {
       at.x = damp(at.x, want.x, 1.3, dt); at.y = damp(at.y, want.y, 1.3, dt); at.z = damp(at.z, want.z, 1.3, dt);
       const vx = (at.x - prevX) / Math.max(dt, 1e-3);
       holder.position.set(at.x, at.y + Math.sin(t * 2.1) * .06 + Math.abs(Math.sin(t * 4)) * .03 * mood.bounce, at.z);
+      // Plush squash-and-stretch: Mycel settles wide at the bottom of each bob,
+      // then springs tall. It makes the floating spirit feel soft rather than rigid.
+      const hop=Math.sin(t*2.1),squash=.035*(1-hop)+.025*mood.bounce*Math.abs(Math.sin(t*4));
+      holder.scale.x=damp(holder.scale.x,.82+squash,8,dt);holder.scale.z=damp(holder.scale.z,.82+squash,8,dt);holder.scale.y=damp(holder.scale.y,.82-squash*.72,8,dt);
       holder.rotation.z = damp(holder.rotation.z, -vx * .35 + mood.roll + Math.sin(t * 1.3) * .04, 4, dt);
       holder.rotation.y = damp(holder.rotation.y, -vx * .25 - at.x * .12 + Math.sin(t * .7) * .12, 3, dt);
       holder.rotation.x = damp(holder.rotation.x, .06 + Math.sin(t * 1.7) * .03, 3, dt);
@@ -113,3 +117,4 @@ export function createNarrator() {
     }
   };
 }
+

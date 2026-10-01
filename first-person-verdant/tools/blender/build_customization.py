@@ -1,80 +1,59 @@
-"""Build visibly distinct customization concept meshes in Blender.
+"""Export five hairstyles and four outfits as a runtime GLB.
 
-Run:
-  blender -b --python tools/blender/build_customization.py
-
-This source file is intentionally kept beside the game even though the runtime uses
-bone-mounted equivalents in src/avatar.js. It gives artists a real Blender starting
-point for replacing the procedural meshes with exported GLBs later.
+Run: blender -b --python first-person-verdant/tools/blender/build_customization.py
+Outfit child names start with the humanoid bone they attach to, then ``__``.
 """
-import bpy, math
-from mathutils import Vector
+import bpy, math, os, sys
+ARGS=sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else []
+def arg(name,default): return ARGS[ARGS.index(name)+1] if name in ARGS else default
+HERE=os.path.dirname(os.path.abspath(__file__))
+OUT=os.path.abspath(arg('--out',os.path.join(HERE,'../../public/characters/customization/customization.glb')))
+bpy.ops.wm.read_factory_settings(use_empty=True)
 
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete(use_global=False)
-
-def mat(name, color):
-    m=bpy.data.materials.new(name)
-    m.diffuse_color=(*color,1)
-    return m
-HAIR=mat('Hair',(0.08,.06,.045))
-CLOTH=mat('Cloth',(.16,.31,.22))
-LEATHER=mat('Leather',(.18,.13,.09))
-ARMOR=mat('Armor',(.24,.3,.27))
-TRIM=mat('Trim',(.48,.37,.18))
-
-def cube(name, loc, scale, material, bevel=.04, rot=(0,0,0)):
-    bpy.ops.mesh.primitive_cube_add(location=loc, rotation=rot)
-    o=bpy.context.object;o.name=name;o.scale=scale
+def material(name,color,metal=0,rough=.8):
+    m=bpy.data.materials.new(name);m.diffuse_color=(*color,1);m.metallic=metal;m.roughness=rough;return m
+HAIR=material('Customization_Hair',(.06,.075,.065),0,.95);CLOTH=material('Customization_Cloth',(.12,.28,.19),0,1)
+DARK=material('Customization_DarkCloth',(.07,.16,.12),0,1);LEATHER=material('Customization_Leather',(.20,.15,.10),0,.92)
+ARMOR=material('Customization_Armor',(.25,.31,.28),.18,.68);TRIM=material('Customization_Trim',(.55,.42,.20),.08,.72)
+def empty(name):
+    o=bpy.data.objects.new(name,None);bpy.context.collection.objects.link(o);return o
+def cube(parent,name,loc,scale,mat,bevel=.025,rot=(0,0,0)):
+    bpy.ops.mesh.primitive_cube_add(location=loc,rotation=rot);o=bpy.context.object;o.name=name;o.scale=scale
     bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
-    b=o.modifiers.new('Soft edges','BEVEL');b.width=bevel;b.segments=3
-    o.data.materials.append(material);return o
+    if bevel:
+        b=o.modifiers.new('Soft_block_edges','BEVEL');b.width=bevel;b.segments=2;bpy.context.view_layer.objects.active=o;bpy.ops.object.modifier_apply(modifier=b.name)
+    o.data.materials.append(mat);o.parent=parent;return o
+def orb(parent,name,loc,scale,mat):
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2,radius=1,location=loc);o=bpy.context.object;o.name=name;o.scale=scale
+    bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(mat);o.parent=parent;return o
 
-def uv(name, loc, scale, material):
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=12, location=loc)
-    o=bpy.context.object;o.name=name;o.scale=scale
-    bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
-    o.data.materials.append(material);return o
+g=empty('Hair_short');cube(g,'Short_Crown',(0,.18,.02),(.205,.06,.19),HAIR,.04);cube(g,'Short_Fringe',(0,.11,-.17),(.17,.038,.045),HAIR,.018)
+g=empty('Hair_curly')
+for i in range(38):
+    ring=i%19;a=ring/19*math.tau;r=.13+(.035 if i>=19 else 0);y=.15+(i%5)*.026;orb(g,f'Curl_{i:02}',(math.cos(a)*r,y,math.sin(a)*r),(.052,.046,.052),HAIR)
+for i in range(9):orb(g,f'CrownCurl_{i}',((i%3-1)*.09,.27+(i//3)*.035,(i%2-.5)*.08),(.055,.05,.055),HAIR)
+g=empty('Hair_swept');cube(g,'Swept_Crown',(-.015,.19,.02),(.215,.075,.19),HAIR,.04,rot=(0,0,-.08))
+for i in range(5):cube(g,f'Swept_Lock_{i}',(-.16+i*.075,.13+i*.025,-.17),(.065,.04,.06),HAIR,.022,rot=(0,0,-.38+i*.06))
+cube(g,'Swept_Side',(-.18,.08,.035),(.05,.125,.15),HAIR,.028,rot=(0,0,-.08))
+g=empty('Hair_tied');cube(g,'Tied_Crown',(0,.18,.02),(.205,.06,.19),HAIR,.04)
+for s,n in ((-1,'L'),(1,'R')):cube(g,f'Tied_Side_{n}',(s*.16,.035,.08),(.048,.16,.05),HAIR,.025,rot=(0,0,-s*.08))
+orb(g,'Tied_Bun',(0,.13,.20),(.105,.095,.084),HAIR)
+g=empty('Hair_braid');cube(g,'Braid_Crown',(0,.18,.02),(.205,.06,.19),HAIR,.04);cube(g,'Braid_Nape',(0,.06,.18),(.05,.1,.045),HAIR,.02)
+for i in range(7):orb(g,f'Braid_Link_{i}',((-.018 if i%2 else .018),-.04-i*.09,.19),(.048-i*.0025,.062-i*.003,.045-i*.0025),HAIR)
+cube(g,'Braid_Cuff',(0,-.64,.19),(.028,.065,.028),TRIM,.012)
 
-# Five hairstyles spaced across X for easy visual inspection.
-for idx,name in enumerate(('short','curly','swept','tied','braid')):
-    x=(idx-2)*1.25
-    cube('head_'+name,(x,0,1.7),(.19,.175,.215),mat('skin_'+name,(.58,.38,.25)),.055)
-    if name=='short':
-        cube('hair_short',(x,-.005,1.93),(.205,.19,.07),HAIR,.045)
-    elif name=='curly':
-        for i in range(28):
-            a=i/14*math.tau;r=.16+(i//14)*.035
-            uv('curl',(x+math.cos(a)*r,math.sin(a)*r,1.91+(i%4)*.035),(.055,.055,.055),HAIR)
-    elif name=='swept':
-        cube('swept_crown',(x-.02,0,1.94),(.22,.19,.08),HAIR,.045,rot=(0,0,-.12))
-        for i in range(5): cube('swept_lock',(x-.18+i*.08,-.18,1.86+i*.03),(.07,.055,.05),HAIR,.025,rot=(0,0,-.4+i*.07))
-    elif name=='tied':
-        cube('tied_cap',(x,0,1.93),(.205,.19,.065),HAIR,.04)
-        uv('bun',(x,.22,1.88),(.12,.09,.11),HAIR)
-        for s in (-1,1): cube('side_lock',(x+s*.17,.05,1.72),(.045,.05,.18),HAIR,.025,rot=(0,0,-s*.08))
-    else:
-        cube('braid_cap',(x,0,1.93),(.205,.19,.065),HAIR,.04)
-        for i in range(8): uv('braid',(x+(-.018 if i%2 else .018),.2,1.77-i*.1),(.055,.05,.065),HAIR)
-        cube('braid_cuff',(x,.2,1.02),(.035,.035,.06),TRIM,.015)
+def outfit(name):return empty('Outfit_'+name)
+g=outfit('ranger');cube(g,'Chest__Scarf',(0,.23,.02),(.335,.06,.21),DARK,.035);cube(g,'Spine__Harness',(.03,.22,-.19),(.045,.275,.02),LEATHER,.012,rot=(0,0,-.55))
+for s,n in ((-1,'L'),(1,'R')):cube(g,f'Hips__Cape_{n}',(s*.13,-.12,.17),(.11,.24,.028),DARK,.018,rot=(0,0,s*.08))
+g=outfit('warden');cube(g,'Chest__Plate',(0,.08,-.20),(.29,.19,.04),ARMOR,.025);cube(g,'Spine__Belt',(0,.02,0),(.23,.06,.195),TRIM,.025)
+for s,n in ((-1,'Left'),(1,'Right')):cube(g,f'{n}Shoulder__Pauldron',(s*.11,-.02,0),(.17,.08,.20),ARMOR,.038,rot=(0,0,-s*.12))
+g=outfit('wanderer');cube(g,'Chest__Poncho',(0,.17,.015),(.39,.09,.24),CLOTH,.045);cube(g,'Neck__Cowl',(0,-.01,.01),(.23,.08,.20),LEATHER,.035)
+for s,n in ((-1,'L'),(1,'R')):cube(g,f'Hips__Coat_{n}',(s*.14,-.19,.17),(.125,.31,.04),CLOTH,.022,rot=(0,0,s*.12))
+g=outfit('sentinel');cube(g,'Chest__Breastplate',(0,.08,-.21),(.35,.21,.05),ARMOR,.028);cube(g,'Neck__HighCollar',(0,-.02,.03),(.24,.10,.20),ARMOR,.038)
+for s,n in ((-1,'Left'),(1,'Right')):
+    cube(g,f'Hips__Guard_{n}',(s*.25,.02,0),(.10,.19,.18),ARMOR,.03);cube(g,f'{n}ForeArm__Bracer',(s*.02,-.12,0),(.14,.17,.15),ARMOR,.03)
 
-# Four outfit torsos, again spaced for side-by-side comparison.
-for idx,name in enumerate(('ranger','warden','wanderer','sentinel')):
-    x=(idx-1.5)*1.55;y=2.1
-    cube('torso_'+name,(x,y,1.2),(.3,.18,.32),CLOTH,.05)
-    if name=='ranger':
-        cube('ranger_harness',(x,y-.19,1.22),(.055,.025,.35),LEATHER,.015,rot=(0,-.5,0))
-        for s in (-1,1): cube('ranger_tail',(x+s*.13,y+.12,.75),(.11,.035,.3),CLOTH,.02,rot=(0,s*.08,0))
-    elif name=='warden':
-        cube('warden_plate',(x,y-.2,1.25),(.29,.05,.24),ARMOR,.025)
-        for s in (-1,1): cube('pauldron',(x+s*.36,y,1.45),(.18,.21,.09),ARMOR,.04)
-    elif name=='wanderer':
-        cube('poncho',(x,y,1.43),(.4,.24,.12),CLOTH,.055)
-        for s in (-1,1): cube('coat_panel',(x+s*.14,y+.12,.72),(.12,.04,.38),CLOTH,.025,rot=(0,s*.1,0))
-    else:
-        cube('sentinel_plate',(x,y-.21,1.25),(.34,.06,.27),ARMOR,.03)
-        cube('sentinel_collar',(x,y,1.58),(.25,.2,.11),ARMOR,.04)
-        for s in (-1,1): cube('hip_guard',(x+s*.32,y, .9),(.12,.18,.22),ARMOR,.035)
+os.makedirs(os.path.dirname(OUT),exist_ok=True);bpy.ops.object.select_all(action='SELECT')
+bpy.ops.export_scene.gltf(filepath=OUT,export_format='GLB',use_selection=True,export_yup=True,export_normals=True,export_texcoords=False,export_cameras=False,export_lights=False,export_animations=False)
+print('EXPORTED',OUT,os.path.getsize(OUT)//1024,'KB')
 
-bpy.ops.wm.save_as_mainfile(filepath=bpy.path.abspath('//customization_concepts.blend'))
-print('Saved customization_concepts.blend')

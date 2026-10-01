@@ -78,7 +78,7 @@ export const CLASS_INFO={
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
 export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
-export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));}catch{/* Private browsing can disable storage. */}}
+export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));window.dispatchEvent(new Event('hollow-roots-profile-saved'));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
     const raw=JSON.parse(localStorage.getItem(STORAGE)||'{}');
@@ -102,7 +102,7 @@ export function loadProfile(){
     profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
     profile.appearance.hairStyle=['short','curly','swept','tied','braid'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
-    profile.appearance.outfit=['ranger','warden'].includes(appearance.outfit)?appearance.outfit:'ranger';
+    profile.appearance.outfit=['ranger','warden','wanderer','sentinel'].includes(appearance.outfit)?appearance.outfit:'ranger';
     profile.appearance.weapon=['rootbound','groveblade','stonebreaker'].includes(appearance.weapon)?appearance.weapon:'rootbound';
     profile.appearance.discipline=Object.hasOwn(CLASS_INFO,appearance.discipline)?appearance.discipline:'fighter';
     profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
@@ -291,3 +291,4 @@ export function weaponEligibility(weapon){
   };
   return rules[weapon]||{ok:false,requirement:'Unknown discipline'};
 }
+

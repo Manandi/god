@@ -69,3 +69,58 @@ revoke all on function public.submit_hunter(uuid, text, text, int, int, text, js
 revoke all on function public.remove_hunter(uuid, text) from public;
 grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) to anon, authenticated;
 grant execute on function public.remove_hunter(uuid, text) to anon, authenticated;
+
+-- One asynchronous weekly world, with personal quest saves. The browser-held
+-- hunter secret protects each personal row; the public weekly row contains
+-- only the shared boss result. Re-running this section is safe.
+create table if not exists public.weekly_hunters (
+  week_id text not null,
+  hunter_id uuid not null,
+  secret_hash text not null,
+  profile jsonb not null default '{}'::jsonb,
+  world jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (week_id,hunter_id)
+);
+alter table public.weekly_hunters enable row level security;
+revoke all on public.weekly_hunters from anon,authenticated;
+
+create table if not exists public.weekly_worlds (
+  week_id text primary key,
+  boss_defeated boolean not null default false,
+  defeated_at timestamptz
+);
+alter table public.weekly_worlds enable row level security;
+grant select (week_id,boss_defeated,defeated_at) on public.weekly_worlds to anon,authenticated;
+drop policy if exists "weekly world is public" on public.weekly_worlds;
+create policy "weekly world is public" on public.weekly_worlds for select to anon,authenticated using (true);
+
+create or replace function public.load_weekly_hunter(p_week text,p_id uuid,p_secret text)
+returns jsonb language sql security definer set search_path=public,extensions as $$
+  select jsonb_build_object('profile',profile,'world',world) from public.weekly_hunters
+  where week_id=left(p_week,16) and hunter_id=p_id and secret_hash=encode(extensions.digest(p_secret,'sha256'),'hex');
+$$;
+create or replace function public.save_weekly_hunter(p_week text,p_id uuid,p_secret text,p_profile jsonb,p_world jsonb)
+returns void language plpgsql security definer set search_path=public,extensions as $$
+declare h text:=encode(extensions.digest(p_secret,'sha256'),'hex');
+begin
+  if p_secret is null or char_length(p_secret)<20 then raise exception 'bad secret'; end if;
+  insert into public.weekly_hunters(week_id,hunter_id,secret_hash,profile,world,updated_at)
+  values(left(p_week,16),p_id,h,coalesce(p_profile,'{}'),coalesce(p_world,'{}'),now())
+  on conflict(week_id,hunter_id) do update set profile=excluded.profile,world=excluded.world,updated_at=now()
+  where public.weekly_hunters.secret_hash=h;
+end;$$;
+create or replace function public.defeat_weekly_boss(p_week text)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+  if extract(dow from now() at time zone 'UTC') not in (0,6) then raise exception 'boss is sealed until the weekend'; end if;
+  insert into public.weekly_worlds(week_id,boss_defeated,defeated_at) values(left(p_week,16),true,now())
+  on conflict(week_id) do update set boss_defeated=true,defeated_at=coalesce(public.weekly_worlds.defeated_at,now());
+end;$$;
+revoke all on function public.load_weekly_hunter(text,uuid,text) from public;
+revoke all on function public.save_weekly_hunter(text,uuid,text,jsonb,jsonb) from public;
+revoke all on function public.defeat_weekly_boss(text) from public;
+grant execute on function public.load_weekly_hunter(text,uuid,text) to anon,authenticated;
+grant execute on function public.save_weekly_hunter(text,uuid,text,jsonb,jsonb) to anon,authenticated;
+grant execute on function public.defeat_weekly_boss(text) to anon,authenticated;
+

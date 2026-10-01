@@ -17,6 +17,7 @@ import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
 import { profile,stats,saveProfile,units } from './profile.js';
+import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
@@ -26,6 +27,21 @@ import './menu.css';
 
 const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
+// Restore this hunter's own weekly quest before the story is constructed. If
+// the cloud schema is unavailable, the existing local save remains authoritative.
+let cloudHunter=null,cloudWorld={boss_defeated:false};
+loadWeeklyWorld().then(v=>cloudWorld=v).catch(()=>{});
+loadWeeklySave().then(v=>{
+  cloudHunter=v;
+  const restored=`hollow-roots-cloud-restored-${weeklyLobbyCode()}`;
+  if(!v||sessionStorage.getItem(restored))return;
+  try{
+    sessionStorage.setItem(restored,'1');
+    if(v.profile)localStorage.setItem('hollow-roots-verdant-3d-profile-v1',JSON.stringify(v.profile));
+    if(v.world)localStorage.setItem('verdant-reach-3d-v1',JSON.stringify(v.world));
+    location.reload();
+  }catch{/* Local-only fallback. */}
+}).catch(()=>{});
 const canvas=$('game'),journal=$('journal'),ending=$('ending'),entry=$('entry');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
 let pixelRatio=Math.min(devicePixelRatio,1.25);
@@ -49,7 +65,7 @@ const player={x:world.home.spawn.x,z:world.home.spawn.z,yaw:0,cameraYaw:0,pitch:
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
 let cueText='',cueUntil=0,cameraKick=0;
-let save;try{save=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
+let save;try{save=cloudHunter?.world||JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const story=createStory(save.story,memories);
@@ -85,7 +101,13 @@ function initAudio(){
   }catch{/* Sound is optional on unsupported browsers. */}
 }
 function toast(title,detail=''){$('toast').innerHTML=title+(detail?`<small>${detail}</small>`:'');$('toast').classList.remove('hidden');toastTimer=3.5;}
-function persist(){try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify({memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize()}));}catch{/* No storage available. */}}
+let cloudSaveTimer=0;
+function persist(){
+  const state={memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize()};
+  try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify(state));}catch{/* No storage available. */}
+  clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>saveWeeklyHunter(JSON.parse(JSON.stringify(profile)),state).catch(()=>{}),650);
+}
+window.addEventListener('hollow-roots-profile-saved',()=>persist());
 function updateJournal(){
   const chronicleEntries=CHRONICLES.map((q,i)=>{const done=chronicles.completed.has(q.id),active=chronicles.active?.id===q.id;
     return `<article class="${done||active?'':'unknown'}"><strong>CHRONICLE ${i+1} · ${done?'TOLD':active?'ACTIVE':'UNTOLD'}</strong>${done?`${q.title}. ${q.complete}`:active?`${q.title}. ${q.accepted}`:'Mossgate’s townsfolk will tell this one.'}</article>`;}).join('');
@@ -321,13 +343,16 @@ $('dialogue').addEventListener('click',e=>{const b=e.target.closest('[data-choic
 /** Orrun is released: the gate roots wither, the story ends, the gate opens. */
 function finishStory(){
   story.advance('end');persist();witherT=0;
+  markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;
   toast('THE FOREST REMEMBERS','Orrun is released. The Canopy Gate stands open.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
 }
 let witherT=-1;
 function updateBoss(rawDt){
   if(warden){
-    warden.setSealed(story.before('gate'));
+    if(cloudWorld.boss_defeated&&warden.state!=='released')warden.release(true);
+    const eventLocked=!dev.bossUnlocked&&(!bossWindow().open||coop.teamSize<2);
+    if(!cloudWorld.boss_defeated)warden.setSealed(story.before('gate')||eventLocked);
     if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
   }
   // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
@@ -370,7 +395,7 @@ const BOSS_CUES={tailspin:'TAIL SPIN · DASH THROUGH OR BACK OFF',tailslam:'TAIL
 // F2 and the password: test any part of the map, any weapon, any class and
 // any point in the story without playing up to it. Adapted from the ChatGPT
 // Sites developer panel.
-const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false};
+const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false,bossUnlocked:false};
 const devPanel=$('devPanel');
 const perfPanel=document.createElement('pre');perfPanel.id='perfPanel';perfPanel.style.display='none';document.body.appendChild(perfPanel);
 let showPerf=false,fpsFrames=0,fpsTime=0;
@@ -462,7 +487,7 @@ devPanel.addEventListener('click',e=>{
       if(warden?.alive&&warden.awake&&Math.hypot(warden.x-player.x,warden.z-player.z)<30){warden.hit({damage:1e6,poise:0,fromX:player.x,fromZ:player.z,stagger:0,part:'head'});n++;}
       toast('DEV · CLEARED',`${n} defeated.`);break;}
     case 'unlock-memories':devJumpTo('gate');break;
-    case 'wake':if(story.before('gate'))devJumpTo('gate');warden?.setSealed(false);warden?.wake();teleport(ARENA.x,ARENA.z+8,"WARDEN'S HOLLOW");break;
+    case 'wake':dev.bossUnlocked=true;if(story.before('gate'))devJumpTo('gate');warden?.setSealed(false);warden?.wake();teleport(ARENA.x,ARENA.z+8,"WARDEN'S HOLLOW");break;
     case 'reset-world':
       memories.clear();story.cleared.clear();resetEncounters();story.advance('meet_sela');
       for(const e of world.echoes)e.crystal.visible=e.ring.visible=e.light.visible=true;
@@ -477,17 +502,10 @@ devPanel.addEventListener('click',e=>{
 });
 
 // --------------------------------------------------------------------- co-op
-// Lobby codes (ChatGPT Sites design) over Supabase Realtime: friends appear as
-// block figures, and recovered memories and cleared nests are shared.
+// Everyone enters the same weekly world. Positions and fights are shared, but
+// memories, nests and dialogue remain personal quest progress.
 const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},
-  getShared:()=>({memories:[...memories],cleared:[...story.cleared]}),
-  onShared:shared=>{
-    let changed=false;
-    for(const id of shared.memories||[])if(SITES.some(s=>s.id===id)&&!memories.has(id)){memories.add(id);const e=world.echoes.find(e=>e.id===id);if(e)e.crystal.visible=e.ring.visible=e.light.visible=false;changed=true;}
-    for(const id of shared.cleared||[])if(CHAPTERS.some(c=>c.id===id)&&!story.cleared.has(id)){
-      story.cleared.add(id);if(spawned.has(id)){creatures.filter(c=>c.chapter===id).forEach(c=>c.sleep());spawned.delete(id);}changed=true;}
-    if(changed){const before=story.stage;story.advance(story.stage);persist();toast('CO-OP · PROGRESS SHARED',story.stage!==before?story.info.objective:'Your party’s discoveries are yours too.');}
-  }});
+  defaultCode:weeklyLobbyCode()});
 
 // ---------------------------------------------------------------- encounters
 // The hollowed gather only at the site of the chapter being played: they rise
@@ -746,7 +764,7 @@ function scaleBosses(){
 
 /** A creature went down (by your hand, or in a team fight by anyone's). */
 function creatureDefeated(c){
-  if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;toast('ORRUN FALLS STILL','The Hollowing drains out of it. Go to it and speak its name.');}
+  if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL','The whole weekly world brought it down. Go to it and speak its name.');}
   else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
@@ -804,7 +822,8 @@ function updateHUD(){
   updateWaypoint(next,distance);
   $('objective').textContent=story.info.objective;
   const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
-  $('sideObjective').textContent=cq?`CHRONICLE · ${cq.title} · ${chronicles.goalMet(cq)?'return to '+giver(cq):'recover the memory'}`:offer?`CHRONICLE · speak with ${giver(offer)} in Mossgate`:'';
+  const event=story.reached('gate')&&!story.reached('end')?`${bossWindowLabel()}${bossWindow().open&&coop.teamSize<2?' · 2 HUNTERS REQUIRED':''}`:'';
+  $('sideObjective').textContent=event||(cq?`CHRONICLE · ${cq.title} · ${chronicles.goalMet(cq)?'return to '+giver(cq):'recover the memory'}`:offer?`CHRONICLE · speak with ${giver(offer)} in Mossgate`:'');
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
@@ -951,7 +970,7 @@ function update(rawDt){
     // The host's creatures go after their explorer (assignTargets); a guest's follow the host's snapshots.
     const pick=targets?.get(c),target=pick?.o||playerPos;
     c.target=target;c.targetKey=pick?.key??'me';
-    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'});
+    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'&&bossWindow().open&&coop.teamSize>=2});
     if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
     // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
     if(target!==playerPos){const key=c.state+c.attack;if(c.localKey!==key){c.localKey=key;c.localHit=false;}
@@ -1073,8 +1092,8 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;warden.netId='warden';gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
-  warden.setSealed(story.before('gate'));
-  if(story.reached('end')){warden.release(true);if(gateRoots)gateRoots.visible=false;}
+  warden.setSealed(story.before('gate')||!bossWindow().open||coop.teamSize<2);
+  if(story.reached('end')||cloudWorld.boss_defeated){warden.release(true);if(gateRoots)gateRoots.visible=false;}
 }).catch(err=>console.warn('The Warden or its arena failed to load.',err));
 // The block explorer (ChatGPT Sites design) is the player. ?legacyCharacters
 // loads the earlier Blender-authored explorer instead.
@@ -1116,3 +1135,4 @@ if(params.has('arena')){
   player.z=37;player.cameraYaw=0;resume();
   window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
+

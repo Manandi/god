@@ -100,6 +100,15 @@ How the story uses the ChatGPT NPCs:
 - Added `first-person-verdant/tools/blender/build_customization.py` as the Blender source/concept generator for those hair and outfit designs. Blender is not installed in the GitHub connector runtime, so the script is committed for Blender generation/export rather than falsely claiming a generated .blend/.glb was verified here.
 - Runtime commits: `c2ab760` (distinct hair/outfit meshes), `0ded2e2` (Blender source generator). Preserve the newer combat/onboarding work when iterating on these assets.
 
+## Weekly world and Blender character pass — 2026-09-30
+
+- The customization gap is closed: `tools/blender/build_customization.py` now exports `public/characters/customization/customization.glb`. `src/avatar.js` loads those Blender meshes, mounts outfit pieces to named combat bones, and keeps the procedural pieces only as a loading/error fallback. All five hairstyles and four outfits are valid saved choices. This also fixes the old outfit-parenting bug that could leave pieces detached from animation bones.
+- Mycel was rebuilt and exported in Blender as a rounder plush mushroom spirit: wider squishy body and cap, large eyes and pupils, blush, tiny root arms, a brighter palette, and runtime squash-and-stretch. Source remains `tools/blender/build_mycel.py`; the runtime asset remains `public/characters/mycel/mycel.glb`.
+- Normal play auto-joins one deterministic lobby for the current Monday-based week. URL lobby codes remain as an explicit private/test override. Other players and team combat are shared, while memories, encounter clears, dialogue, and quest stage are personal.
+- Orrun is a weekend community event: sealed Monday–Friday, open Saturday 00:00 UTC through Monday 00:00 UTC, and requires at least two hunters online to wake. F2 dev mode's WAKE WARDEN bypasses both gates for testing. A defeat is shared for that week's world.
+- `src/weeklyWorld.js` and the appended `supabase/schema.sql` section add durable personal weekly saves and shared boss completion using the existing browser hunter identity. Local storage remains the offline fallback. **Run the new SQL once in the existing Supabase project's SQL editor before cloud saves/shared boss completion become durable; do not claim the migration is live until it has been applied.**
+- Hosting remains GitHub Pages + Supabase. The owner does **not** need to leave a MacBook on: GitHub serves the game and Supabase stores saves/presence. For reliable 24/7 play, use a paid/non-pausing Supabase project; the free project may pause after inactivity.
+
 ## Latest shared state — 2026-10-01 (story rewrite, Old Shell and 2D game removed, leaderboard, hidden dev mode)
 
 - **The 2D game is removed** (owner's request). Its root files, the 2D Site config (`.openai/`) and `ASSETS.md` are deleted; they remain in git history.
@@ -458,3 +467,4 @@ The owner asked for a better camera and quest marker, a dev mode, Monster Hunter
 ## How to hand off work
 
 After each meaningful task, update this file with the date, the exact commit, what changed, what was tested, what was published and verified, and remaining issues. Keep the newest update above older notes; remove stale claims. Run `npm ci`, `npm run dev` and `npm run build` in `first-person-verdant/` for 3D changes. Use `?arena&debug` or F3 for combat testing. Run root checks when touching the 2D project. Commit and push to the existing branch, then verify the GitHub Actions run and live Pages result. If updating the 3D Site, push its **existing** source repository and verify the deployment separately. Never claim a deployment is live from a successful push alone.
+
