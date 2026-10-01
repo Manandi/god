@@ -85,3 +85,40 @@ export const PLAN = [
 ];
 export const PLAN_BONUS = 300;   // XP for finishing a whole week
 export const planStep = n => PLAN[Math.max(0, Math.min(PLAN.length - 1, n - 1))];
+
+// ------------------------------------------------------------- lift log
+// The personal lift log on WEEKLY QUEST, for lifters who follow their own
+// program. It earns no XP (XP comes only from the plan and the weekly tasks);
+// it tracks personal records and unlocks cosmetic titles.
+export const EXERCISES = [
+  // Chest
+  'Barbell Bench Press', 'Incline Barbell Bench Press', 'Decline Bench Press', 'Dumbbell Bench Press', 'Incline Dumbbell Press', 'Dumbbell Fly', 'Cable Fly', 'Machine Chest Press', 'Push-up', 'Weighted Dip',
+  // Back
+  'Deadlift', 'Romanian Deadlift', 'Sumo Deadlift', 'Barbell Row', 'Pendlay Row', 'Dumbbell Row', 'T-Bar Row', 'Seated Cable Row', 'Lat Pulldown', 'Pull-up', 'Chin-up', 'Weighted Pull-up', 'Face Pull', 'Shrug', 'Rack Pull',
+  // Legs
+  'Back Squat', 'Front Squat', 'Goblet Squat', 'Bulgarian Split Squat', 'Walking Lunge', 'Leg Press', 'Hack Squat', 'Leg Extension', 'Leg Curl', 'Hip Thrust', 'Glute Bridge', 'Standing Calf Raise', 'Seated Calf Raise', 'Step-up', 'Good Morning',
+  // Shoulders
+  'Overhead Press', 'Seated Dumbbell Press', 'Arnold Press', 'Push Press', 'Lateral Raise', 'Front Raise', 'Rear Delt Fly', 'Upright Row',
+  // Arms
+  'Barbell Curl', 'Dumbbell Curl', 'Hammer Curl', 'Preacher Curl', 'Cable Curl', 'Tricep Pushdown', 'Skull Crusher', 'Overhead Tricep Extension', 'Close-Grip Bench Press', 'Dip',
+  // Core
+  'Plank', 'Hanging Leg Raise', 'Cable Crunch', 'Ab Wheel Rollout', 'Russian Twist', 'Pallof Press',
+  // Olympic and power
+  'Power Clean', 'Hang Clean', 'Clean and Jerk', 'Snatch', 'Kettlebell Swing', 'Farmer’s Carry', 'Sled Push', 'Box Jump',
+  // Machines and other
+  'Smith Machine Squat', 'Pec Deck', 'Assisted Pull-up', 'Back Extension', 'Battle Ropes'
+];
+/** Estimated one-rep max (Epley): weight × (1 + reps/30); a single counts as itself. */
+export const e1rm = (kg, reps) => reps <= 1 ? kg : kg * (1 + reps / 30);
+// Cosmetic titles: shown next to your name on the leaderboard. [id, label, how to earn, test(stats)]
+export const TITLES = [
+  ['first-rep', 'First Rep', 'Log your first set', s => s.sets >= 1],
+  ['iron-apprentice', 'Iron Apprentice', 'Log 25 sets', s => s.sets >= 25],
+  ['iron-regular', 'Iron Regular', 'Log 100 sets', s => s.sets >= 100],
+  ['iron-veteran', 'Iron Veteran', 'Log 300 sets', s => s.sets >= 300],
+  ['consistent', 'Consistent', 'Lift on 12 different days', s => s.days >= 12],
+  ['well-rounded', 'Well-Rounded', 'Log 15 different exercises', s => s.exercises >= 15],
+  ['record-breaker', 'Record Breaker', 'Set 10 personal records', s => s.prs >= 10],
+  ['two-plate', 'Two-Plate Club', 'Lift 225 lb / 102 kg in any exercise', s => s.heaviest >= 102],
+  ['three-plate', 'Three-Plate Club', 'Lift 315 lb / 143 kg in any exercise', s => s.heaviest >= 143]
+].map(([id, label, need, test]) => ({ id, label, need, test }));

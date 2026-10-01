@@ -206,3 +206,35 @@ revoke all on function public.toggle_stat_cap(uuid, text, uuid, text) from publi
 grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb) to anon, authenticated;
 grant execute on function public.remove_hunter(uuid, text) to anon, authenticated;
 grant execute on function public.toggle_stat_cap(uuid, text, uuid, text) to anon, authenticated;
+
+
+-- Cosmetic lift-log titles (migration leaderboard_titles). Earned from the
+-- personal lift log on the quest page; they never give XP or stats, they only
+-- show under the name on the board. Unknown titles are dropped to null.
+alter table public.hunters add column if not exists title text
+  check (title is null or title in ('first-rep','iron-apprentice','iron-regular','iron-veteran','consistent','well-rounded','record-breaker','two-plate','three-plate'));
+grant select (title) on public.hunters to anon, authenticated;
+
+create or replace function public.submit_hunter(p_id uuid, p_secret text, p_name text, p_level int, p_xp int, p_klass text, p_stats jsonb, p_title text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare
+  h text := encode(extensions.digest(p_secret, 'sha256'), 'hex');
+  clean jsonb := '{}'::jsonb;
+  k text;
+  t text := case when p_title in ('first-rep','iron-apprentice','iron-regular','iron-veteran','consistent','well-rounded','record-breaker','two-plate','three-plate') then p_title else null end;
+begin
+  if p_secret is null or char_length(p_secret) < 20 then raise exception 'bad secret'; end if;
+  if exists (select 1 from public.weekly_hunters where hunter_id = p_id and secret_hash <> h) then raise exception 'not your hunter'; end if;
+  foreach k in array array['strength','speed','stamina','defense','intelligence','discipline'] loop
+    if jsonb_typeof(p_stats -> k) = 'number' then
+      clean := clean || jsonb_build_object(k, greatest(1, least(30, round((p_stats ->> k)::numeric)::int)));
+    end if;
+  end loop;
+  insert into public.hunters (id, secret_hash, name, level, xp, klass, stats, title, updated_at)
+  values (p_id, h, left(btrim(p_name), 24), p_level, p_xp, p_klass, clean, t, now())
+  on conflict (id) do update
+    set name = excluded.name, level = excluded.level, xp = excluded.xp, klass = excluded.klass, stats = excluded.stats, title = excluded.title, updated_at = now()
+    where public.hunters.secret_hash = h;
+end;$$;
+revoke all on function public.submit_hunter(uuid, text, text, int, int, text, jsonb, text) from public;
+grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb, text) to anon, authenticated;

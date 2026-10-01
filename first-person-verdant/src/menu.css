@@ -148,3 +148,22 @@
 .board-note{color:#a6c2ab;font-size:12px}
 .stat-grid>div.capped{border-color:#a4553f}.stat-grid em.cap{font-style:normal;color:#e7a88f;letter-spacing:.05em}.stat-grid s{color:#e7a88f;font-size:.6em}
 #entry .board button.cap{width:auto;min-width:0;min-height:0;height:auto;padding:1px 5px;margin:0 0 0 4px;font-size:12px;letter-spacing:0;display:inline-block;vertical-align:middle}
+/* Personal lift log */
+.lift-log{margin-top:22px;padding-top:6px;border-top:1px solid #2f4d3c}
+.lift-log h3 small,.lift-log h4 small{font-size:9px;color:#a6c2ab;letter-spacing:.12em;margin-left:6px}
+.lift-log h4{font:500 11px 'DM Mono',monospace;letter-spacing:.14em;color:#bdd7b0;margin:16px 0 8px}
+.lift-note{font-size:12px!important;color:#a6c2ab}
+#liftForm{display:grid!important;grid-template-columns:2.2fr 1fr .8fr .7fr auto;gap:10px;align-items:end}
+#liftForm label{display:grid;gap:6px;font-size:11px;color:#b9d2bc}
+.lift-columns{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:22px}
+.lift-list{list-style:none;padding:0;margin:0;font-size:12px}
+.lift-list li{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-top:1px solid #243f31}
+.lift-list li span{color:#94b19b;font-size:10px;min-width:38px}.lift-list li b{font-weight:500;flex:1}.lift-list li em{font-style:normal;color:#bce09c;white-space:nowrap}.lift-list li em small{color:#94b19b}
+#entry .lift-list button.lift-del{padding:0 6px;border:0;background:transparent;color:#94b19b;font-size:14px;line-height:1}
+#entry .lift-list button.lift-del:hover{color:#e7a88f;transform:none}
+.title-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.title-list li{display:flex;align-items:center;gap:8px}.title-list small{font-size:9px;color:#94b19b;letter-spacing:.06em}
+#entry .title-list button{padding:4px 8px;font-size:10px;min-width:118px;text-align:left}
+#entry .title-list button.worn{background:#cbe2a6;color:#17251c;border-color:#e4f5c5}
+@media(max-width:800px){#liftForm{grid-template-columns:1fr 1fr}.lift-columns{grid-template-columns:1fr}}
+.board .board-title{display:block;font-size:9px;letter-spacing:.1em;color:#f0d897;text-transform:uppercase}

@@ -22,14 +22,14 @@ export const leaderboard = {
     if (leaderboard.hidden || !profile.complete) return false;
     const me = hunterIdentity();
     const { error } = await rpc('submit_hunter', { p_id: me.id, p_secret: me.secret, p_name: (profile.name || 'Wayfarer').slice(0, 24),
-      p_level: level(), p_xp: Math.round(profile.xp), p_klass: profile.appearance.discipline || 'fighter', p_stats: claimedStats() });
+      p_level: level(), p_xp: Math.round(profile.xp), p_klass: profile.appearance.discipline || 'fighter', p_stats: claimedStats(), p_title: profile.title || null });
     if (error) throw error;
     return true;
   },
   /** The board (highest level first) and every standing cap. */
   async load(limit = 50) {
     const [h, c] = await Promise.all([
-      supabase.from('hunters').select('id,name,level,xp,klass,stats').order('level', { ascending: false }).order('xp', { ascending: false }).limit(limit),
+      supabase.from('hunters').select('id,name,level,xp,klass,stats,title').order('level', { ascending: false }).order('xp', { ascending: false }).limit(limit),
       supabase.from('stat_caps').select('target,flagger,stat')
     ]);
     if (h.error) throw h.error; if (c.error) throw c.error;

@@ -111,6 +111,10 @@ function initAudio(){
   }catch{/* Sound is optional on unsupported browsers. */}
 }
 function toast(title,detail=''){$('toast').innerHTML=title+(detail?`<small>${detail}</small>`:'');$('toast').classList.remove('hidden');toastTimer=3.5;}
+// First-time tips: shown once per player, the first time each thing happens.
+// The NPCs in Mossgate teach the rest (their first dialogue choice is a tutorial).
+const TIPS_KEY='hollow-roots-tips-v1';let tipsSeen;try{tipsSeen=new Set(JSON.parse(localStorage.getItem(TIPS_KEY)||'[]'));}catch{tipsSeen=new Set();}
+function tip(id,title,detail){if(tipsSeen.has(id)||dialogue)return;tipsSeen.add(id);try{localStorage.setItem(TIPS_KEY,JSON.stringify([...tipsSeen]));}catch{}toast(title,detail);toastTimer=7;}
 let cloudSaveTimer=0;
 function persist(){
   const state={memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize(),savedAt:Date.now()};
@@ -131,7 +135,7 @@ function updateJournal(){
     `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('')+chronicleEntries;
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
-function resume(){if(!started)player.health=maxHealth();started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+function resume(){if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
@@ -329,7 +333,7 @@ function chooseDialogue(index){
     if(extra)text+=` ${extra}`;
   }else chronicles.stances[d.id]=key;
   if(npcs[d.id])npcs[d.id].expression=/^(accept|turnin)/.test(key)?'warm':key==='doubt'||key==='boast'?'stern':'warm';
-  persist();d.lines=[text];d.i=0;d.chars=0;d.choices=null;d.replying=true;renderDialogue();playTone(430,.08,.025,'triangle');
+  persist();d.lines=Array.isArray(text)?[...text]:[text];d.i=0;d.chars=0;d.choices=null;d.replying=true;renderDialogue();playTone(430,.08,.025,'triangle');
 }
 function advanceDialogue(){
   const d=dialogue;if(!d||d.choices)return;
@@ -587,6 +591,7 @@ function hurtPlayer(from,kind='light',damage=1){
   $('vignette').style.background='radial-gradient(ellipse,transparent 24%,rgba(143,42,42,.6) 100%)';
   setTimeout(()=>{$('vignette').style.background='';},240);
   hitstop=Math.max(hitstop,kind==='heavy'?.12:.08);kick(from,kind==='heavy'?.14:.07);shoulderCam.punch(kind==='heavy'?.3:.12);combo=0;
+  if(player.health>0&&player.health<=Math.ceil(maxHealth()/2)&&player.flasks>0)tip('flask','YOU ARE HURT','Press X to drink a Sap Flask; it heals after a moment. Rest at the brazier in Mossgate or your hearth at home to refill them.');
   checkDefeated();
 }
 function checkDefeated(){
@@ -623,7 +628,7 @@ function updateNumbers(dt){
 }
 function spend(amount){if(!amount)return;player.stamina=Math.max(0,player.stamina-amount*mech.staminaCost);staminaRest=STAMINA.delay;
   // Emptying Breath leaves you winded: no attacks or dashes until it refills to 30 (after Rotten Souls, MIT).
-  if(player.stamina<=0&&!player.winded){player.winded=true;cue('WINDED',.8);sound.tired();}}
+  if(player.stamina<=0&&!player.winded){player.winded=true;cue('WINDED',.8);sound.tired();tip('winded','OUT OF BREATH','Every swing, dash and guard costs Breath. Back off for a moment and it refills. Orin can teach you more.');}}
 function critTarget(){
   // A toppled or parried creature within reach opens the Root Strike.
   return creatures.find(c=>c.alive&&c.exposed&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
@@ -998,7 +1003,7 @@ function update(rawDt){
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
       else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
-      else if(ev.type==='alert')sound.alert();
+      else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
       else if(ev.type==='enrage'){sound.enrage();toast(c.type==='thornling'?'THE THORNLING IS ENRAGED':'THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}

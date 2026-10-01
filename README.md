@@ -62,15 +62,15 @@ How the story uses the ChatGPT NPCs:
 | `main.js` | Input, the game loop, HUD, quest waypoint, dialogue and choices, encounter spawning, boss wiring, dev panel |
 | `camera.js` | Third-person shoulder camera: right-drag orbit, lock-on framing, world collision, shake, boss intro shots |
 | `mechanics.js` | Real-life stats → damage, speed, dash, jump and double jump, Breath cost, vitality, class bonuses; the equipped weapon |
-| `chronicles.js` | The three Mossgate Chronicles and each NPC's dialogue topics |
-| `training.js` | The weekly training plan (tasks per week, tiers) and the home workouts with their easier versions |
+| `chronicles.js` | The three Mossgate Chronicles and each NPC's dialogue topics (the first topic is a tutorial) |
+| `training.js` | The weekly training plan (tasks per week, tiers), the home workouts with their easier versions, the lift-log exercise list, `e1rm()` and cosmetic `TITLES` |
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
 | `dressingRoom.js` | The character screen's live 3D preview of the real avatar |
 | `identity.js` | This browser's hunter id and secret (the cloud save key) and LINK DEVICE codes |
-| `leaderboard.js` | The shared leaderboard and 🧢 stat caps |
+| `leaderboard.js` | The shared leaderboard, worn titles and 🧢 stat caps |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
 | `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
 | `narrator.js` | The intro's 3D glade and the floating, animated Mycel |
@@ -96,6 +96,20 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (lift log, cosmetic titles, NPC tutorials)
+
+- Still one link: **https://manandi.github.io/god/**, lobby `HROOTS`.
+- **Personal lift log** (WEEKLY QUEST page, under the quest list; `liftLog()`/`wireLiftLog()` in `src/shell.js`):
+  - A searchable exercise box (a `<datalist>` of 77 exercises from `EXERCISES` in `src/training.js`; you can also type your own), weight (lb or kg, following the units setting), reps and sets, then LOG SET.
+  - It shows the last 8 entries (× deletes one), personal records as the best estimated 1RM (Epley, `e1rm()`), and titles.
+  - **It never gives XP or changes stats** (the owner's call: lifts can't be checked). Saved in the profile as `lifts` (max 600 entries; sanitized on load), so it goes to the cloud save like everything else. Old saves just get an empty log.
+- **Cosmetic titles** (`TITLES` in `src/training.js`): First Rep, Iron Apprentice/Regular/Veteran (25/100/300 sets), Consistent (12 days), Well-Rounded (15 exercises), Record Breaker (10 PRs), Two-Plate Club (102 kg), Three-Plate Club (143 kg). Press one to wear it; the worn title (`profile.title`) shows under your name on the leaderboard.
+  - Database: migration `leaderboard_titles` adds `hunters.title` (only those nine ids are accepted) and an 8-parameter `submit_hunter(..., p_title)`; the old 7-parameter one still works. Recorded in `supabase/schema.sql`.
+- **NPC tutorials:** each Mossgate NPC's first topic is now a short guide, spoken over several lines. Halden: "How do I get stronger?" (real tests, WEEKLY QUEST and XP, 30-day retests, the lift log, caps). Orin: "Teach me to fight." (light strikes and Breath, charged heavy, lock-on and dash, guard and parry, weak points, the weekend boss needing 2+ players). Sela: "How do I get around?" (movement, double jump, camera, waypoint, journal and map, lanterns). Tavi: "How do I stay alive?" (hearts and flasks, brazier and hearth, Breath, falling).
+- **First-time tips** (`tip()` in `src/main.js`, remembered in `hollow-roots-tips-v1`): on the first start, the first time Breath runs out, the first fight, and the first time health drops to half with flasks left.
+- Tested in the browser: datalist, PR detection, title unlock and wear, delete, XP unchanged at 0; NPC tutorials; story, saves, combat smoke and dressing room regressions pass. No test data was written to the live database.
+- Live data as of this update: five cloud saves (the friends' two unnamed saves from 04:48 and 04:54 UTC plus three newer ones, one named Speckz) and one board row (Speckz). All left untouched.
 
 ## Latest shared state — 2026-10-01 (leaderboard back, with 🧢 caps)
 

@@ -1,4 +1,4 @@
-import {PLAN,PLAN_BONUS,planStep} from './training.js';
+import {PLAN,PLAN_BONUS,planStep,e1rm,TITLES} from './training.js';
 
 export const BIOMES=[
   {id:'grove',name:'VERDANT REACH',short:'VERDANT',longitude:.115,latitude:.20,level:1,color:'#a8db91',description:'Ancient roots, drowned temples, and the Shellbacks. The first realm is open.',creatures:'Shellbacks · Thornlings',guardian:'Verdant Guardian'},
@@ -77,7 +77,7 @@ export const CLASS_INFO={
   mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
-export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],lifts:[],title:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));window.dispatchEvent(new Event('hollow-roots-profile-saved'));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -115,6 +115,8 @@ export function loadProfile(){
     profile.appearance.pants=['charcoal','umber','olive','indigo'].includes(appearance.pants)?appearance.pants:'charcoal';
     profile.lastWeek=typeof raw.lastWeek==='string'?raw.lastWeek:'';
     profile.name=typeof raw.name==='string'?raw.name.slice(0,24):'';
+    profile.lifts=Array.isArray(raw.lifts)?raw.lifts.filter(l=>l&&typeof l.ex==='string'&&DATE.test(l.date)&&Number.isFinite(l.kg)&&Number.isFinite(l.reps)).map(l=>({date:l.date,ex:l.ex.slice(0,40),kg:Math.max(0,Math.min(500,l.kg)),reps:Math.max(1,Math.min(100,Math.round(l.reps))),sets:Math.max(1,Math.min(20,Math.round(l.sets)||1)),pr:l.pr===true})).slice(-600):[];
+    profile.title=TITLES.some(t=>t.id===raw.title)?raw.title:'';
   }catch{/* New profile. */}
 }
 /** Share of a normal population below z, in percent (Abramowitz–Stegun erf, error < 1.5e-7). */
@@ -314,3 +316,32 @@ export function weaponEligibility(weapon){
   return rules[weapon]||{ok:false,requirement:'Unknown discipline'};
 }
 
+
+// ------------------------------------------------------------- lift log
+// No XP: the lift log only tracks personal records and unlocks cosmetic titles.
+/** Best estimated one-rep max per exercise: Map(exercise -> {e1rm, kg, reps, date}). */
+export function liftRecords(){
+  const best=new Map();
+  for(const l of profile.lifts){const v=e1rm(l.kg,l.reps),b=best.get(l.ex);if(!b||v>b.e1rm)best.set(l.ex,{e1rm:v,kg:l.kg,reps:l.reps,date:l.date});}
+  return best;
+}
+export function liftSummary(){
+  const L=profile.lifts;
+  return {sets:L.reduce((n,l)=>n+l.sets,0),days:new Set(L.map(l=>l.date)).size,exercises:new Set(L.map(l=>l.ex)).size,prs:L.filter(l=>l.pr).length,heaviest:L.reduce((m,l)=>Math.max(m,l.kg),0)};
+}
+export const unlockedTitles=()=>{const s=liftSummary();return TITLES.filter(t=>t.test(s));};
+/** Log sets of an exercise (weight in kg). Returns {pr, titles: newly unlocked} or {error}. */
+export function logLift(ex,kg,reps,sets=1){
+  ex=String(ex||'').trim().replace(/\s+/g,' ').slice(0,40);
+  if(!ex)return {error:'Choose or type an exercise.'};
+  if(!(kg>=0&&kg<=500))return {error:'Enter the weight (0 for bodyweight).'};
+  if(!(reps>=1&&reps<=100))return {error:'Enter the reps (1–100).'};
+  const before=new Set(unlockedTitles().map(t=>t.id)),prev=liftRecords().get(ex);
+  const pr=!prev||e1rm(kg,reps)>prev.e1rm+1e-9;
+  profile.lifts.push({date:localDay(),ex,kg:Math.round(kg*100)/100,reps:Math.round(reps),sets:Math.max(1,Math.min(20,Math.round(sets)||1)),pr:pr&&!!prev});
+  profile.lifts=profile.lifts.slice(-600);
+  const titles=unlockedTitles().filter(t=>!before.has(t.id));
+  if(titles.length&&!profile.title)profile.title=titles[0].id;
+  saveProfile();return {pr:pr&&!!prev,first:!prev,titles};
+}
+export function removeLift(index){if(index>=0&&index<profile.lifts.length){profile.lifts.splice(index,1);saveProfile();}}
