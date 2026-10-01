@@ -2,7 +2,7 @@ import {BIOMES,METRICS,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,
 import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
 import {WORKOUTS,WORKOUT_NOTE} from './training.js';
 import {createLinkCode,claimLinkCode} from './identity.js';
-import {QUESTIONS,canTakeReasoning} from './reasoning.js';
+import {createMindCheck,iqFromTheta,canTakeReasoning,TEST_ITEMS,TIME_LIMIT,TEST_VERSION} from './reasoning.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
 // The intro, told by Mycel (narrator.js floats him around the screen). Each beat
@@ -26,12 +26,12 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
-  loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',quizIndex=0,quizCorrect=0,quizStarted=0,personalityIndex=0;
-  const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;};
+  loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',mind=null,quizQ=null,quizTimer=null,quizResult=null,personalityIndex=0;
+  const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;if(quizTimer){clearInterval(quizTimer);quizTimer=null;}};
   // First time through: intro → measure → check → how you play → reveal → look.
   const onboarding=()=>!profile.customized;
   const step=n=>onboarding()?` · STEP ${n} OF 4`:'';
-  const startQuiz=()=>{quizIndex=0;quizCorrect=0;quizStarted=Date.now();show('quiz');};
+  const startQuiz=()=>{mind=createMindCheck(profile.reasoningSeen);quizQ=null;quizResult=null;show('quiz');};
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
   function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
     if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();else if(view==='workout')renderWorkout();else if(view==='testResult')renderTestResult();
@@ -131,16 +131,28 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');entry.querySelector('[data-action="baseline"]').onclick=()=>show('baseline');entry.querySelector('[data-action="weekly"]').onclick=()=>show('weekly');
     entry.querySelector('[data-action="personality"]').onclick=()=>{personalityIndex=0;show('personality');};
     entry.querySelector('[data-action="quiz"]')?.addEventListener('click',startQuiz);}
-  function renderQuiz(){const q=QUESTIONS[quizIndex];
-    entry.innerHTML=`<section class="shell-card wide-card quiz-card"><span class="eyebrow">MYCEL'S MIND CHECK · ${q.kind==='knowledge'?'KNOWLEDGE':'REASONING'} · ${quizIndex+1} / ${QUESTIONS.length}${step(2)}</span><h2>${esc(q.prompt)}</h2><p>Select the best answer. Eight short questions set your Intelligence; this is a game estimate, not an IQ diagnosis.</p><div class="quiz-options">${q.options.map((o,i)=>`<button data-answer="${i}">${esc(o)}</button>`).join('')}</div><div class="panel-actions">${button('skip','KEEP DEFAULT SCORE')}</div></section>`;
-    entry.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
-      if(Number(b.dataset.answer)===q.answer)quizCorrect++;
-      quizIndex++;if(quizIndex<QUESTIONS.length){renderQuiz();return;}
-      const accuracy=quizCorrect/QUESTIONS.length,pace=Math.max(0,1-(Date.now()-quizStarted)/300000);
-      profile.reasoning=Math.round(70+65*(accuracy*.85+accuracy*pace*.15));profile.reasoningTaken=new Date().toISOString().slice(0,10);
-      saveProfile();show(onboarding()?'personality':'stats');
-    });
-    entry.querySelector('[data-action="skip"]').onclick=()=>show(onboarding()?'personality':'stats');
+  // Mycel's mind check (reasoning.js): twelve adaptive items, each on a clock.
+  const TYPE_LABEL={series:'NUMBER SERIES','letter series':'LETTER SERIES',matrix:'MATRIX',analogy:'ANALOGY',vocabulary:'VOCABULARY','odd one out':'ODD ONE OUT',deduction:'DEDUCTION',quantitative:'QUANTITATIVE',spatial:'SPATIAL',knowledge:'KNOWLEDGE'};
+  function renderQuiz(){
+    if(quizResult){renderQuizResult();return;}
+    if(!mind)mind=createMindCheck(profile.reasoningSeen);
+    const q=quizQ||(quizQ=mind.next());
+    const [text,...grid]=q.prompt.split('\n');
+    entry.innerHTML=`<section class="shell-card wide-card quiz-card"><span class="eyebrow">MYCEL'S MIND CHECK · ${TYPE_LABEL[q.type]||'REASONING'} · ${mind.count+1} / ${TEST_ITEMS}${step(2)}</span><h2>${esc(text)}</h2>${grid.length?`<div class="quiz-matrix">${grid.map(r=>`<div>${r.trim().split(/\s+/).map(c=>`<span>${esc(c)}</span>`).join('')}</div>`).join('')}</div>`:''}<div class="quiz-clock"><i></i></div><p>Questions get harder as you get them right. ${TIME_LIMIT} seconds each; running out counts as wrong. A game estimate on the IQ scale, not a clinical test.</p><div class="quiz-options">${q.options.map((o,i)=>`<button data-answer="${i}">${esc(o)}</button>`).join('')}</div><div class="panel-actions">${button('skip',onboarding()?'SKIP · KEEP AVERAGE (10)':'STOP · KEEP CURRENT SCORE')}</div></section>`;
+    const started=Date.now(),bar=entry.querySelector('.quiz-clock i');
+    const submit=choice=>{if(quizTimer){clearInterval(quizTimer);quizTimer=null;}mind.answer(q,choice);quizQ=null;
+      if(!mind.done){renderQuiz();return;}
+      const est=mind.estimate(),iq=iqFromTheta(est.theta);
+      profile.reasoning=iq;profile.reasoningTaken=new Date().toISOString().slice(0,10);profile.reasoningVersion=TEST_VERSION;profile.reasoningSeen=mind.ids;saveProfile();
+      quizResult={iq,se:Math.round(est.se*15),int:stats().intelligence};mind=null;renderQuizResult();};
+    quizTimer=setInterval(()=>{const left=1-(Date.now()-started)/(TIME_LIMIT*1000);bar.style.width=`${Math.max(0,left)*100}%`;bar.classList.toggle('low',left<.25);if(left<=0)submit(-1);},200);
+    entry.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>submit(Number(b.dataset.answer)));
+    entry.querySelector('[data-action="skip"]').onclick=()=>{mind=null;quizQ=null;show(onboarding()?'personality':'stats');};
+  }
+  function renderQuizResult(){
+    const r=quizResult;
+    entry.innerHTML=`<section class="shell-card wide-card quiz-card"><span class="eyebrow">MYCEL'S MIND CHECK · COMPLETE${step(2)}</span><h2>INTELLIGENCE ${r.int}</h2><div class="stat-grid"><div><small>IQ-SCALE ESTIMATE</small><strong>${r.iq}</strong><span>± ${r.se} (ONE STANDARD ERROR)</span></div><div><small>INTELLIGENCE</small><strong>${r.int}</strong><span>10 IS THE ADULT AVERAGE · 20 IS THE TOP 0.1%</span></div></div><p>Twelve questions can only estimate, so treat this as a range. You can retake it in 30 days, with different questions.</p><div class="panel-actions">${button('next','CONTINUE →',true)}</div></section>`;
+    entry.querySelector('[data-action="next"]').onclick=()=>{quizResult=null;show(onboarding()?'personality':'stats');};
   }
   // WEEKLY QUEST: this week's step of the training plan, checked off one day at a
   // time; the body goal and weigh-ins; and a free log for anything else.

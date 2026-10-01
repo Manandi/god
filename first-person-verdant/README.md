@@ -117,4 +117,5 @@ So 10 is the middle of everyone, 18 is the top 1%, and 20 is the top 0.1%.
 
 These are estimates put together from surveys, fitness-test norms and summaries, not one representative study. Age and sex are not asked for, so everyone is compared with all adults. Change a row of `norms` to retune a test.
 
+**Intelligence** comes from Mycel's mind check, an adaptive 12-question reasoning test (`src/reasoning.js`) scored on the IQ scale with an IRT model. It maps onto the same table: IQ 100 = 10, 135 (top 1%) = 18, 146 (top 0.1%) = 20. It is a game estimate, not a clinical test.
 

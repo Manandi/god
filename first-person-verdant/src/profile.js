@@ -77,7 +77,7 @@ export const CLASS_INFO={
   mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
-export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));window.dispatchEvent(new Event('hollow-roots-profile-saved'));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -87,8 +87,13 @@ export function loadProfile(){
     profile.unitsChosen=raw.unitsChosen===true;profile.units=profile.unitsChosen&&raw.units==='metric'?'metric':'imperial';
     profile.personality={role:CLASSES.includes(raw.personality?.role)?raw.personality.role:'',instinct:CLASSES.includes(raw.personality?.instinct)?raw.personality.instinct:''};
     profile.inputs=cleanInputs(raw.inputs);
-    profile.reasoning=Number.isFinite(raw.reasoning)?Math.max(70,Math.min(135,raw.reasoning)):100;
+    profile.reasoning=Number.isFinite(raw.reasoning)?Math.max(55,Math.min(160,raw.reasoning)):100;
     profile.reasoningTaken=typeof raw.reasoningTaken==='string'?raw.reasoningTaken:'';
+    profile.reasoningVersion=Number.isInteger(raw.reasoningVersion)?raw.reasoningVersion:0;
+    profile.reasoningSeen=Array.isArray(raw.reasoningSeen)?raw.reasoningSeen.filter(v=>typeof v==='string').slice(0,20):[];
+    // Results from the old 8-question check (far too easy) are capped at 110 and
+    // the new adaptive check opens at once.
+    if(profile.reasoningVersion<2&&profile.reasoningTaken){profile.reasoning=Math.min(profile.reasoning,110);profile.reasoningTaken='';}
     profile.xp=Number.isFinite(raw.xp)?Math.max(0,Math.min(1e7,raw.xp)):0;
     profile.activities=Array.isArray(raw.activities)?raw.activities.filter(a=>a&&['workout','steps','run','study'].includes(a.kind)&&DATE.test(a.date)&&Number.isFinite(a.amount)).map(a=>({kind:a.kind,date:a.date,amount:a.amount,xp:Number.isFinite(a.xp)?a.xp:0,...(typeof a.item==='string'?{item:a.item}:{})})).slice(-240):[];
     // Monthly tests: the measurements on each test day. Saves from before tests existed count as one taken a month ago, so a new test is open now.
@@ -112,6 +117,8 @@ export function loadProfile(){
     profile.name=typeof raw.name==='string'?raw.name.slice(0,24):'';
   }catch{/* New profile. */}
 }
+/** Share of a normal population below z, in percent (Abramowitz–Stegun erf, error < 1.5e-7). */
+const normalPercentile=z=>{const x=Math.abs(z)/Math.SQRT2,t=1/(1+.3275911*x),y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x);return 50*(1+Math.sign(z)*y);};
 const lerp=(pts,x)=>{   // piecewise linear through [x, y] points (x ascending), flat past the ends
   if(x<=pts[0][0])return pts[0][1];
   for(let i=1;i<pts.length;i++)if(x<=pts[i][0]){const [x0,y0]=pts[i-1],[x1,y1]=pts[i];return y0+(x-x0)/(x1-x0)*(y1-y0);}
@@ -132,9 +139,10 @@ export function level(){return 1+Math.floor(Math.sqrt(profile.xp/250));}
 /** Stats straight from a set of measurements (and the mind check and training log). */
 function rawStats(inputs=profile.inputs){
   const s=Object.fromEntries(METRICS.filter(m=>m.norms).map(m=>[m.key,score(m,inputs)]));
-  const iq=[70,90,100,115,135],points=[1,5,10,15,20];let reason=20;
-  if(profile.reasoning<=70)reason=1;
-  else for(let i=0;i<4;i++)if(profile.reasoning<=iq[i+1]){reason=Math.round(points[i]+(profile.reasoning-iq[i])/(iq[i+1]-iq[i])*(points[i+1]-points[i]));break;}
+  // Intelligence uses the same population scale as the body tests: the mind
+  // check's IQ-scale score is turned into a percentile of adults (normal, mean
+  // 100, SD 15), so 100 → 10, ~125 → 16, ~135 → 18, ~146 → 20.
+  const reason=Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,normalPercentile((profile.reasoning-100)/15)))));
   const days=new Set(profile.activities.filter(a=>a.date>=new Date(Date.now()-27*86400000).toISOString().slice(0,10)).map(a=>a.date)).size;
   return {
     strength:Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25),speed:Math.round(s.dashSeconds*.7+s.verticalJumpCm*.3),

@@ -128,3 +128,10 @@
 .link-code strong{display:block;font:600 34px 'Cinzel',serif;letter-spacing:.12em;color:#f0d897}
 .link-card form{display:grid;gap:10px}.link-card input{background:#071b18;color:#edf4e5;border:1px solid #6d9377;padding:12px;font:600 20px 'DM Mono',monospace;letter-spacing:.2em;text-transform:uppercase;width:100%}
 @media(max-width:700px){.link-columns{grid-template-columns:1fr}}
+/* Mind check: matrices and the per-question clock */
+.quiz-matrix{display:inline-grid;gap:6px;margin:-6px 0 14px;padding:12px 16px;border:1px solid #4d6f58;background:#0a1d18}
+.quiz-matrix div{display:flex;gap:6px}
+.quiz-matrix span{min-width:52px;padding:8px 10px;text-align:center;font:600 20px 'DM Mono',monospace;color:#f0d897;border:1px solid #2f4d3c}
+.quiz-clock{height:5px;background:#213b2c;margin:0 0 6px}
+.quiz-clock i{display:block;height:100%;width:100%;background:#bce09c;transition:width .2s linear}
+.quiz-clock i.low{background:#e7a88f}

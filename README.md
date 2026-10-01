@@ -22,7 +22,7 @@ The 3D game combines two sources. Keep each part with its owner, and don't repla
 | **Boss and arena**: Orrun, the Hollow Warden (moveset, tail club), and the Warden's Hollow | Claude | `src/boss.js`, `tools/blender/build_warden.py`, `build_arena.py` |
 | **Camera and quest waypoint**: shoulder camera (hold right click to orbit), compass strip, on-screen waypoint | Claude; camera adapted from [Rotten Souls](https://github.com/igorjohn/rotten-souls) (MIT) | `src/camera.js`, `updateWaypoint` in `src/main.js` |
 | **Stats → mechanics**: what each real-life stat does in play, and frames (weight and height) | Claude | `src/mechanics.js`, `FRAMES`/`frame()` in `src/profile.js` (the stats screen shows the same table) |
-| **Onboarding**: the story intro with the floating Mycel (Blender), measure, mind check, how you play, class reveal | Claude (at the owner's request, 2026-09-30) | `src/shell.js` (intro to reveal), `src/narrator.js`, `tools/blender/build_mycel.py`, `src/reasoning.js`, `METRICS`/`PERSONALITY` in `src/profile.js`. The character creator that follows stays ChatGPT's design |
+| **Onboarding**: the story intro with the floating Mycel (Blender), measure, the adaptive mind check, how you play, class reveal | Claude (at the owner's request, 2026-09-30) | `src/shell.js` (intro to reveal), `src/narrator.js`, `tools/blender/build_mycel.py`, `src/reasoning.js`, `METRICS`/`PERSONALITY` in `src/profile.js`. The character creator that follows stays ChatGPT's design |
 | **Classes, weapons, Rootbreaker, double jump**: class and weapon rules from ChatGPT; weapon models (Blender, `build_weapons.py`), movesets and hit timing by Claude | Both | `CLASS_INFO`/`weaponEligibility` in `src/profile.js`; `MOVESETS` in `src/combat/moves.js` |
 | **Mossgate Chronicles, dialogue choices**: the idea and choice UI from ChatGPT; the three chronicles were rewritten into Claude's story on 2026-10-01. The Old Shell was removed at the owner's request ("it keeps the game repetitive") | Both | `src/chronicles.js` |
 | **Dev panel and co-op lobby**: ideas from ChatGPT, rebuilt for GitHub Pages. The dev panel is hidden: F2 then the password | Claude | dev block in `src/main.js`; `src/coop.js` (Supabase Realtime) |
@@ -94,6 +94,18 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (adaptive mind check)
+
+- **The mind check is now an adaptive test** (`src/reasoning.js`, the quiz screens in `src/shell.js`). The old one was 8 fixed easy questions; 8 of 8 gave IQ 135 (INT 20), and 6 of 8 gave about INT 15.
+  - **Question bank:** 55 items, from easy (b = −2.2) to very hard (b = 3.2): number and letter series, 3×3 matrices, analogies, vocabulary, deduction, quantitative and spatial reasoning, and a little knowledge. Every computable answer was checked in code.
+  - **Adaptive:** 12 items per test, each picked near the current ability estimate, with shuffled options. A retake avoids the last test's items, and the test can be retaken every 30 days.
+  - **Timed:** 75 seconds per item; running out counts as wrong.
+  - **Scoring:** a 3-parameter IRT model (a = 1, b per item, guessing c = 1/options), EAP over a N(0, 2.0) prior, IQ = 100 + 15θ (range 55–160). The result screen shows the estimate with its standard error.
+  - **Simulated** with 400 test-takers per level: true 70/100/130/145 scored about 76/99/124/137. A perfect run scores about 146–151, and random clicking about 60. 12 items were chosen over 8 because 8 under-rated strong test-takers more (true 145 scored about 133). Item difficulties are the designer's estimates, not calibrated norms, so it remains a game estimate.
+- **Intelligence uses the population scale** like the body tests (`normalPercentile` in `profile.js`): IQ 100 → 10, 115 → 14, 125 → 16, 135 → 18, 146 → 20.
+- **Old results** (`reasoningVersion` < 2) are capped at 110 (INT 13) and the new check opens straight away. New fields: `reasoningVersion`, `reasoningSeen`.
+- Tested in a browser: an old 135 shows INT 13; random answers scored 61 (INT 1); a perfect run scored 146 ± 10 (INT 20); the matrix grid and the clock render correctly. Story, saves and smoke tests pass.
 
 ## Latest shared state — 2026-10-01 (link device, leaderboard removed, fresh lobby)
 
