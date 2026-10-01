@@ -95,6 +95,13 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-01 (one permanent lobby)
+
+- **The lobby is permanent: `HROOTS`** (`weeklyLobbyCode` in `src/weeklyWorld.js`). The owner asked to keep one link for the 90-day challenge (Oct 1 – Dec 31). Everyone who opens https://manandi.github.io/god/ joins the same lobby every time.
+  - It used to change every Monday (`HR` + MMDD), which split players in different time zones for a few hours around Monday midnight.
+  - The weekly boss window and boss result, and the cloud saves, still go by week (`weekKey`), independent of the lobby name.
+  - A `?lobby=CODE` link still makes a separate private room, so share only the plain link.
+
 ## Latest shared state — 2026-10-01 (adaptive mind check)
 
 - **The mind check is now an adaptive test** (`src/reasoning.js`, the quiz screens in `src/shell.js`). The old one was 8 fixed easy questions; 8 of 8 gave IQ 135 (INT 20), and 6 of 8 gave about INT 15.

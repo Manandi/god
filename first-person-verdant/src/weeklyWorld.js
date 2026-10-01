@@ -3,9 +3,10 @@ import {weekKey} from './profile.js';
 import {supabase,rpc} from './supabase.js';
 
 export const worldWeek=()=>weekKey();
-// The week's lobby: HR + the Monday's month and day (HR0928). Changed from ROOTdd on
-// 2026-10-01 to start everyone in a fresh lobby; it also no longer repeats each month.
-export const weeklyLobbyCode=()=>`HR${worldWeek().slice(5).replace('-','')}`;
+// One permanent lobby for everyone, so the same link always lands in the same
+// room (it used to change every Monday, which split players in different time
+// zones for a few hours). The weekly boss and saves still reset by week on their own.
+export const weeklyLobbyCode=()=>'HROOTS';
 export function bossWindow(now=new Date()){
   const day=now.getUTCDay(),hour=now.getUTCHours();
   const open=day===6||day===0; // Saturday 00:00 UTC through Sunday 23:59 UTC.
