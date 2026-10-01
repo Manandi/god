@@ -95,16 +95,21 @@ grant select (week_id,boss_defeated,defeated_at) on public.weekly_worlds to anon
 drop policy if exists "weekly world is public" on public.weekly_worlds;
 create policy "weekly world is public" on public.weekly_worlds for select to anon,authenticated using (true);
 
+-- Personal progress carries over between weeks: this returns the hunter's most
+-- recent save (this week's if there is one), and the browser keeps whichever of
+-- the cloud and local copies is newer (world.savedAt).
 create or replace function public.load_weekly_hunter(p_week text,p_id uuid,p_secret text)
 returns jsonb language sql security definer set search_path=public,extensions as $$
-  select jsonb_build_object('profile',profile,'world',world) from public.weekly_hunters
-  where week_id=left(p_week,16) and hunter_id=p_id and secret_hash=encode(extensions.digest(p_secret,'sha256'),'hex');
+  select jsonb_build_object('profile',profile,'world',world,'week',week_id) from public.weekly_hunters
+  where hunter_id=p_id and secret_hash=encode(extensions.digest(p_secret,'sha256'),'hex')
+  order by (week_id=left(p_week,16)) desc, updated_at desc limit 1;
 $$;
 create or replace function public.save_weekly_hunter(p_week text,p_id uuid,p_secret text,p_profile jsonb,p_world jsonb)
 returns void language plpgsql security definer set search_path=public,extensions as $$
 declare h text:=encode(extensions.digest(p_secret,'sha256'),'hex');
 begin
   if p_secret is null or char_length(p_secret)<20 then raise exception 'bad secret'; end if;
+  if octet_length(coalesce(p_profile,'{}')::text)+octet_length(coalesce(p_world,'{}')::text)>200000 then raise exception 'save too large'; end if;
   insert into public.weekly_hunters(week_id,hunter_id,secret_hash,profile,world,updated_at)
   values(left(p_week,16),p_id,h,coalesce(p_profile,'{}'),coalesce(p_world,'{}'),now())
   on conflict(week_id,hunter_id) do update set profile=excluded.profile,world=excluded.world,updated_at=now()
@@ -114,6 +119,11 @@ create or replace function public.defeat_weekly_boss(p_week text)
 returns void language plpgsql security definer set search_path=public as $$
 begin
   if extract(dow from now() at time zone 'UTC') not in (0,6) then raise exception 'boss is sealed until the weekend'; end if;
+  -- Only this week can be marked (the browser's Monday may be a day either side of UTC's).
+  if p_week is null or p_week !~ '^\d{4}-\d{2}-\d{2}$'
+     or abs(p_week::date - date_trunc('week', now() at time zone 'UTC')::date) > 1 then
+    raise exception 'not this week';
+  end if;
   insert into public.weekly_worlds(week_id,boss_defeated,defeated_at) values(left(p_week,16),true,now())
   on conflict(week_id) do update set boss_defeated=true,defeated_at=coalesce(public.weekly_worlds.defeated_at,now());
 end;$$;

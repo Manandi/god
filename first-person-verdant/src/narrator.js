@@ -82,7 +82,7 @@ export function createNarrator() {
       // Plush squash-and-stretch: Mycel settles wide at the bottom of each bob,
       // then springs tall. It makes the floating spirit feel soft rather than rigid.
       const hop=Math.sin(t*2.1),squash=.035*(1-hop)+.025*mood.bounce*Math.abs(Math.sin(t*4));
-      holder.scale.x=damp(holder.scale.x,.82+squash,8,dt);holder.scale.z=damp(holder.scale.z,.82+squash,8,dt);holder.scale.y=damp(holder.scale.y,.82-squash*.72,8,dt);
+      holder.scale.x=damp(holder.scale.x,.96+squash,8,dt);holder.scale.z=damp(holder.scale.z,.96+squash,8,dt);holder.scale.y=damp(holder.scale.y,.96-squash*.72,8,dt);
       holder.rotation.z = damp(holder.rotation.z, -vx * .35 + mood.roll + Math.sin(t * 1.3) * .04, 4, dt);
       holder.rotation.y = damp(holder.rotation.y, -vx * .25 - at.x * .12 + Math.sin(t * .7) * .12, 3, dt);
       holder.rotation.x = damp(holder.rotation.x, .06 + Math.sin(t * 1.7) * .03, 3, dt);

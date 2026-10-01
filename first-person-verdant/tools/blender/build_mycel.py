@@ -3,16 +3,17 @@ Mycel, keeper of the Heartseed: the narrator of the intro (The Hollow Roots).
 
     blender -b --python first-person-verdant/tools/blender/build_mycel.py -- [--out PATH.glb] [--preview PATH.png]
 
-A floating mushroom spirit: a deep-teal cap with glowing spots and luminous
-gills, a pale stem-body with a leafy collar, big glowing eyes, root arms that
-gesture, and root tendrils trailing where legs would be. The Heartseed, a
-glowing seed, orbits him.
+A cute, squishy mushroom spirit (the owner asked for "cute and squishy"): a
+soft dumpling body with tiny feet, a big puffy mint cap with pastel spots and
+a sprout on top, huge glossy eyes with sparkles, rosy cheeks, a tiny mouth and
+stubby nub arms. The game squashes and stretches him as he bobs. The
+Heartseed, a glowing seed, orbits him.
 
 The face parts and limbs are separate objects with their origins at their
 pivots, so the game animates them directly (no rig):
-  Mycel (root) > Body > Cap (> Spots, Gills), EyeL, EyeR, BrowL, BrowR, Mouth, ArmL, ArmR
+  Mycel (root) > Body > Cap (> Spots, Sprout), EyeL (> sparkles), EyeR, BrowL, BrowR, Mouth, ArmL, ArmR, CheekL/R, Feet
   Heartseed (separate)
-He faces -Y (the game's +Z, toward its camera). About 1.4 m tall.
+He faces -Y (the game's +Z, toward its camera). About 1.1 m tall.
 """
 import bpy, bmesh, math, os, sys, random
 import numpy as np
@@ -30,18 +31,18 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
 M = {
-    'cap': material('MY_Cap', color=hexc('#376d63'), rough=.6),
-    'rim': material('MY_Rim', color=hexc('#b3cf9b'), rough=.68),
-    'spots': material('MY_Spots', color=hexc('#d9ffb0'), emission=hexc('#c6f48a'), strength=3, rough=.4),
+    'cap': material('MY_Cap', color=hexc('#6cc3a6'), rough=.55),
+    'rim': material('MY_Rim', color=hexc('#f3e6c8'), rough=.7),
+    'spots': material('MY_Spots', color=hexc('#fff6dc'), emission=hexc('#fff1c2'), strength=.6, rough=.5),
     'gills': material('MY_Gills', color=hexc('#8fe8c8'), emission=hexc('#5fe0b8'), strength=1.4, rough=.5),
-    'stem': material('MY_Stem', color=hexc('#d6cfae'), rough=.75),
-    'moss': material('MY_Moss', color=hexc('#4f7a3a'), rough=.9),
+    'stem': material('MY_Stem', color=hexc('#f6ecd2'), rough=.62),
+    'moss': material('MY_Moss', color=hexc('#7cc46a'), rough=.75),
     'root': material('MY_Root', color=hexc('#6a5238'), rough=.85),
-    'eye': material('MY_Eye', color=hexc('#e8ffd8'), emission=hexc('#c8f7a8'), strength=4, rough=.2),
+    'eye': material('MY_Eye', color=hexc('#ffffff'), emission=hexc('#ffffff'), strength=2.5, rough=.2),
     'dark': material('MY_Mouth', color=hexc('#15241d'), rough=.8),
-    'brow': material('MY_Brow', color=hexc('#9fd488'), rough=.6),
-    'blush': material('MY_Blush', color=hexc('#eaa08e'), emission=hexc('#c86e63'), strength=.18, rough=.82),
-    'pupil': material('MY_Pupil', color=hexc('#24372f'), rough=.25),
+    'brow': material('MY_Brow', color=hexc('#a98a62'), rough=.7),
+    'blush': material('MY_Blush', color=hexc('#f4a0a0'), emission=hexc('#e9787c'), strength=.25, rough=.85),
+    'pupil': material('MY_Pupil', color=hexc('#1c2420'), rough=.12),
     'seed': material('MY_Heartseed', color=hexc('#fff0b8'), emission=hexc('#ffd774'), strength=6, rough=.2),
 }
 
@@ -58,95 +59,79 @@ def ellipsoid(rx, ry, rz, u=20, v=12):
 
 root = link(bpy.data.objects.new('Mycel', None))
 
-# --- the stem-body: a lathe with a soft belly, narrowing into the tendrils.
-b = bmesh.new(); prof = [(.32, .18), (.23, .255), (.08, .285), (-.08, .29), (-.24, .255), (-.38, .19), (-.48, .105)]
-rings = []
-for z, r in prof:
-    ring = []
-    for i in range(24):
-        a = i / 24 * math.tau; k = 1 + .03 * noise.noise(Vector((math.cos(a) * 2, math.sin(a) * 2, z * 4)))
-        ring.append(b.verts.new((math.cos(a) * r * k, math.sin(a) * r * k * .92, z)))
-    rings.append(ring)
-for r0, r1 in zip(rings, rings[1:]):
-    for i in range(24): b.faces.new((r1[i], r1[(i + 1) % 24], r0[(i + 1) % 24], r0[i]))
-b.faces.new(rings[-1]); b.faces.new(rings[0][::-1])
-body = obj_from(b, 'Body', 'stem'); parent(body, root)
-# Leafy collar and trailing tendrils belong to the body.
-parts = []
-leaves = bmesh.new()
-for i in range(9):
-    a = i / 9 * math.tau + .2; leaf = ellipsoid(.13, .06, .018, 10, 6)
-    bmesh.ops.transform(leaf, matrix=Matrix.Translation((math.cos(a) * .24, math.sin(a) * .22, -.06)) @ Matrix.Rotation(a, 4, 'Z') @ Matrix.Rotation(-.55, 4, 'Y') @ Matrix.Translation((.09, 0, 0)), verts=leaf.verts[:])
-    me = bpy.data.meshes.new('t'); leaf.to_mesh(me); leaf.free(); leaves.from_mesh(me); bpy.data.meshes.remove(me)
-collar = obj_from(leaves, 'Collar', 'moss')
-for i in range(6):
-    a = i / 6 * math.tau + .3; start = Vector((math.cos(a) * .1, math.sin(a) * .09, -.46))
-    pts = [start + Vector((math.cos(a + t * 2.2) * .08 * t + math.cos(a) * .12 * t, math.sin(a + t * 2.2) * .08 * t + math.sin(a) * .1 * t, -t * random.uniform(.45, .6))) for t in np.linspace(0, 1, 9)]
-    o = tube(pts, [.05 * (1 - t * .85) for t in np.linspace(0, 1, 9)], f'tendril{i}'); o.data.materials.append(M['root']); parts.append(o)
-extra = join([collar] + parts, 'BodyExtras'); parent(extra, body)
-for p in extra.data.polygons: p.use_smooth = True
+def lathe(prof, n=32, squash_y=.94):
+    """A round body of revolution from (z, r) pairs, bottom to top, closed at both ends."""
+    b = bmesh.new(); rings = []
+    for z, r in prof:
+        rings.append([b.verts.new((math.cos(i / n * math.tau) * r, math.sin(i / n * math.tau) * r * squash_y, z)) for i in range(n)])
+    for r0, r1 in zip(rings, rings[1:]):
+        for i in range(n): b.faces.new((r0[i], r0[(i + 1) % n], r1[(i + 1) % n], r1[i]))
+    bot = b.verts.new((0, 0, prof[0][0] - .01)); top = b.verts.new((0, 0, prof[-1][0] + .01))
+    for i in range(n):
+        b.faces.new((rings[0][(i + 1) % n], rings[0][i], bot)); b.faces.new((rings[-1][i], rings[-1][(i + 1) % n], top))
+    bmesh.ops.recalc_face_normals(b, faces=b.faces[:]); return b
+def add(bm_target, piece, matrix):
+    bmesh.ops.transform(piece, matrix=matrix, verts=piece.verts[:])
+    me = bpy.data.meshes.new('t'); piece.to_mesh(me); piece.free(); bm_target.from_mesh(me); bpy.data.meshes.remove(me)
 
-# --- the cap: a dome with a wavy, rolled rim; glowing spots; gills beneath.
-CAP_Z = .42
-b = bmesh.new(); rings = []
-for k, t in enumerate(np.linspace(0, 1, 14)):
-    phi = t * math.pi * .5; ring = []
-    for i in range(40):
-        a = i / 40 * math.tau; wave = 1 + .045 * math.sin(a * 7) * t ** 3
-        r = math.sin(phi) * .68 * wave; z = math.cos(phi) * .30
-        if t > .88: z -= (t - .88) * .5; r *= 1 - (t - .88) * .25                                   # the rim rolls under
+# --- the body: a soft dumpling, widest low down, like a mochi that has just sat down.
+prof = [(-.42, .05), (-.40, .20), (-.35, .30), (-.25, .365), (-.12, .385), (0, .375), (.10, .345), (.18, .30), (.24, .24)]
+body = obj_from(lathe(prof), 'Body', 'stem'); parent(body, root)
+# Two tiny feet peeking out underneath.
+feet = bmesh.new()
+for s in (1, -1): add(feet, ellipsoid(.085, .1, .05, 14, 8), Matrix.Translation((s * .14, -.08, -.41)))
+f = obj_from(feet, 'Feet', 'stem'); parent(f, body)
+
+# --- the cap: a big puffy bun with a thick soft rim, tipped jauntily, pastel spots and a sprout.
+CAP_Z = .30
+b = bmesh.new(); rings = []; N = 40
+for t in np.linspace(0, 1, 16):
+    phi = t * math.pi * .56; ring = []
+    for i in range(N):
+        a = i / N * math.tau
+        r = math.sin(phi) * .56; z = math.cos(phi) * .34 - .06
+        if t > .82: k = (t - .82) / .18; r = .56 * math.sin(math.pi * .56 * .82) + .05 * math.sin(k * math.pi); z -= k * .09   # rolled, pillowy rim
         ring.append(b.verts.new((math.cos(a) * r, math.sin(a) * r, z)))
     rings.append(ring)
-top = b.verts.new((0, 0, .34))
+top = b.verts.new((0, 0, .29))
 for r0, r1 in zip(rings[1:], rings[2:]):
-    for i in range(40): b.faces.new((r0[i], r1[i], r1[(i + 1) % 40], r0[(i + 1) % 40]))
-for i in range(40): b.faces.new((top, rings[1][i], rings[1][(i + 1) % 40]))
-under = b.verts.new((0, 0, .02))
-for i in range(40): b.faces.new((rings[-1][(i + 1) % 40], rings[-1][i], under))
+    for i in range(N): b.faces.new((r0[i], r1[i], r1[(i + 1) % N], r0[(i + 1) % N]))
+for i in range(N): b.faces.new((top, rings[1][i], rings[1][(i + 1) % N]))
+under = b.verts.new((0, 0, -.08))
+for i in range(N): b.faces.new((rings[-1][(i + 1) % N], rings[-1][i], under))
 bmesh.ops.recalc_face_normals(b, faces=b.faces[:])
-cap = obj_from(b, 'Cap', 'cap', (0, 0, CAP_Z))
+cap = obj_from(b, 'Cap', 'cap', (0, 0, CAP_Z)); cap.rotation_euler = (math.radians(-6), math.radians(7), 0)
 cap.data.materials.append(M['rim'])
-for p in cap.data.polygons:                                          # the lower band is the pale rim
-    if (sum((cap.data.vertices[v].co.z for v in p.vertices)) / len(p.vertices)) < .035: p.material_index = 1
+for p in cap.data.polygons:
+    if (sum(cap.data.vertices[v].co.z for v in p.vertices) / len(p.vertices)) < -.125: p.material_index = 1
 parent(cap, body)
 spots = bmesh.new()
-for i in range(13):
-    t = random.uniform(.2, .78); a = random.uniform(0, math.tau); phi = t * math.pi * .5
-    n = Vector((math.sin(phi) * math.cos(a), math.sin(phi) * math.sin(a), math.cos(phi))).normalized()
-    co = Vector((math.cos(a) * math.sin(phi) * .62, math.sin(a) * math.sin(phi) * .62, math.cos(phi) * .36)) + n * .004
-    s = random.uniform(.035, .075); d = ellipsoid(s, s, .012, 10, 6)
-    bmesh.ops.transform(d, matrix=Matrix.Translation(co) @ n.to_track_quat('Z', 'Y').to_matrix().to_4x4(), verts=d.verts[:])
-    me = bpy.data.meshes.new('t'); d.to_mesh(me); d.free(); spots.from_mesh(me); bpy.data.meshes.remove(me)
+for a, t, s in ((.4, .45, .09), (1.9, .55, .07), (3.0, .35, .06), (4.1, .6, .085), (5.3, .4, .065), (2.5, .15, .055)):
+    phi = t * math.pi * .5; n = Vector((math.sin(phi) * math.cos(a), math.sin(phi) * math.sin(a), math.cos(phi))).normalized()
+    co = Vector((math.cos(a) * math.sin(phi) * .54, math.sin(a) * math.sin(phi) * .54, math.cos(phi) * .33 - .06)) + n * .006
+    add(spots, ellipsoid(s, s, .016, 14, 8), Matrix.Translation(co) @ n.to_track_quat('Z', 'Y').to_matrix().to_4x4())
 sp = obj_from(spots, 'Spots', 'spots', (0, 0, CAP_Z)); parent(sp, cap)
-gills = bmesh.new()
-for i in range(36):
-    a = i / 36 * math.tau; g = bmesh.new(); bmesh.ops.create_cube(g, size=1); bmesh.ops.scale(g, vec=(.36, .006, .06), verts=g.verts[:])
-    bmesh.ops.transform(g, matrix=Matrix.Rotation(a, 4, 'Z') @ Matrix.Translation((.36, 0, -.005)), verts=g.verts[:])
-    me = bpy.data.meshes.new('t'); g.to_mesh(me); g.free(); gills.from_mesh(me); bpy.data.meshes.remove(me)
-gl = obj_from(gills, 'Gills', 'gills', (0, 0, CAP_Z), False); parent(gl, cap)
+sprout = bmesh.new()
+add(sprout, ellipsoid(.018, .018, .07, 8, 6), Matrix.Translation((0, 0, .33)))
+for s in (1, -1): add(sprout, ellipsoid(.075, .035, .012, 12, 6), Matrix.Translation((s * .06, 0, .40)) @ Matrix.Rotation(s * .5, 4, 'Y'))
+spr = obj_from(sprout, 'Sprout', 'moss', (0, 0, CAP_Z)); parent(spr, cap)
 
-# --- the face (on the front of the stem, -Y), each part at its pivot.
+# --- the face: huge glossy eyes with sparkles, rosy cheeks, a tiny mouth, soft brows.
+FACE_Y = -.355
 for s, name in ((1, 'L'), (-1, 'R')):
-    eye = obj_from(ellipsoid(.072, .032, .092, 16, 10), f'Eye{name}', 'eye', (s * .10, -.267, .10)); parent(eye, body)
-    pupil = obj_from(ellipsoid(.027, .009, .04, 12, 8), f'Pupil{name}', 'pupil', (s * .10, -.298, .095)); parent(pupil, body)
-    cheek = obj_from(ellipsoid(.052, .009, .025, 12, 8), f'Cheek{name}', 'blush', (s * .19, -.286, .005)); parent(cheek, body)
-    bb = bmesh.new(); bmesh.ops.create_cube(bb, size=1); bmesh.ops.scale(bb, vec=(.085, .025, .022), verts=bb.verts[:])
-    brow = obj_from(bb, f'Brow{name}', 'brow', (s * .10, -.275, .225)); parent(brow, body)
-mouth = obj_from(ellipsoid(.05, .012, .026, 14, 8), 'Mouth', 'dark', (0, -.296, -.015)); parent(mouth, body)
+    eye = obj_from(ellipsoid(.075, .03, .095, 18, 12), f'Eye{name}', 'pupil', (s * .13, FACE_Y, .02)); parent(eye, body)
+    for k, (dx, dz, r) in enumerate(((-.022, .035, .024), (.02, -.03, .011))):
+        hl = obj_from(ellipsoid(r, .006, r, 10, 6), f'Sparkle{name}{k}', 'eye', (s * .13 + dx, FACE_Y - .03, .02 + dz)); parent(hl, eye)
+    cheek = obj_from(ellipsoid(.06, .012, .034, 14, 8), f'Cheek{name}', 'blush', (s * .235, FACE_Y + .04, -.09)); parent(cheek, body)
+    bb = ellipsoid(.05, .014, .014, 10, 6)
+    brow = obj_from(bb, f'Brow{name}', 'brow', (s * .13, FACE_Y + .01, .145)); parent(brow, body)
+mouth = obj_from(ellipsoid(.034, .012, .022, 14, 8), 'Mouth', 'dark', (0, FACE_Y - .012, -.085)); parent(mouth, body)
 
-# --- root arms, pivoting at the shoulder; three rootlet fingers each.
+# --- stubby little arms (round nubs), pivoting at the shoulder.
 for s, name in ((1, 'L'), (-1, 'R')):
-    shoulder = Vector((s * .2, -.02, .02))
-    pts = [Vector((0, 0, 0)), Vector((s * .08, -.02, -.03)), Vector((s * .15, -.05, -.10)), Vector((s * .19, -.08, -.17))]
-    arm = tube(pts, [.052, .047, .04, .034], f'arm{name}'); arm.data.materials.append(M['root'])
-    fingers = []
-    for k, off in enumerate((-.03, 0, .03)):
-        tip = pts[-1] + Vector((s * .05 + off * .5, -.03 + off, -.07 - abs(off)))
-        f = tube([pts[-1], pts[-1].lerp(tip, .5) + Vector((0, -.01, 0)), tip], [.022, .016, .006], f'f{name}{k}'); f.data.materials.append(M['root']); fingers.append(f)
-    leaf = obj_from(ellipsoid(.06, .03, .012, 10, 6), f'wl{name}', 'moss', (s * .12, -.03, -.06))
-    a = join([arm] + fingers + [leaf], f'Arm{name}')
-    for p in a.data.polygons: p.use_smooth = True
-    a.location = shoulder; parent(a, body)
+    nub = ellipsoid(.075, .07, .11, 14, 10)
+    bmesh.ops.transform(nub, matrix=Matrix.Translation((s * .06, 0, -.08)) @ Matrix.Rotation(s * .35, 4, 'Y'), verts=nub.verts[:])
+    a = obj_from(nub, f'Arm{name}', 'stem', (s * .33, -.04, -.04)); parent(a, body)
 
 # --- the Heartseed.
 seed = obj_from(ellipsoid(.06, .06, .075, 14, 10), 'Heartseed', 'seed', (.45, -.2, .3))

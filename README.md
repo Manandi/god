@@ -67,6 +67,7 @@ How the story uses the ChatGPT NPCs:
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
+| `dressingRoom.js` | The character screen's live 3D preview of the real avatar |
 | `leaderboard.js` | The shared online leaderboard (Supabase table `hunters`, see `supabase/schema.sql`) |
 | `boss.js` | Orrun, the Hollow Warden (attacks, follow-ups, breakable tail club), and arena loading |
 | `weapons.js` | Loads the Blender weapons and mounts them in the fist; their markers are the strike hitbox |
@@ -93,6 +94,25 @@ How the story uses the ChatGPT NPCs:
 - `first-person-verdant/`: the game (Vite/Three.js 3D). The 2D Phaser game that used to be the repository root was removed on 2026-10-01. Read its [README](first-person-verdant/README.md), combat and camera code, and the deployment configuration before editing.
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
+
+## Latest shared state — 2026-10-01 (review of the weekly world; live preview; cute Mycel; Supabase live)
+
+Claude reviewed and finished the other device's "weekly world and Blender character pass" (commits `c2ab760`–`8ded6eb`):
+- **The weekly-world SQL is now applied** to `hollow-roots` (migration `weekly_world`), with three fixes, also in `supabase/schema.sql`:
+  - `defeat_weekly_boss` only accepts the current week. Before, anyone could pre-mark a future week's Orrun as defeated.
+  - `load_weekly_hunter` returns the hunter's most recent save from any week, so progress carries over when a new week starts.
+  - Saves are capped at 200 KB.
+- **Cloud restore is now newer-wins** (`savedAt` in the world save). Before, a save that failed to upload (offline, or the project paused) could be overwritten on the next login by an older cloud copy.
+- Probed from outside: a save from one week loads in the next, a wrong secret loads nothing, the table can't be read directly, and the boss can't be marked defeated on a weekday. The probe row was deleted.
+- **Live 3D preview on the character screen** (`src/dressingRoom.js`). The old CSS drawing could not show the Blender hair and outfits. The preview is the real avatar (with the `customization.glb` pieces), turning slowly, draggable, and updated with every choice.
+- **Mycel rebuilt as cute and squishy** (`tools/blender/build_mycel.py` → `public/characters/mycel/mycel.glb`, 130 KB, 6,400 triangles).
+  - A soft dumpling body with tiny feet, a puffy mint cap with pastel spots and a sprout, big glossy eyes with sparkles, rosy cheeks, a tiny mouth and stubby nub arms.
+  - It replaces the tall mushroom with dangling root tendrils. Part names are unchanged, so `narrator.js` still animates him; he is shown a little larger (base scale .96).
+- **Dev unlock fix.** `dev.bossUnlocked` now also lets Orrun wake when you walk up to him (`canWake`), not only through the WAKE button.
+- **Keep-alive** (`.github/workflows/keepalive.yml`): reads the leaderboard every 3 days so the free Supabase project doesn't pause again. It pauses after about a week idle, as it did on 2026-09-30. Scheduled runs need this branch to stay the repo's default branch, which it is.
+- **Leaderboard leftovers.** Three level-1 "Wayfarer" rows exist. One is from 2026-09-30 15:17 UTC, possibly a Claude test run; two are from 2026-10-01 00:20–00:28 UTC, around the other device's push. They were left in place; delete them in the dashboard if they aren't real players.
+- **Testing note.** On weekdays Orrun stays asleep by design (open Sat–Sun UTC, 2+ hunters online). Tests set `window.__verdant.dev.bossUnlocked = true`, or use dev mode → WAKE.
+- Tested: story, smoke, saves, heavies, dev key and NEW GAME, the two-tab team boss fight (with the dev unlock), the leaderboard, the weekly page, and the character-screen preview pass.
 
 ## Customization update — 2026-09-30
 

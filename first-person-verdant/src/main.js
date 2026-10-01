@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildWorld, groundY, SITES, GATE, HUNT, ARENA } from './world.js';
 import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
+import { createDressingRoom } from './dressingRoom.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
@@ -35,6 +36,10 @@ loadWeeklySave().then(v=>{
   cloudHunter=v;
   const restored=`hollow-roots-cloud-restored-${weeklyLobbyCode()}`;
   if(!v||sessionStorage.getItem(restored))return;
+  // Keep whichever copy is newer: a save that failed to upload (offline, or the
+  // project paused) must not be overwritten by an older cloud copy.
+  let localAt=0;try{localAt=JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}').savedAt||0;}catch{}
+  if(!(v.world?.savedAt>localAt))return;
   try{
     sessionStorage.setItem(restored,'1');
     if(v.profile)localStorage.setItem('hollow-roots-verdant-3d-profile-v1',JSON.stringify(v.profile));
@@ -103,7 +108,7 @@ function initAudio(){
 function toast(title,detail=''){$('toast').innerHTML=title+(detail?`<small>${detail}</small>`:'');$('toast').classList.remove('hidden');toastTimer=3.5;}
 let cloudSaveTimer=0;
 function persist(){
-  const state={memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize()};
+  const state={memories:[...memories],story:story.serialize(),chronicles:chronicles.serialize(),savedAt:Date.now()};
   try{localStorage.setItem('verdant-reach-3d-v1',JSON.stringify(state));}catch{/* No storage available. */}
   clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>saveWeeklyHunter(JSON.parse(JSON.stringify(profile)),state).catch(()=>{}),650);
 }
@@ -970,7 +975,7 @@ function update(rawDt){
     // The host's creatures go after their explorer (assignTargets); a guest's follow the host's snapshots.
     const pick=targets?.get(c),target=pick?.o||playerPos;
     c.target=target;c.targetKey=pick?.key??'me';
-    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'&&bossWindow().open&&coop.teamSize>=2});
+    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'&&(dev.bossUnlocked||bossWindow().open&&coop.teamSize>=2)});
     if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
     // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
     if(target!==playerPos){const key=c.state+c.attack;if(c.localKey!==key){c.localKey=key;c.localHit=false;}
@@ -1086,7 +1091,8 @@ function update(rawDt){
   updateNumbers(rawDt);
   updateHUD();
 }
-shell=createShell(entry,canvas,globe,{narrator,enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
+const dressingRoom=createDressingRoom();
+shell=createShell(entry,canvas,globe,{narrator,dressingRoom,weapon:()=>equippedWeapon(),enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
@@ -1122,6 +1128,7 @@ function frame(){
   if(!paused)update(dt);
   if(shell.view==='map'){globe.update(dt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(globe.scene,globe.camera);}
   else if(shell.view==='intro'){narrator.update(rawDt,clock.elapsedTime,innerWidth,innerHeight);renderer.render(narrator.scene,narrator.camera);}
+  if(shell.view==='customize')dressingRoom.update(rawDt);
   else if(!paused||((pausedRender+=rawDt)>.15)){pausedRender=0;renderer.render(scene,camera);}
 }frame();
 // ?capture advances the game by fixed steps on request, so footage recorded on a

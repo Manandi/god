@@ -124,3 +124,7 @@
 .board td{padding:8px 6px;border-bottom:1px solid #243f31;white-space:nowrap}
 .board tr.me td{background:#1b382d;color:#f0d897}.board em{font-style:normal;font-size:9px;letter-spacing:.12em;color:#bce09c}
 .board-note{color:#a6c2ab;font-size:12px}
+/* Live 3D preview on the character screen (dressingRoom.js) */
+.customize-preview .preview-3d{width:100%;height:360px;border:1px solid #4d6f58;background:radial-gradient(ellipse at 50% 35%,#24473a,#0a1a16 75%);cursor:grab}
+.customize-preview .preview-3d:active{cursor:grabbing}
+.dressing-canvas{width:100%;height:100%;display:block}
