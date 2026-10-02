@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked, HYBRID_MASTERY } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -62,6 +62,8 @@ export function mechanics() {
     steadfast: false, secondWind: false,
     poise: 1, chargedDamage: 1, parryBonus: 0, flasks: FLASK.charges, flaskHeal: FLASK.heal, abilities: []
   };
+  // Hybrid Mastery: an unlocked hybrid also hits harder and recovers faster.
+  if (pathInfo().hybrid && !pathLocked()) { m.damage *= 1 + HYBRID_MASTERY.damage; m.regen *= 1 + HYBRID_MASTERY.regen; m.hybrid = true; }
   // Frames (weight and height): every body gets a real advantage.
   if (body === 'stone') { m.maxHealth = Math.min(9, m.maxHealth + 1); m.steadfast = true; m.guardCost *= .85; }
   if (body === 'swift') { m.runSpeed *= 1.07; m.dash *= 1.15; m.iframeBonus += .02; }
@@ -91,7 +93,7 @@ export function mechanicsTable() {
     ['STAMINA', `Action cost ${pct(m.staminaCost)} · Breath recovery ${pct(m.regen)}`],
     ['DEFENSE', `${m.maxHealth} vitality · guard cost ${pct(m.guardCost)}`],
     ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · ${m.echoReach > 0 ? `memories answer from ${units.short(m.echoReach)} farther` : 'memories answer from farther at INT 11+'}`],
-    ['CLASS', `${pathInfo().label}${pathInfo().hybrid ? ` (${pathInfo().bonus})` : ''}${pathLocked() ? ' · LOCKED: below its stat requirement, no class bonus' : ''} · parry restores ${Math.round(m.parryReward)} Breath`],
+    ['CLASS', `${pathInfo().label}${pathInfo().hybrid ? ` (${pathInfo().bonus})` : ''}${pathLocked() ? ` · LOCKED: needs 12 in both stats; playing as ${profile.appearance.discipline.toUpperCase()} until then` : ''} · parry restores ${Math.round(m.parryReward)} Breath`],
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],
     ['LEVEL', `LV ${m.level} · strikes ${pct(levelDamage(m.level))} to keep pace with enemies (+15% health per level)${levelVitality(m.level) ? ` · +${levelVitality(m.level)} vitality` : ' · +1 vitality at LV 4'}`],

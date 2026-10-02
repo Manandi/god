@@ -324,16 +324,14 @@ export function classScores(){
   for(const k of Object.keys(scores))scores[k]+=(role===k?5:0)+(instinct===k?3:0);
   return scores;
 }
-export function recommendedClass(){return Object.entries(classScores()).filter(([k])=>classUnlock(k).ok).sort((a,b)=>b[1]-a[1])[0][0];}
-// Class unlocks: a class opens when its key stat reaches the adult average (10);
-// a hybrid when both of its stats reach 12 (the first ability tier). Your best
-// class (highest key stat) is always open, so nobody is locked out. A class you
-// hold whose stat drops below (a new test, or a 🧢 cap) keeps its name but loses
-// its bonus until the stat is back, like an ability that slips.
-export const CLASS_REQ=10,HYBRID_REQ=12;
+export function recommendedClass(){return Object.entries(classScores()).sort((a,b)=>b[1]-a[1])[0][0];}
+// Class unlocks: the five classes are open to everyone. Hybrids are earned: both
+// of their stats must reach 12 (the first ability tier), and they are much
+// stronger (the full bonus of both classes plus Hybrid Mastery, mechanics.js).
+// A hybrid whose stat drops below 12 (a new test, or a 🧢 cap) falls back to its
+// first class until the stat is back, like an ability that slips.
+export const HYBRID_REQ=12;
 const STAT_SHORT={strength:'STR',defense:'DEF',speed:'SPD',intelligence:'INT',discipline:'DIS'};
-/** The always-open starter class: the one whose key stat is highest. */
-export function starterClass(s=stats()){const sc=classScores();return Object.keys(CLASS_STAT).sort((a,b)=>s[CLASS_STAT[b]]-s[CLASS_STAT[a]]||sc[b]-sc[a])[0];}
 /** Whether a class (or a hybrid pair) is open, and what it needs. */
 export function classUnlock(primary,secondary=''){
   const s=stats();
@@ -341,13 +339,11 @@ export function classUnlock(primary,secondary=''){
     const need=[primary,secondary].map(k=>CLASS_STAT[k]).filter(k=>s[k]<HYBRID_REQ);
     return {ok:!need.length,requirement:`${STAT_SHORT[CLASS_STAT[primary]]} ${HYBRID_REQ} + ${STAT_SHORT[CLASS_STAT[secondary]]} ${HYBRID_REQ}`,missing:need};
   }
-  const k=CLASS_STAT[primary];
-  return {ok:s[k]>=CLASS_REQ||primary===starterClass(s),requirement:`${STAT_SHORT[k]} ${CLASS_REQ}`,missing:s[k]>=CLASS_REQ?[]:[k]};
+  return {ok:true,requirement:'',missing:[]};
 }
-// Hybrid paths: a second class blends in. A pure class gets its whole bonus; a
-// hybrid gets 65% of each of its two classes' bonuses (mechanics.js), so it
-// trades peak strength for balance.
-export const HYBRID_SHARE=.65;
+// Hybrid paths: two classes at once, unlocked by stats. A hybrid gets the full
+// bonus of both classes plus Hybrid Mastery (mechanics.js).
+export const HYBRID_SHARE=1,HYBRID_MASTERY={damage:.1,regen:.1};
 export const HYBRIDS={
   'fighter+ranger':{label:'SKIRMISHER',description:'Hit hard and keep moving: damage with a quicker step.'},
   'fighter+tank':{label:'VANGUARD',description:'Lead the charge and take the answer: damage backed by a sturdier body.'},
@@ -366,7 +362,7 @@ export function pathInfo(primary=profile.appearance.discipline,secondary=profile
   const base=CLASS_INFO[primary]||CLASS_INFO.fighter;
   if(!secondary||secondary===primary||!CLASS_INFO[secondary])return {label:base.label,description:base.description,bonus:base.bonus,hybrid:false};
   const h=HYBRIDS[pairKey(primary,secondary)];
-  return {label:h.label,description:h.description,bonus:`${base.label} + ${CLASS_INFO[secondary].label} · ${Math.round(HYBRID_SHARE*100)}% of each bonus`,hybrid:true};
+  return {label:h.label,description:h.description,bonus:`${base.label} + ${CLASS_INFO[secondary].label} · full bonus of both + Hybrid Mastery (+10% damage, +10% Breath recovery)`,hybrid:true};
 }
 /** How much of each class's bonus applies (1 for a pure class). */
 export function classWeights(primary=profile.appearance.discipline||'fighter',secondary=profile.appearance.secondary){
@@ -374,13 +370,13 @@ export function classWeights(primary=profile.appearance.discipline||'fighter',se
   if(secondary&&secondary!==primary&&w[secondary]!==undefined){
     if(classUnlock(primary,secondary).ok){w[primary]=HYBRID_SHARE;w[secondary]=HYBRID_SHARE;return w;}
   }
-  if(classUnlock(primary).ok)w[primary]=1;   // a locked class (or a locked blend's locked primary) gives no bonus
+  w[primary]=1;   // a pure class, or a hybrid that is locked right now
   return w;
 }
-/** Mycel's pick: a hybrid when the top two classes score within 8% of each other. */
+/** Mycel's pick: your best class, blended with your next-best one that you have unlocked a hybrid with. */
 export function recommendedPath(){
-  const open=Object.entries(classScores()).filter(([k])=>classUnlock(k).ok).sort((x,y)=>y[1]-x[1]),[a,b]=open;
-  return {primary:a[0],secondary:b&&b[1]>=a[1]*.92&&classUnlock(a[0],b[0]).ok?b[0]:''};
+  const [a,...rest]=Object.entries(classScores()).sort((x,y)=>y[1]-x[1]),b=rest.find(([k])=>classUnlock(a[0],k).ok);
+  return {primary:a[0],secondary:b?b[0]:''};
 }
 /** True when the class you hold is below its requirement right now. */
 export function pathLocked(){return !classUnlock(profile.appearance.discipline,profile.appearance.secondary).ok;}
@@ -388,7 +384,7 @@ export function pathLocked(){return !classUnlock(profile.appearance.discipline,p
 export function classReason(){
   const s=stats(),top=Object.entries(s).filter(([k])=>k!=='discipline').sort((a,b)=>b[1]-a[1])[0],rec=recommendedClass(),{role,instinct}=profile.personality;
   const plays=role===rec&&instinct===rec?'You told me this is how you play, and your instincts agree.':role===rec?'It is the role you told me you play.':instinct===rec?'It is how you react when a fight turns.':'Your numbers point here more than your answers do.';
-  const path=recommendedPath(),blend=path.secondary?` Your ${CLASS_INFO[path.primary].label} and ${CLASS_INFO[path.secondary].label} sides are close, so a blend of both fits you.`:'';
+  const path=recommendedPath(),blend=path.secondary?` You have unlocked the ${CLASS_INFO[path.primary].label} + ${CLASS_INFO[path.secondary].label} hybrid, and it suits you.`:'';
   return `Your strongest attribute is ${top[0].toUpperCase()} (${top[1]}). ${plays}${blend}`;
 }
 export function weaponEligibility(weapon){

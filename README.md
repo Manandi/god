@@ -100,13 +100,13 @@ How the story uses the ChatGPT NPCs:
 ## Latest shared state — 2026-10-02 (named hybrid classes, class unlocks)
 
 - **Hybrids are their own choices.** CUSTOMIZE shows COMBAT CLASS (5 pure) and HYBRID CLASS (all 10 by name, e.g. SKIRMISHER, FIGHTER + RANGER) instead of a hidden "second class" row. Mycel's recommendation card has a TAKE button, or shows ✓ THIS IS YOUR CLASS. Buttons use `data-path="primary+secondary"`; picking a hybrid keeps your current primary first (the leaderboard shows the primary).
-- **Class unlocks** (owner's request; `classUnlock()`, `starterClass()`, `CLASS_REQ`, `HYBRID_REQ` in `src/profile.js`):
-  - A pure class opens at **10** in its stat (FIGHTER STR, TANK DEF, RANGER SPD, MAGE INT, SUPPORT DIS).
-  - A hybrid opens at **12 in both** of its stats.
-  - The class with your highest key stat is always open. Discipline starts at 10, so SUPPORT is always open in practice.
-  - Locked choices are greyed out, with what they need. Caps count, because unlocks use the capped stats.
-  - If your current class drops below its requirement, you keep it, but `classWeights()` gives no bonus until the stat is back. The stats screen and customize screen say so.
-  - Mycel only recommends open classes.
+- **Class unlocks, as the owner settled them:**
+  - **All five classes are open to everyone.** The owner didn't want to push anyone into Support.
+  - **Hybrids are stat-locked:** both stats must reach **12** (`HYBRID_REQ`, `classUnlock()` in `src/profile.js`). They are "something to chase".
+  - **Hybrids are much stronger:** the full bonus of both classes (`HYBRID_SHARE = 1`) plus Hybrid Mastery (+10% damage, +10% Breath recovery; `HYBRID_MASTERY`, applied in `mechanics.js`).
+  - A hybrid whose stat drops below 12 (a new test or a 🧢 cap) plays as its first class until the stat is back.
+  - Mycel recommends your best class plus your best unlocked hybrid partner.
+  - Example at strong stats: Fighter has damage ×1.42; Skirmisher has damage ×1.56 plus Ranger's speed and dash.
 
 ## Latest shared state — 2026-10-02 (squat and deadlift removed)
 
