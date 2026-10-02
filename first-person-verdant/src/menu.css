@@ -167,3 +167,6 @@
 #entry .title-list button.worn{background:#cbe2a6;color:#17251c;border-color:#e4f5c5}
 @media(max-width:800px){#liftForm{grid-template-columns:1fr 1fr}.lift-columns{grid-template-columns:1fr}}
 .board .board-title{display:block;font-size:9px;letter-spacing:.1em;color:#f0d897;text-transform:uppercase}
+.metric .feeds{font:500 9px 'DM Mono',monospace;letter-spacing:.1em;color:#f0d897;margin-left:4px}
+.metric.optional input::placeholder{color:#6f8a78}
+.stat-grid .sources{font-style:normal;font-size:9px;letter-spacing:.06em;color:#9fbca7;margin-top:4px;line-height:1.35}

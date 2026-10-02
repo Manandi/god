@@ -120,6 +120,13 @@ So 10 is the middle of everyone, 18 is the top 1%, and 20 is the top 0.1%.
 | 40-yard dash | 6.4 s | 5.1 s | 4.75 s | 4.45 s | An estimate: NFL combine players average about 4.7 s, and no general-population study was found. |
 | Mile | 11:30 | 7:00 | 6:00 | 5:00 | Adults average 9–10 min (men) and 11–12 min (women); under 6 minutes is rare ([Marathon Handbook](https://marathonhandbook.com/is-a-6-minute-mile-good/)). |
 
+| Back squat (optional) | 48 kg | 102 kg | 143 kg | 200 kg | Estimate: about a third above the bench for untrained adults. |
+| Deadlift (optional) | 58 kg | 125 kg | 175 kg | 240 kg | Estimate: about two thirds above the bench for untrained adults. |
+| Plank hold (optional) | 60 s | 3:00 | 5:00 | 8:00 | Estimate: adults typically hold about a minute. |
+| Resting heart rate (optional) | 72 bpm | 55 | 48 | 40 | Adults average about 70–75 bpm; trained endurance athletes sit in the 40s. Lower is better. |
+
+Optional tests left blank drop out: strength, stamina and defense then use the original formulas exactly.
+
 These are estimates put together from surveys, fitness-test norms and summaries, not one representative study. Age and sex are not asked for, so everyone is compared with all adults. Change a row of `norms` to retune a test.
 
 **Intelligence** comes from Mycel's mind check, an adaptive 12-question reasoning test (`src/reasoning.js`) scored on the IQ scale with an IRT model. It maps onto the same table: IQ 100 = 10, 135 (top 1%) = 18, 146 (top 0.1%) = 20. It is a game estimate, not a clinical test.

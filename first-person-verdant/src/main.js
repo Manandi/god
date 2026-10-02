@@ -1122,6 +1122,7 @@ function update(rawDt){
   updateHUD();
 }
 const dressingRoom=createDressingRoom();
+if(params.has('dresstest'))window.__dressAngle=a=>dressingRoom.setAngle(a);
 shell=createShell(entry,canvas,globe,{narrator,dressingRoom,saveNow:cloudSaveNow,weapon:()=>equippedWeapon(),enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.

@@ -124,15 +124,21 @@ export function createAvatar(scene){
     for(const style of HAIR_STYLES){
       const source=asset.getObjectByName(`Hair_${style}`);if(!source)continue;
       const group=source.clone(true);group.name=`BlenderHair_${style}`;group.visible=false;
-      group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.material=hair;}});
+      // Hair takes the chosen hair colour; ties and cuffs keep their brass.
+      group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(!/Tie/.test(o.name))o.material=hair;}});
       hairGroup.add(group);
     }
+    // Cloth pieces follow the chosen shirt colour, like the base body.
+    const shared={Customization_Cloth:blockCloth,Customization_DarkCloth:clothDark};
     for(const outfit of OUTFITS){
       const source=asset.getObjectByName(`Outfit_${outfit}`);if(!source)continue;
+      // The authored pieces replace the code-built ones (they used to show together).
+      for(const old of outfitGroups[outfit])old.removeFromParent();
+      outfitGroups[outfit]=[];
       source.children.forEach(piece=>{
         const boneName=piece.name.split('__')[0],bone=body.bones[boneName];if(!bone)return;
         const clone=piece.clone(true);clone.name=`Blender_${outfit}_${piece.name}`;clone.visible=false;
-        clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});bone.add(clone);outfitGroups[outfit].push(clone);
+        clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(shared[o.material?.name])o.material=shared[o.material.name];}});bone.add(clone);outfitGroups[outfit].push(clone);
       });
     }
     applyAppearance();

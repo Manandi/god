@@ -97,6 +97,24 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (hair and outfits fixed, optional tests)
+
+- **Hair in front of the face, and messy outfits: fixed.** `tools/blender/build_customization.py` wrote three.js coordinates (y up) straight into Blender (z up), so every hair and outfit piece came out turned 90°: hair over the face, plates sideways. The script now converts each piece (`to_blender`), and the GLB is rebuilt.
+  - avatar.js also showed the old code-built outfit pieces **together with** the Blender ones; once the pack loads, the code-built ones are now removed.
+  - Redesigned pieces:
+    - **Ranger:** hood, cape, quiver, chest strap, belt pouches, archer's guard.
+    - **Warden:** plates, layered pauldrons, gorget, vambraces, tabard.
+    - **Wanderer:** coat, lapels, scarf, sash, satchel.
+    - **Sentinel:** cuirass, round pauldrons, faulds, tassets, knee cops, greaves.
+    - **Hair:** a shared scalp for every style, plus tufts, curls, a quiff, a ponytail and a braid.
+  - Cloth pieces follow the chosen shirt colour (materials `Customization_Cloth`/`DarkCloth`).
+  - `?dresstest` exposes `window.__dressAngle(radians)` to turn the preview for screenshots.
+- **Optional tests** (measurement form, "OPTIONAL · MORE TESTS, SHARPER STATS"):
+  - The tests: back squat and deadlift (→ STR), plank hold (→ DEF), resting heart rate (→ STA).
+  - Blank tests are stored as `null` and drop out. When they are blank, the stat uses the old formula exactly (checked over 20,000 random inputs: 0 differences), so existing saves keep their stats.
+  - Every test shows the stats it feeds (→ STR · DEF), and each stat tile lists its tests (`STAT_SOURCES`).
+  - Norms for the new tests are estimates (see the 3D README).
+
 ## Latest shared state — 2026-10-01 (flicker fix, stat refresh)
 
 - **Background flicker fixed** (`frame()` in `src/main.js`). Since the live character preview went in (b557c81), a broken `else if` chain drew the paused game world over the intro and map backgrounds every 0.15 s. Now each view draws only its own scene: one clear per frame on the intro, against three before. The intro also runs much smoother.

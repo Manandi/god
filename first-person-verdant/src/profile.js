@@ -15,24 +15,41 @@ export const METRICS=[
   {key:'weightKg',label:'Body weight',unit:'kg',min:30,max:250,step:.5,value:75,body:true,imperial:{unit:'lb',factor:2.20462,step:1}},
   {key:'heightCm',label:'Height',unit:'cm',min:120,max:230,step:1,value:175,body:true,imperial:{unit:'in',factor:1/2.54,step:.5}},
   // About 1 in 5 adults cannot do one; 36% do fewer than 5 and 54% fewer than 10 (US survey of 2,000 adults).
-  {key:'pushups',label:'Max push-ups',unit:'reps',min:0,max:300,step:1,value:10,stat:'strength',
+  {key:'pushups',label:'Max push-ups',unit:'reps',min:0,max:300,step:1,value:10,stat:'strength',feeds:['strength','defense'],
     norms:[[0,10],[1,20],[5,36],[10,54],[15,65],[20,74],[30,86],[40,93],[50,97],[60,99],[80,99.7],[100,99.9]]},
   // Only about 17% of men and 5% of women can do one strict pull-up.
-  {key:'pullups',label:'Max pull-ups',unit:'reps',min:0,max:100,step:1,value:0,stat:'strength',
+  {key:'pullups',label:'Max pull-ups',unit:'reps',min:0,max:100,step:1,value:0,stat:'strength',feeds:['strength'],
     norms:[[0,44],[1,89],[2,91.5],[5,95],[10,98],[15,99],[20,99.6],[25,99.9]]},
   // Men average about 45 cm and women about 30 cm; elite jumpers reach 75+.
-  {key:'verticalJumpCm',label:'Vertical jump',unit:'cm',min:0,max:150,step:1,value:37,stat:'speed',imperial:{unit:'in',factor:1/2.54,step:.5},
+  {key:'verticalJumpCm',label:'Vertical jump',unit:'cm',min:0,max:150,step:1,value:37,stat:'speed',feeds:['speed'],imperial:{unit:'in',factor:1/2.54,step:.5},
     norms:[[15,1],[20,5],[26,15],[31,30],[37,50],[43,70],[49,85],[56,95],[64,99],[75,99.9]]},
   // Untrained adults run about 6–7 s; NFL combine players average about 4.7 s.
-  {key:'dashSeconds',label:'40-yard dash',unit:'seconds',min:3.5,max:20,step:.1,value:6.4,stat:'speed',
+  {key:'dashSeconds',label:'40-yard dash',unit:'seconds',min:3.5,max:20,step:.1,value:6.4,stat:'speed',feeds:['speed'],
     norms:[[11,1],[9,5],[7.8,15],[7,30],[6.4,50],[5.9,70],[5.5,85],[5.1,95],[4.75,99],[4.45,99.9]]},
   // Adults average about 9–10 min (men) and 11–12 min (women); under 6 min is rare.
-  {key:'mileSeconds',label:'One-mile time',unit:'min:sec',min:200,max:2400,step:1,value:690,stat:'stamina',clock:true,
+  {key:'mileSeconds',label:'One-mile time',unit:'min:sec',min:200,max:2400,step:1,value:690,stat:'stamina',feeds:['stamina','defense'],clock:true,
     norms:[[1500,1],[1320,2],[1080,8],[900,20],[780,35],[690,50],[600,68],[540,80],[480,90],[420,96],[360,99],[300,99.9]]},
   // Most adults never train the bench; fewer than 1% of the US population can bench 102 kg (225 lb).
-  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:35,stat:'strength',imperial:{unit:'lb',factor:2.20462,step:5},
-    norms:[[5,1],[12,5],[20,15],[27,30],[35,50],[45,70],[57,85],[75,95],[102,99],[140,99.9]]}
+  {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:35,stat:'strength',feeds:['strength','defense'],imperial:{unit:'lb',factor:2.20462,step:5},
+    norms:[[5,1],[12,5],[20,15],[27,30],[35,50],[45,70],[57,85],[75,95],[102,99],[140,99.9]]},
+  // Optional tests (added 2026-10-02): leave them blank and the stat is worked out
+  // exactly as before. Estimates for all adults, most of whom never lift: about a
+  // third more than the bench for the squat and two thirds more for the deadlift.
+  {key:'squatKg',label:'Max back squat',unit:'kg',min:0,max:400,step:2.5,value:null,optional:true,stat:'strength',feeds:['strength'],imperial:{unit:'lb',factor:2.20462,step:5},
+    norms:[[10,1],[18,5],[28,15],[38,30],[48,50],[60,70],[77,85],[102,95],[143,99],[200,99.9]]},
+  {key:'deadliftKg',label:'Max deadlift',unit:'kg',min:0,max:450,step:2.5,value:null,optional:true,stat:'strength',feeds:['strength'],imperial:{unit:'lb',factor:2.20462,step:5},
+    norms:[[15,1],[25,5],[36,15],[47,30],[58,50],[72,70],[92,85],[125,95],[175,99],[240,99.9]]},
+  // Core endurance, the closest home test of being hard to break. Adults hold a
+  // plank for about a minute; past five minutes is rare.
+  {key:'plankSeconds',label:'Plank hold',unit:'seconds',min:0,max:3600,step:1,value:null,optional:true,stat:'defense',feeds:['defense'],
+    norms:[[5,1],[10,5],[20,15],[35,30],[60,50],[90,70],[120,85],[180,95],[300,99],[480,99.9]]},
+  // Resting heart rate on waking (a phone or watch reads it). Adults average about
+  // 72 bpm; trained endurance athletes sit in the 40s.
+  {key:'restingHeartRate',label:'Resting heart rate',unit:'bpm',min:30,max:130,step:1,value:null,optional:true,stat:'stamina',feeds:['stamina'],
+    norms:[[100,1],[92,5],[84,15],[78,30],[72,50],[67,70],[62,85],[55,95],[48,99],[40,99.9]]}
 ];
+/** Which tests feed each stat (for the stats screen). */
+export const STAT_SOURCES=Object.fromEntries(['strength','speed','stamina','defense'].map(k=>[k,METRICS.filter(m=>m.feeds?.includes(k)).map(m=>{const l=m.label.replace(/^Max /,'');return l[0].toUpperCase()+l.slice(1);})]));
 /** Percentile of adults → score: 50th = 10, 99th = 18, 99.9th = 20 (and the same steps below the middle). */
 export const SCORE_SCALE=[[.5,1],[1,2],[5,4],[15,6],[30,8],[50,10],[70,12],[85,14],[95,16],[99,18],[99.9,20]];
 /** Frames: every body gets something. Heavier frames are hard to move; light or tall
@@ -64,7 +81,7 @@ const dayOf=ms=>{const d=new Date(ms);return new Date(d.getTime()-d.getTimezoneO
 export const localDay=()=>dayOf(Date.now());
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const daysBetween=(a,b)=>Math.round((Date.parse(`${b}T00:00:00Z`)-Date.parse(`${a}T00:00:00Z`))/86400000);
-const cleanInputs=src=>Object.fromEntries(METRICS.map(m=>{const v=Number(src?.[m.key]);return [m.key,Number.isFinite(v)?Math.max(m.min,Math.min(m.max,v)):m.value];}));
+const cleanInputs=src=>Object.fromEntries(METRICS.map(m=>{const r=src?.[m.key];if(m.optional&&(r===null||r===undefined||r===''))return [m.key,null];const v=Number(r);return [m.key,Number.isFinite(v)?Math.max(m.min,Math.min(m.max,v)):m.value];}));
 export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
@@ -128,7 +145,9 @@ const lerp=(pts,x)=>{   // piecewise linear through [x, y] points (x ascending),
 };
 /** The share of adults (0–100) who do no better than this result. */
 export function percentile(m,v){const pts=[...m.norms].sort((a,b)=>a[0]-b[0]);return lerp(pts,v);}
-const score=(m,inputs=profile.inputs)=>Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,percentile(m,inputs[m.key])))));
+const score=(m,inputs=profile.inputs)=>inputs[m.key]==null?null:Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,percentile(m,inputs[m.key])))));
+/** Weighted average of the tests that were taken (optional tests left blank drop out). */
+const blend=(s,weights)=>{let sum=0,w=0;for(const [k,f] of Object.entries(weights))if(s[k]!=null){sum+=s[k]*f;w+=f;}return Math.round(sum/w);};
 /** Distances and speeds in the player's units (US by default). */
 export const units={
   get us(){return profile.units==='imperial';},
@@ -147,8 +166,11 @@ function rawStats(inputs=profile.inputs){
   const reason=Math.max(1,Math.min(20,Math.round(lerp(SCORE_SCALE,normalPercentile((profile.reasoning-100)/15)))));
   const days=new Set(profile.activities.filter(a=>a.date>=new Date(Date.now()-27*86400000).toISOString().slice(0,10)).map(a=>a.date)).size;
   return {
-    strength:Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25),speed:Math.round(s.dashSeconds*.7+s.verticalJumpCm*.3),
-    stamina:s.mileSeconds,defense:Math.round(s.benchPressKg*.45+s.pushups*.3+s.mileSeconds*.25),
+    // Weights keep the original split when the optional tests are blank.
+    strength:s.squatKg==null&&s.deadliftKg==null?Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25):blend(s,{pushups:.32,pullups:.28,benchPressKg:.2,squatKg:.1,deadliftKg:.1}),
+    speed:Math.round(s.dashSeconds*.7+s.verticalJumpCm*.3),
+    stamina:s.restingHeartRate==null?s.mileSeconds:blend(s,{mileSeconds:.7,restingHeartRate:.3}),
+    defense:s.plankSeconds==null?Math.round(s.benchPressKg*.45+s.pushups*.3+s.mileSeconds*.25):blend(s,{plankSeconds:.4,benchPressKg:.27,pushups:.18,mileSeconds:.15}),
     intelligence:reason,discipline:Math.min(20,10+Math.round(days*10/24))   // starts at 10; 24 active days in 4 weeks reaches 20
   };
 }

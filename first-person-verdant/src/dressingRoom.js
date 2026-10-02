@@ -34,6 +34,8 @@ export function createDressingRoom() {
       ensure(); host = el; el.appendChild(renderer.domElement);
       avatar.setAppearance(appearance); if (weapon) avatar.setWeapon(weapon);
     },
+    /** Face the preview a given way (radians; 0 faces the camera). Used by tests. */
+    setAngle(a) { if (avatar) avatar.root.rotation.y = a; },
     update(dt) {
       if (!renderer || !host?.isConnected) return;
       const w = host.clientWidth, h = host.clientHeight;
