@@ -4,6 +4,7 @@ import {WORKOUTS,WORKOUT_NOTE,EXERCISES,TITLES,e1rm} from './training.js';
 import {createLinkCode,claimLinkCode} from './identity.js';
 import {leaderboard,STAT_KEYS} from './leaderboard.js';
 import {createMindCheck,iqFromTheta,canTakeReasoning,TEST_ITEMS,TIME_LIMIT,TEST_VERSION} from './reasoning.js';
+import {createLofi} from './music.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
 // The intro, told by Mycel (narrator.js floats him around the screen). Each beat
@@ -26,6 +27,7 @@ const INTRO=[
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
+const lofi=createLofi();
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
   loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',mind=null,quizQ=null,quizTimer=null,quizResult=null,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;if(quizTimer){clearInterval(quizTimer);quizTimer=null;}};
@@ -34,7 +36,9 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   const step=n=>onboarding()?` · STEP ${n} OF 4`:'';
   const startQuiz=()=>{mind=createMindCheck(profile.reasoningSeen);quizQ=null;quizResult=null;show('quiz');};
   const button=(action,label,primary=false)=>`<button type="button" class="${primary?'primary':''}" data-action="${action}">${label}</button>`;
-  function show(next){stopTyping();view=next;entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
+  function show(next){stopTyping();view=next;
+    // Mycel's theme plays while Mycel talks: the intro, and the rest of onboarding.
+    lofi.want(view==='intro'||(!profile.customized&&['baseline','personality','reveal','quiz','customize','link'].includes(view)));entry.classList.remove('hidden');entry.classList.toggle('map-view',view==='map');entry.classList.toggle('intro-view',view==='intro');
     if(view==='intro')renderIntro();else if(view==='baseline')renderBaseline();else if(view==='personality')renderPersonality();else if(view==='reveal')renderReveal();else if(view==='quiz')renderQuiz();else if(view==='map')renderMap();else if(view==='weekly')renderWeekly();else if(view==='lifts')renderLifts();else if(view==='workout')renderWorkout();else if(view==='testResult')renderTestResult();
     else if(view==='customize')renderCustomize();else if(view==='stats')renderStats();else if(view==='link')renderLink();else if(view==='leaderboard')renderLeaderboard();else renderMenu();
   }
@@ -42,7 +46,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   function start(){show(profile.complete?'menu':profile.introSeen?'baseline':'intro');}
   function renderIntro(){
     const beat=INTRO[line];
-    entry.innerHTML=`<div class="story-stage"><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS · ${line+1} / ${INTRO.length}</span><h2>MYCEL</h2><p id="spoken"></p>${beat.chips?`<div class="story-chips">${beat.chips.map((c,i)=>`<span style="animation-delay:${.4+i*.18}s">${esc(c)}</span>`).join('')}</div>`:''}<div class="story-actions">${button('skip','SKIP INTRO')}${line===0?button('link','PLAYED BEFORE? LINK DEVICE'):''}${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Click NEXT or press Space to reveal a line, then again to continue.</small></div></div>`;
+    entry.innerHTML=`<div class="story-stage"><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS · ${line+1} / ${INTRO.length}</span><h2>MYCEL</h2><p id="spoken"></p>${beat.chips?`<div class="story-chips">${beat.chips.map((c,i)=>`<span style="animation-delay:${.4+i*.18}s">${esc(c)}</span>`).join('')}</div>`:''}<div class="story-actions">${button('skip','SKIP INTRO')}${line===0?button('link','PLAYED BEFORE? LINK DEVICE'):''}<button type="button" class="music-toggle" data-action="music" title="Mycel’s theme">${lofi.enabled?'♪ MUSIC ON':'♪ MUSIC OFF'}</button>${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Click NEXT or press Space to reveal a line, then again to continue.</small></div></div>`;
     const target=entry.querySelector('#spoken'),phrase=beat.text;let cursor=0;
     if(narrator){narrator.say(beat.mood,line>0);narrator.talking=true;}
     typing=setInterval(()=>{target.textContent=phrase.slice(0,++cursor);if(cursor>=phrase.length)stopTyping();},26);
@@ -54,6 +58,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     };
     entry.querySelector('[data-action="skip"]').onclick=finish;
     entry.querySelector('[data-action="link"]')?.addEventListener('click',()=>show('link'));
+    entry.querySelector('[data-action="music"]').onclick=e=>{e.currentTarget.textContent=lofi.toggle()?'♪ MUSIC ON':'♪ MUSIC OFF';};
   }
   addEventListener('keydown',e=>{if(view==='intro'&&(e.code==='Space'||e.code==='Enter')){e.preventDefault();entry.querySelector('[data-action="next"]')?.click();}});
   function renderMenu(){
@@ -264,7 +269,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     return leaderboard.submit().catch(()=>{}).then(()=>leaderboard.refreshMyCaps()).catch(()=>{lastSync=0;});
   }
   function renderLeaderboard(){
-    entry.innerHTML=`<section class="shell-card wide-card board-card"><div class="panel-heading"><div><span class="eyebrow">THE HOMIES · RANKED BY LEVEL</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div><p>Levels come only from training you log; stats come from real tests. Only class, level, XP and stats are shown, never weight or height. Think a stat is fake? Press 🧢 to cap it: it stops counting until they show you proof in person or on video, then press 🧢 again to lift it.</p><div class="board-wrap"><p class="board-note">Loading the board…</p></div><small class="feedback">${esc(notice)}</small><div class="panel-actions"><button type="button" data-action="hide">${leaderboard.hidden?'SHOW ME ON THE BOARD':'HIDE ME FROM THE BOARD'}</button>${button('refresh','REFRESH',true)}</div></section>`;
+    entry.innerHTML=`<section class="shell-card wide-card board-card"><div class="panel-heading"><div><span class="eyebrow">THE HOMIES · RANKED BY OVERALL</span><h2>LEADERBOARD</h2></div>${button('back','BACK')}</div><p>Ranked by OVR, the average of all six stats (a capped stat counts as 10, as it does in play); ties go to level. Levels come only from training you log; stats come from real tests. Only class, level, XP and stats are shown, never weight or height. Think a stat is fake? Press 🧢 to cap it: it stops counting until they show you proof in person or on video, then press 🧢 again to lift it.</p><div class="board-wrap"><p class="board-note">Loading the board…</p></div><small class="feedback">${esc(notice)}</small><div class="panel-actions"><button type="button" data-action="hide">${leaderboard.hidden?'SHOW ME ON THE BOARD':'HIDE ME FROM THE BOARD'}</button>${button('refresh','REFRESH',true)}</div></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>{notice='';show('menu');};
     entry.querySelector('[data-action="refresh"]').onclick=()=>{notice='';renderLeaderboard();};
     entry.querySelector('[data-action="hide"]').onclick=async e=>{e.target.disabled=true;try{await leaderboard.setHidden(!leaderboard.hidden);}catch{}renderLeaderboard();};
@@ -272,10 +277,13 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
       if(view!=='leaderboard')return;
       const me=leaderboard.id,names=new Map(rows.map(r=>[r.id,r.name]));
       const capsOn=(id,stat)=>all.filter(c=>c.target===id&&c.stat===stat);
+      // Overall: the average of the six stats, a capped stat counting as at most 10 (as in play).
+      const ovr=r=>STAT_KEYS.reduce((t,k)=>{const v=Number(r.stats?.[k])||0;return t+(capsOn(r.id,k).length?Math.min(v,10):v);},0)/STAT_KEYS.length;
+      rows.forEach(r=>{r.ovr=ovr(r);});rows.sort((a,b)=>b.ovr-a.ovr||b.level-a.level||b.xp-a.xp);
       const cell=(r,stat)=>{const list=capsOn(r.id,stat),mine=list.some(c=>c.flagger===me),v=r.stats?.[stat]??'–';
         const who=list.map(c=>names.get(c.flagger)||'someone').join(', ');
         return `<td class="${list.length?'capped':''}" title="${list.length?`Capped by ${esc(who)}`:''}"><span class="stat-v">${v}</span>${r.id===me?(list.length?' <em class="cap-n">🧢'+list.length+'</em>':''):`<button type="button" class="cap ${mine?'on':''}" data-target="${r.id}" data-stat="${stat}" title="${mine?'Lift your cap (they showed proof)':'Cap this stat (you think it is fake)'}">🧢${list.length?`<b>${list.length}</b>`:''}</button>`}</td>`;};
-      const table=rows.length?`<table class="board"><thead><tr><th>#</th><th>EXPLORER</th><th>CLASS</th><th>LV</th><th>XP</th>${STAT_KEYS.map(k=>`<th>${short[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.id===me?'me':''}"><td>${i+1}</td><td>${esc(r.name)}${r.id===me?' <em>YOU</em>':''}${r.title?`<small class="board-title">${esc(TITLES.find(t=>t.id===r.title)?.label||'')}</small>`:''}</td><td>${esc(CLASS_INFO[r.klass]?.label||r.klass)}</td><td>${r.level}</td><td>${r.xp}</td>${STAT_KEYS.map(k=>cell(r,k)).join('')}</tr>`).join('')}</tbody></table>`:'<p class="board-note">No explorers yet. Finish your measure and you will be the first.</p>';
+      const table=rows.length?`<table class="board"><thead><tr><th>#</th><th>EXPLORER</th><th>OVR</th><th>CLASS</th><th>LV</th><th>XP</th>${STAT_KEYS.map(k=>`<th>${short[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr class="${r.id===me?'me':''}"><td>${i+1}</td><td>${esc(r.name)}${r.id===me?' <em>YOU</em>':''}${r.title?`<small class="board-title">${esc(TITLES.find(t=>t.id===r.title)?.label||'')}</small>`:''}</td><td class="ovr">${r.ovr.toFixed(1)}</td><td>${esc(CLASS_INFO[r.klass]?.label||r.klass)}</td><td>${r.level}</td><td>${r.xp}</td>${STAT_KEYS.map(k=>cell(r,k)).join('')}</tr>`).join('')}</tbody></table>`:'<p class="board-note">No explorers yet. Finish your measure and you will be the first.</p>';
       entry.querySelector('.board-wrap').innerHTML=table;
       entry.querySelectorAll('button.cap').forEach(b=>b.onclick=async()=>{
         b.disabled=true;
@@ -317,5 +325,5 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
   canvas.addEventListener('pointerdown',e=>{if(view!=='map')return;pointer={x:e.clientX,last:e.clientX,moved:false};canvas.setPointerCapture(e.pointerId);});
   canvas.addEventListener('pointermove',e=>{if(view!=='map'||!pointer)return;const delta=e.clientX-pointer.last;pointer.last=e.clientX;if(Math.abs(e.clientX-pointer.x)>5)pointer.moved=true;globe.turn(delta*.008);});
   canvas.addEventListener('pointerup',e=>{if(view!=='map'||!pointer)return;if(!pointer.moved){const rect=canvas.getBoundingClientRect();const picked=globe.pick((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);if(picked){selected=picked;renderMap();}}pointer=null;});
-  return {start,show,get view(){return view;},hide(){stopTyping();entry.classList.add('hidden');entry.classList.remove('map-view');view='game';},pause(){pauseGame();show('menu');}};
+  return {start,show,get view(){return view;},hide(){stopTyping();lofi.want(false);entry.classList.add('hidden');entry.classList.remove('map-view');view='game';},pause(){pauseGame();show('menu');}};
 }

@@ -97,6 +97,30 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (NPC memory, story decisions, overall ranking, Mycel's theme)
+
+- **NPCs share what you have been told** (`chronicles.heard`, saved in the world save; old saves start empty):
+  - Every topic you hear, from anyone, is remembered. New topics are listed first; heard ones drop to the bottom with ✓.
+  - Tutorials skip what another NPC already taught you. For example, Tavi skips Breath once Orin explained it, and Sela's "Where should I go now?" names the current objective.
+  - A side quest's full pitch is given once. If you already cleared its site, the giver just asks what you found and you turn it in.
+  - Replies can be functions of what you know (`replyLines()` in `src/chronicles.js`).
+  - The old "Last time you asked me…" line is gone.
+- **Gossip:** NPCs mention, once each, something you said or did with someone else, or your class and level (`GOSSIP` in `src/story.js`; one per conversation).
+- **Story decisions** (`DECISIONS`, `story.decisions` saved in `story`, `pendingDecision()`):
+  - Each keeper asks one real question after its report:
+    - Brannoch: wall the Rootwell off, or leave it open to the creatures.
+    - Ysolde: confess in the square, or tell only Orin.
+    - Pip: bring Pip to the gate, or send them home to Sela.
+  - Walk away and they ask again next time.
+  - The keepers' everyday lines change with your answer, the town gossips about it, and the journal has a WHAT YOU DECIDED page.
+  - The release scene at the gate (`endingLines()`) and the ending card (`#endingChoices`) both reflect all three.
+- **Leaderboard ranks by OVR:** the average of the six stats, with a capped stat counting as at most 10, as in play. Ties go to level, then XP. It is sorted in the browser over up to 200 rows, with a new OVR column. Tested with mocked rows, so nothing was written live.
+- **Mycel's theme** (`src/music.js`):
+  - An original lofi forest loop synthesised with Web Audio, with no audio files and nothing copyrighted. The owner asked for "the most popular YouTube forest or game opening theme"; those are copyrighted, so this one was composed instead.
+  - Parts: Fmaj9, Em9, Dm9, Cmaj9 electric piano, bass, a swung brush beat, pentatonic flute, vinyl hiss and birds, at 72 BPM.
+  - It plays during the intro and the rest of onboarding (while Mycel talks), starts on the first click or key, and fades out in game.
+  - ♪ MUSIC ON/OFF is on the intro screen (`hollow-roots-music`).
+
 ## Latest shared state — 2026-10-02 (named hybrid classes, class unlocks)
 
 - **Hybrids are their own choices.** CUSTOMIZE shows COMBAT CLASS (5 pure) and HYBRID CLASS (all 10 by name, e.g. SKIRMISHER, FIGHTER + RANGER) instead of a hidden "second class" row. Mycel's recommendation card has a TAKE button, or shows ✓ THIS IS YOUR CLASS. Buttons use `data-path="primary+secondary"`; picking a hybrid keeps your current primary first (the leaderboard shows the primary).

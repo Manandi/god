@@ -30,7 +30,8 @@ export const TOPICS = {
       'Open WEEKLY QUEST in the menu. Check off the steps, the home workouts and the learning. That is your XP, and XP is your level.',
       'Every 30 days you can retest. A stat that rises earns a Growth bonus, and a stat of 12 or 16 wakes an ability.',
       'Lifting on your own program? Log it in the lift log on the quest page. It gives no XP, but it earns titles your friends will see.',
-      'And the leaderboard keeps everyone honest: if a friend doubts a stat, they cap it, and it does not count until you show them proof.']],
+      'And the leaderboard keeps everyone honest: if a friend doubts a stat, they cap it, and it does not count until you show them proof.',
+      c => c.heard.has('learn-fight') && c.heard.has('learn-move') && c.heard.has('learn-survive') ? 'Orin, Sela and Tavi have had their turn teaching you. Now you have all of it. The rest is showing up.' : 'Orin can teach you to fight, Sela to move, and Tavi to stay alive. Ask them; each knows their piece best.']],
     ['city', 'What is Mossgate?', 'A promise made from rootwood and stubbornness: carry your own stone, and shelter those who carry theirs.'],
     ['heartseed', 'What is the Heartseed?', 'The heart of the Reach. It grows from effort honestly spent, yours included. That is why you grow stronger here only when you grow stronger out there.'],
     ['doubt', 'I do not trust this place.', 'Good. Trust should grow roots before it bears weight. Look around, then ask me again.']],
@@ -48,14 +49,14 @@ export const TOPICS = {
       'W, A, S and D walk. Hold Shift to sprint, tap it to dash. Space jumps, and if your real vertical jump is good enough, a second press jumps again in the air.',
       'Hold the right mouse button to look around. The marker on screen and the compass at the top always point to your next goal.',
       'J opens your journal with the story so far, M the world map, and V switches between first and third person. E talks to people and uses things.',
-      'Lost or stuck? Follow the lanterns. They always lead to whatever the forest needs next.']],
-    ['route', 'Where should I go first?', 'Follow the lanterns. They always lead to the next thing the forest needs remembered.'],
+      c => c.heard.has('route') ? 'And you already know the rest: when in doubt, follow the lanterns.' : 'Lost or stuck? Follow the lanterns. They always lead to whatever the forest needs next.']],
+    ['route', 'Where should I go now?', c => c.heard.has('learn-move') ? `You know the trick already: follow the lanterns. Right now they lead to this: ${c.objective}.` : `Follow the lanterns. They always lead to the next thing the forest needs remembered. Right now: ${c.objective}.`],
     ['hollowing', 'What is the Hollowing?', 'A rot in the roots. It takes strength and memory together, and it hits the strong first. That is all anyone knew, until you started asking the right people.'],
     ['company', 'Will you come with me?', 'Not yet. Someone must keep the path home visible. Bring me a memory and I may reconsider.']],
   tavi: [['learn-survive', 'How do I stay alive?', [
       'Those diamonds at the top are your hearts. X drinks a Sap Flask: it heals after a moment, and a hit before then spills it.',
       'The green brazier in the square and the hearth at your homestead refill your hearts and your flasks. Stand by one and press E.',
-      'Breath is your stamina. Back off and it comes back fast; stay greedy and you will be winded right when you need to dash.',
+      c => c.heard.has('learn-fight') ? 'Orin already told you about Breath, so I will only add this: drink before it is hopeless, not after. A flask needs a moment.' : 'Breath is your stamina. Back off and it comes back fast; stay greedy and you will be winded right when you need to dash.',
       'And if you fall, the roots carry you home. You lose nothing but the walk back.']],
     ['healing', 'Can you heal me?', 'The brazier in the square restores vitality, Breath and flasks. Stand beside it and press E.'],
     ['herbs', 'What grows in the Reach?', 'Sunmoss for wounds, bellcap for fever, and ghostfern for mistakes best left unnamed. Nothing at all in the Scorched Hollow.'],
@@ -68,6 +69,12 @@ export const TOPICS = {
     ['sela', 'Does Sela know you’re here?', 'Define “know.” She knows I’m somewhere. That’s a kind of knowing.']]
 };
 
+/** A reply as lines: strings stay, functions are asked with what you already know. */
+export function replyLines(reply, ctx) {
+  const list = Array.isArray(reply) ? reply : [reply];
+  return list.map(r => typeof r === 'function' ? r(ctx) : r).filter(Boolean);
+}
+
 /**
  * Chronicle state. `done(site)` says whether a chronicle's goal is met
  * (that site's memory recovered).
@@ -76,10 +83,13 @@ export function createChronicles(saved, done) {
   const completed = new Set((Array.isArray(saved?.completed) ? saved.completed : []).filter(id => CHRONICLES.some(q => q.id === id)));
   let active = CHRONICLES.some(q => q.id === saved?.active) && !completed.has(saved.active) ? saved.active : '';
   const stances = { ...(saved?.stances || {}) };
+  // What you have already been told, by anyone: topic keys, chronicle offers and
+  // one-time remarks (gossip ids). Shared across NPCs so nobody repeats it.
+  const heard = new Set((Array.isArray(saved?.heard) ? saved.heard : []).filter(k => typeof k === 'string').slice(-300));
   const byId = id => CHRONICLES.find(q => q.id === id);
   const available = () => CHRONICLES.find((q, i) => !completed.has(q.id) && (i === 0 || completed.has(CHRONICLES[i - 1].id)));
   return {
-    completed, stances,
+    completed, stances, heard,
     get active() { return byId(active) || null; },
     available,
     goalMet(q) { return done(q.site); },
@@ -87,7 +97,7 @@ export function createChronicles(saved, done) {
     choiceFor(npc) {
       const q = active ? byId(active) : available();
       if (!q || q.giver !== npc) return null;
-      if (active === q.id && done(q.site)) return [`turnin:${q.id}`, q.turnin, q.complete];
+      if (done(q.site)) return [`turnin:${q.id}`, q.turnin, q.complete];   // done before it was even asked: just tell them
       if (active === q.id) return [`remind:${q.id}`, 'Remind me where to go.', q.accepted];
       return [`accept:${q.id}`, q.accept, q.accepted];
     },
@@ -107,10 +117,14 @@ export function createChronicles(saved, done) {
       const q = active ? byId(active) : available();
       if (!q || q.giver !== npc) return null;
       if (active === q.id && done(q.site)) return 'You have the look of someone who has seen it. Tell me.';
+      if (done(q.site)) return heard.has(`offer:${q.id}`) ? null : (heard.add(`offer:${q.id}`), 'I was going to ask you to go there, and you have already been. Tell me what you found.');
       if (active === q.id) return null;
+      // The full pitch once; after that the choice is simply there.
+      if (heard.has(`offer:${q.id}`)) return null;
+      heard.add(`offer:${q.id}`);
       return q.opening;
     },
-    reset() { completed.clear(); active = ''; for (const k in stances) delete stances[k]; },
-    serialize() { return { active, completed: [...completed], stances }; }
+    reset() { completed.clear(); active = ''; heard.clear(); for (const k in stances) delete stances[k]; },
+    serialize() { return { active, completed: [...completed], stances, heard: [...heard] }; }
   };
 }

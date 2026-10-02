@@ -5,8 +5,8 @@ import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
-import { createStory,NPCS,CHAPTERS,STAGES,keeperName } from './story.js';
-import { createChronicles,CHRONICLES,TOPICS } from './chronicles.js';
+import { createStory,NPCS,CHAPTERS,STAGES,keeperName,GOSSIP,endingLines } from './story.js';
+import { createChronicles,CHRONICLES,TOPICS,replyLines } from './chronicles.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
@@ -17,7 +17,7 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units } from './profile.js';
+import { profile,stats,saveProfile,units,level,pathInfo } from './profile.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
@@ -270,7 +270,7 @@ function nearestInteractable(){
 function interact(){
   const nearby=nearestInteractable();if(!nearby)return;
   if(nearby.type==='npc')openDialogue(nearby.id);
-  else if(nearby.type==='orrun')openDialogue('orrun',{lines:RELEASE_LINES});
+  else if(nearby.type==='orrun')openDialogue('orrun',{lines:[...RELEASE_LINES.slice(0,3),...endingLines(story.decisions),...RELEASE_LINES.slice(3)]});
   else if(nearby.type==='echo'){
     const e=nearby.value,locked=story.memoryLocked(e.id);
     if(locked){toast(...locked);playTone(180,.3,.04);return;}
@@ -291,9 +291,11 @@ function interact(){
 function openDialogue(id,conversation=null){
   const conv=conversation||story.talk(id,profile.name),who=speakerOf(id),lines=[...conv.lines];
   if(!conversation){
-    // Idle talk remembers what you chose to discuss (ChatGPT Sites design); a chronicle offer follows the story.
-    const stance=chronicles.stances[id],topic=stance&&TOPICS[id]?.find(t=>t[0]===stance);
-    if(!conv.then&&topic)lines[0]+=` Last time you asked me, “${topic[1]}” I remember.`;
+    // Word travels in Mossgate: one thing you did or said elsewhere, mentioned once.
+    if(!conv.then){
+      const c=talkContext(),g=GOSSIP.find(g=>g.npc===id&&!chronicles.heard.has(g.id)&&g.when(c));
+      if(g){chronicles.heard.add(g.id);lines.unshift(typeof g.line==='function'?g.line(c):g.line);}
+    }
     const offer=chronicles.openingFor(id);if(offer)lines.push(offer);
   }
   dialogue={id,...conv,lines,i:0,chars:0,opened:elapsed,custom:!!conversation,choices:null};if(npcs[id])npcs[id].talking=true;
@@ -315,23 +317,35 @@ function applyStoryStep(d){
   if(d.spawn)spawnEncounter(d.spawn);
   persist();toast('NEW OBJECTIVE',story.info.objective);playTone(620,.35,.05,'sine');
 }
-/** Dialogue choices: a chronicle action if this person has one, what you can ask about, and farewell. */
+/** What dialogue knows about you: topics heard anywhere, your decisions, level and class. */
+const talkContext=()=>({heard:chronicles.heard,dec:story.decisions,level:level(),klass:pathInfo().label,name:profile.name||'wayfarer',objective:story.info.objective});
+/** Dialogue choices: a decision this person is waiting on (first), a chronicle action, what you
+ *  can ask about (new topics first; ones you have heard from anyone are marked ✓), and farewell. */
 function showChoices(){
-  const d=dialogue,quest=chronicles.choiceFor(d.id);
-  d.choices=[...(quest?[quest]:[]),...(TOPICS[d.id]||[]),['farewell','Farewell.','']];
+  const d=dialogue,pending=story.pendingDecision(d.id);
+  if(pending){
+    d.lines=[pending.ask];d.i=0;d.chars=0;
+    d.choices=pending.options.map(([k,label,reply])=>[`decide:${pending.id}:${k}`,label,reply]);
+    if(document.pointerLockElement)document.exitPointerLock();renderDialogue();return;
+  }
+  const quest=chronicles.choiceFor(d.id),topics=TOPICS[d.id]||[],heard=chronicles.heard;
+  const fresh=topics.filter(t=>!heard.has(t[0])),old=topics.filter(t=>heard.has(t[0])).map(([k,l,r])=>[k,`✓ ${l}`,r]);
+  d.choices=[...(quest?[quest]:[]),...fresh,...old,['farewell','Farewell.','']];
   if(document.pointerLockElement)document.exitPointerLock();renderDialogue();
 }
 function chooseDialogue(index){
   const d=dialogue;if(!d?.choices)return;const choice=d.choices[index];if(!choice)return;
   const [key,,reply]=choice;
   if(key==='farewell'){closeDialogue(true);return;}
-  let text=reply;
-  if(/^(accept|turnin|remind):/.test(key)){
+  let text=replyLines(reply,talkContext());
+  if(key.startsWith('decide:')){
+    const [,id,opt]=key.split(':');story.decide(id,opt);toast('DECISION MADE','The forest will remember it.');playTone(560,.4,.05,'sine');
+  }else if(/^(accept|turnin|remind):/.test(key)){
     const q=CHRONICLES.find(q=>q.id===key.split(':')[1]),extra=chronicles.choose(key);
     if(key.startsWith('accept'))toast('CHRONICLE ACCEPTED',q.title);
     if(key.startsWith('turnin')){toast('CHRONICLE COMPLETE',q.title);playTone(660,.5,.05,'sine');}
-    if(extra)text+=` ${extra}`;
-  }else chronicles.stances[d.id]=key;
+    if(extra)text=[...text,extra];
+  }else{chronicles.stances[d.id]=key;chronicles.heard.add(key);}
   if(npcs[d.id])npcs[d.id].expression=/^(accept|turnin)/.test(key)?'warm':key==='doubt'||key==='boast'?'stern':'warm';
   persist();d.lines=Array.isArray(text)?[...text]:[text];d.i=0;d.chars=0;d.choices=null;d.replying=true;renderDialogue();playTone(430,.08,.025,'triangle');
 }
@@ -365,6 +379,8 @@ function finishStory(){
   story.advance('end');persist();witherT=0;
   markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;
   toast('THE FOREST REMEMBERS','Orrun is released. The Canopy Gate stands open.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
+  const dec=story.decisions,parts=[dec.rootwell==='open'?'The Rootwell stays open to every creature that remembers.':dec.rootwell==='wall'?'The Rootwell runs clean behind Mossgate’s new wall.':'',dec.ruins==='truth'?'Mosswatch’s confession is spoken in the square.':dec.ruins==='quiet'?'Mosswatch’s debt is known to the few who needed to know.':'',dec.shrine==='bring'?'Pip stood at the gate and said the name.':dec.shrine==='home'?'Pip carried the name home to Mossgate.':''].filter(Boolean);
+  $('endingChoices').textContent=parts.join(' ');
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
 }
 let witherT=-1;

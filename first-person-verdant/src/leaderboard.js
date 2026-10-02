@@ -26,8 +26,8 @@ export const leaderboard = {
     if (error) throw error;
     return true;
   },
-  /** The board (highest level first) and every standing cap. */
-  async load(limit = 50) {
+  /** The board and every standing cap. */
+  async load(limit = 200) {   // the board sorts by overall in the browser (shell.js)
     const [h, c] = await Promise.all([
       supabase.from('hunters').select('id,name,level,xp,klass,stats,title').order('level', { ascending: false }).order('xp', { ascending: false }).limit(limit),
       supabase.from('stat_caps').select('target,flagger,stat')

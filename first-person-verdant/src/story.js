@@ -178,6 +178,8 @@ const DIALOGUE = {
       ['<rootwell', 'Turn back. The spring isn’t safe, and I haven’t time to explain it twice. Sela in Mossgate will tell you.'],
       ['<rootwell_memory', 'Keep one of them in front of you. They take turns if you let them; the clever ones wait for your back.'],
       ['<rootwell_report', 'The spring has gone quiet. The memory is yours to carry. Touch the light over the pool.'],
+      ['<end', 'The wall is half up. Your townsfolk carry stone like they mean it. I only had to swear at two of them.', d => d.rootwell === 'wall'],
+      ['<end', 'A shellback drank here at dawn. Looked at me a long while, then went back into the trees. Nobody swung at anybody. Strangest morning of my life.', d => d.rootwell === 'open'],
       ['<gate', 'The pool is clearing. I saw a fish this morning, the first in nine days. Tell Sela.'],
       ['<end', 'If you face the Warden, remember it hatched in this water and hauled stone for us. Tell it the spring still remembers.'],
       ['>=end', 'The spring is running sweet again. Whatever you said to that old shell, it listened.']
@@ -206,6 +208,8 @@ const DIALOGUE = {
       ['<ruins', 'Mosswatch isn’t for wanderers. If Sela sent you, you will have news from the Rootwell first.'],
       ['<ruins_memory', 'Thornlings are quicker than shellbacks but lighter. Let the lunge land beside you, then answer.'],
       ['<ruins_report', 'Go to the oath-stone and listen closely. I have been forgetting the words myself.'],
+      ['<end', 'I said it in the square. A child asked me if I was sorry. I said yes, and that sorry is where the work starts, not where it ends.', d => d.ruins === 'truth'],
+      ['<end', 'Orin knows. The town does not. I keep telling myself that is kindness. Go on, the Shrine, before I talk myself out of it.', d => d.ruins === 'quiet'],
       ['<gate', 'The words are coming back to me, all of them, even the ones I would rather lose. Go on, the Shrine.'],
       ['<end', 'What we took by force, you have earned by sweat. That is the only thing that can pay the debt. When you face it, don’t only fight. Remind it.'],
       ['>=end', 'The oath is fulfilled, and the debt with it. The stones feel lighter for it.']
@@ -234,11 +238,71 @@ const DIALOGUE = {
       ['<shrine', 'Shh! Thornlings, everywhere. Come back with somebody who knows what they’re doing. Or be that somebody.'],
       ['<shrine_memory', 'When something big rears up, jump or dash through the ring. Through! I learned that the hard way. My ribs learned it.'],
       ['<shrine_report', 'The carving is just above the light. Go on, touch it. I would, but I’m supervising.'],
+      ['<end', 'I’ll be right behind you. Well, behind that rock. Which is behind you. Same thing.', d => d.shrine === 'bring'],
       ['<end', 'Orrun. Say it like you mean it. Don’t let it be forgotten again.'],
       ['>=end', 'You did it! Sela says I can be a real scout now. On probation. Heavy probation.']
     ]
   }
 };
+
+// ----------------------------------------------------------------- decisions
+// One real choice per chapter, asked by its keeper once the memory is reported.
+// Every choice is remembered: the townsfolk talk about it (GOSSIP below), and it
+// changes what you say to Orrun at the gate (endingLines). Nothing is locked out
+// by either answer; they change how the forest remembers what you did.
+export const DECISIONS = {
+  rootwell: { npc: 'brannoch', after: 'rootwell_report',
+    ask: 'The spring runs clean again. So tell me, since you cleared it: do I wall it off so the hollowed never come back, or leave it open to the creatures that still remember drinking here?',
+    options: [
+      ['wall', 'Wall it off. The town drinks first.', ['Stone it is. Mossgate will carry them up here, every one. Fitting, for the spring that taught the Warden to carry stone.', 'If the hollowed come back, they will find a wall and a very rude man behind it.']],
+      ['open', 'Leave it open. Their kin drank here first.', ['Open. Hah. My grandmother would have kissed you.', 'If a shellback comes to drink and remembers what it was, maybe that is one fewer we have to fight. I will keep the torch close all the same.']]
+    ] },
+  ruins: { npc: 'ysolde', after: 'ruins_report',
+    ask: 'Mossgate thinks the Hollowing was a curse from outside. It was us. Do I go down and say so in the square, in front of everyone, or do I tell only Orin and let the town keep its story?',
+    options: [
+      ['truth', 'Tell them. All of them.', ['Then I will say it in the square, with my own mouth, and let them look at me while I do.', 'Sixty years I kept watch over a lie. I would like to spend whatever is left of them keeping watch over the truth.']],
+      ['quiet', 'Tell Orin. Let the town heal first.', ['Orin, then, behind a closed door. He will take the leaf off his shoulder and nobody will know why.', 'Perhaps that is mercy. Perhaps it is cowardice wearing mercy’s cloak. I am too old to tell the difference any more.']]
+    ] },
+  shrine: { npc: 'pip', after: 'shrine_report',
+    ask: 'So, um. Can I come to the gate? I found the name too, sort of. I would stand really far back. Or I can run home and tell Sela everything. Your call. Please say the first one.',
+    options: [
+      ['bring', 'Come with me, Pip. You found it first.', ['Yes! Yes. I mean, a dignified yes. I will be at the edge of the hollow, being dignified.', 'If it goes badly, I will say its name for you. Loudly. From behind a rock.']],
+      ['home', 'Go home. Sela needs to hear this from you.', ['…Okay. Yeah. She should hear it from me. She will be angry, then proud. In that order.', 'Say its name properly, okay? Say it like someone is finally listening.']]
+    ] }
+};
+
+// One-time remarks: when you next talk to `npc`, they mention something you did
+// elsewhere. `when` gets {heard, dec, level, klass, name, objective}. Each is said once.
+export const GOSSIP = [
+  { id: 'g-doubt', npc: 'sela', when: c => c.heard.has('doubt'), line: 'Halden says you don’t trust Mossgate yet. Good. Neither did I, my first winter here.' },
+  { id: 'g-boast', npc: 'tavi', when: c => c.heard.has('boast'), line: 'Orin tells me you can “handle the turtles.” I packed you extra sunmoss anyway. Humour me.' },
+  { id: 'g-company', npc: 'pip', when: c => c.heard.has('company'), line: 'Sela said you asked her to come with you? She never leaves the road. So you get me instead. You’re welcome.' },
+  { id: 'g-flasks', npc: 'orin', when: c => c.heard.has('learn-survive') && !c.heard.has('learn-fight'), line: 'Tavi says she has talked you through flasks already. Good. Ask me about fighting when you are ready; then you have both halves.' },
+  { id: 'g-class', npc: 'orin', when: c => !!c.klass, line: c => `A ${c.klass.toLowerCase()}, by the way you stand. Good. Mossgate needs every kind.` },
+  { id: 'g-level', npc: 'tavi', when: c => c.level >= 3, line: c => `Level ${c.level} already? Whatever you are doing out there, keep doing it. It shows in your colour.` },
+  { id: 'g-wall-sela', npc: 'sela', when: c => c.dec.rootwell === 'wall', line: 'Half the town walked out to the Rootwell this morning, carrying stones for Brannoch’s wall. I have not seen Mossgate carry anything together in years.' },
+  { id: 'g-open-sela', npc: 'sela', when: c => c.dec.rootwell === 'open', line: 'Brannoch left the Rootwell open. He swears a shellback came to drink at dawn, looked at him for a long time, and left without a fight.' },
+  { id: 'g-wall-tavi', npc: 'tavi', when: c => c.dec.rootwell === 'wall', line: 'The walled spring runs clean. Brannoch sends water up to my stall in barrels now. I could get used to this.' },
+  { id: 'g-open-tavi', npc: 'tavi', when: c => c.dec.rootwell === 'open', line: 'Bellcap is growing by the Rootwell again. The creatures that drink there are calmer, Brannoch says. For once I believe him.' },
+  { id: 'g-truth-orin', npc: 'orin', when: c => c.dec.ruins === 'truth', line: 'Ysolde said it in the square. All of it. I took the leaf off my shoulder in front of everyone. Lightest thing I have ever carried.' },
+  { id: 'g-quiet-orin', npc: 'orin', when: c => c.dec.ruins === 'quiet', line: 'Ysolde came to me alone. I took the leaf off in the barracks, door shut. One day I will say it in the square. Not today.' },
+  { id: 'g-truth-halden', npc: 'mycel', when: c => c.dec.ruins === 'truth', line: 'The square was silent a whole evening after Ysolde spoke. Then people began carrying each other’s stones. Truth is heavy, but it bears weight.' },
+  { id: 'g-quiet-halden', npc: 'mycel', when: c => c.dec.ruins === 'quiet', line: 'Orin came down to the roots last night and sat with me without a word. Whatever Ysolde told him, he is carrying it alone.' },
+  { id: 'g-bring-sela', npc: 'sela', when: c => c.dec.shrine === 'bring', line: c => `Pip is going to the gate with you? Then bring that child back in one piece, ${c.name}, or don’t bother coming back yourself.` },
+  { id: 'g-home-sela', npc: 'sela', when: c => c.dec.shrine === 'home', line: 'Pip came home. Told me everything twice, then fell asleep on my map table. Thank you for sending them back to me.' }
+];
+
+/** What you tell Orrun, shaped by your three decisions (the release scene's middle). */
+export function endingLines(dec = {}) {
+  return [
+    dec.rootwell === 'open' ? 'You tell it the Rootwell is open again, that its kin can drink where it hatched. Something deep in its chest loosens.' :
+      dec.rootwell === 'wall' ? 'You tell it the Rootwell is safe behind new stones, carried up by the whole town. It knows what carrying stones means.' : null,
+    dec.ruins === 'truth' ? 'You tell it Mosswatch confessed, out loud, in the square. The oath it swore on those stones is answered with honesty at last.' :
+      dec.ruins === 'quiet' ? 'You tell it the debt is known by the ones who needed to know. It listens, and bows a little lower.' : null,
+    dec.shrine === 'bring' ? 'Pip steps up beside you and says it too, “Orrun,” voice shaking, and the old shell turns toward the child as if it remembers small hands on its back.' :
+      dec.shrine === 'home' ? 'Far down the road, in Mossgate, Pip is telling the story for the third time. The name is already spreading.' : null
+  ].filter(Boolean);
+}
 
 function matches(rule, stage) {
   const i = index(stage), at = rule.startsWith('>=') ? index(rule.slice(2)) : index(rule.slice(1));
@@ -254,6 +318,8 @@ function matches(rule, stage) {
 export function createStory(saved, memories) {
   let stage = 'meet_sela';
   const cleared = new Set();
+  const decisions = {};
+  for (const [k, v] of Object.entries(saved?.decisions || {})) if (DECISIONS[k]?.options.some(o => o[0] === v)) decisions[k] = v;
   // Saves from before Mossgate called the first stage 'meet_wren'.
   if (saved?.stage === 'meet_wren') saved = { ...saved, stage: 'meet_sela' };
   const valid = saved && index(saved.stage) >= 0;
@@ -269,7 +335,13 @@ export function createStory(saved, memories) {
     get stage() { return stage; },
     get info() { return STAGES[index(stage)]; },
     get chapter() { return chapter(STAGES[index(stage)].chapter) || null; },
-    cleared, migrated: !valid && memories.size > 0,
+    cleared, decisions, migrated: !valid && memories.size > 0,
+    /** The decision this person is waiting on you for, if its chapter is reported and you haven't chosen. */
+    pendingDecision(npc) {
+      const e = Object.entries(DECISIONS).find(([k, d]) => d.npc === npc && !decisions[k] && index(stage) > index(d.after));
+      return e ? { id: e[0], ...e[1] } : null;
+    },
+    decide(id, option) { if (DECISIONS[id]?.options.some(o => o[0] === option)) decisions[id] = option; },
     before(id) { return index(stage) < index(id); },
     reached(id) { return index(stage) >= index(id); },
     /** Move to a stage, skipping steps already done (cleared nests, found memories). */
@@ -298,7 +370,7 @@ export function createStory(saved, memories) {
         const c = main.spawn && chapter(main.spawn), done = c && cleared.has(c.id);
         return { lines: fill(done && main.cleared ? main.cleared : main.lines), then: main.then, spawn: done ? null : main.spawn || null };
       }
-      const idle = d.idle.find(([rule]) => matches(rule, stage));
+      const idle = d.idle.find(([rule, , when]) => matches(rule, stage) && (!when || when(decisions)));
       return { lines: fill([idle ? idle[1] : '…']) };
     },
     /** Where the compass points. */
@@ -323,10 +395,12 @@ export function createStory(saved, memories) {
       for (const c of CHAPTERS) pages.push({ title: c.memoryTitle, text: c.memoryText, open: memories.has(c.id) });
       pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'The Crown of Ashmere wanted the Reach’s strength without the labour. Mosswatch’s wardens cut the Heartseed’s roots in the Scorched Hollow and drank. Borrowed strength never holds: it hollowed them out, and its rot is the Hollowing. As the forest forgets the Warden, it roots into the gate to hold on, and spreads the rot further.', open: story.reached('shrine') });
       pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Only earned strength and its true name can release it. Carry both to the Canopy Gate.', open: story.reached('gate') });
+      const said = Object.entries(DECISIONS).filter(([k]) => decisions[k]).map(([k, d]) => d.options.find(o => o[0] === decisions[k])[1]);
+      pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
       pages.push({ title: 'THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. What was taken by force has been paid back by effort.', open: story.reached('end') });
       return pages;
     },
-    serialize() { return { v: 2, stage, cleared: [...cleared] }; }
+    serialize() { return { v: 2, stage, cleared: [...cleared], decisions: { ...decisions } }; }
   };
   story.advance(stage);
   return story;
