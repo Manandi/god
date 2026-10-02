@@ -100,7 +100,7 @@ How the story uses the ChatGPT NPCs:
 ## Latest shared state — 2026-10-02 (squat and deadlift removed)
 
 - Owner's call: no squat or deadlift tests. Strength stays bodyweight first (push-ups 40%, pull-ups 35%, bench 25%), and the bench also feeds Defense (the shield arm, 45%). The optional tests are now plank (→ DEF) and resting heart rate (→ STA). Squat and deadlift stay in the lift log's exercise list (cosmetic titles only).
-- Not built: the activity-based stat idea (stats moving with logged training between monthly tests). Asked the owner; no answer yet.
+- Decided 2026-10-02: stats stay based on the monthly test only. Logged training does not move stats between tests (the owner's call; don't build the activity-based idea unless asked again).
 
 ## Latest shared state — 2026-10-02 (lift log page, faster levels, minimap, hybrid classes)
 
@@ -122,7 +122,7 @@ How the story uses the ChatGPT NPCs:
   - 260 random clicks and drags across 12 menu screens (59 distinct buttons); then 150 actions on the world map (globe clicks and drags, realm buttons, ENTER, BACK, M in game).
   - No errors and no stuck states.
   - ENTER on a locked or unbuilt realm is now visibly disabled instead of a live button that did nothing.
-- **Open question for the owner:** the stat rebalance they floated (strength from weight lifted, speed from cardio, stamina from reps and duration, intelligence from exercise variety). A proposal is in the chat; nothing is changed until they confirm, because it would move everyone's stats on the board mid-challenge.
+- The stat rebalance the owner floated was settled: stats stay on the monthly test (see the next entry up).
 
 ## Latest shared state — 2026-10-02 (hair and outfits fixed, optional tests)
 
