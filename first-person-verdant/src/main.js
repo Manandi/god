@@ -7,6 +7,7 @@ import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,STAGES,keeperName,GOSSIP,endingLines } from './story.js';
 import { createChronicles,CHRONICLES,TOPICS,replyLines } from './chronicles.js';
+import { typeBlip } from './music.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
@@ -369,7 +370,7 @@ function updateDialogue(dt){
   const n=speakerOf(dialogue.id);
   if(Math.hypot(n.x-player.x,n.z-player.z)>(dialogue.id==='orrun'?11:5.5)){closeDialogue(false);return;}
   const line=dialogue.lines[dialogue.i];
-  if(dialogue.chars<line.length){dialogue.chars=Math.min(line.length,dialogue.chars+dt*62);renderDialogue();}
+  if(dialogue.chars<line.length){const before=Math.floor(dialogue.chars);dialogue.chars=Math.min(line.length,dialogue.chars+dt*62);const now=Math.floor(dialogue.chars);if(Math.floor(now/2)>Math.floor(before/2))typeBlip(line[now-1]);renderDialogue();}
   else if(dialogue.replying){dialogue.replying=false;}
 }
 $('dialogue').addEventListener('click',e=>{const b=e.target.closest('[data-choice]');if(b){e.stopPropagation();chooseDialogue(Number(b.dataset.choice));}});

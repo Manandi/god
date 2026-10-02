@@ -4,7 +4,7 @@ import {WORKOUTS,WORKOUT_NOTE,EXERCISES,TITLES,e1rm} from './training.js';
 import {createLinkCode,claimLinkCode} from './identity.js';
 import {leaderboard,STAT_KEYS} from './leaderboard.js';
 import {createMindCheck,iqFromTheta,canTakeReasoning,TEST_ITEMS,TIME_LIMIT,TEST_VERSION} from './reasoning.js';
-import {createLofi} from './music.js';
+import {lofi} from './music.js';
 import {SKIN_TONES,SHIRTS,TROUSERS,HAIR_COLORS,HAIR_STYLES,FACE_STYLES,OUTFITS} from './avatar.js';
 
 // The intro, told by Mycel (narrator.js floats him around the screen). Each beat
@@ -27,7 +27,6 @@ const INTRO=[
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
-const lofi=createLofi();
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
   loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',mind=null,quizQ=null,quizTimer=null,quizResult=null,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;if(quizTimer){clearInterval(quizTimer);quizTimer=null;}};
@@ -49,7 +48,7 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     entry.innerHTML=`<div class="story-stage"><div class="story-box"><span class="eyebrow">THE HEARTSEED SPEAKS · ${line+1} / ${INTRO.length}</span><h2>MYCEL</h2><p id="spoken"></p>${beat.chips?`<div class="story-chips">${beat.chips.map((c,i)=>`<span style="animation-delay:${.4+i*.18}s">${esc(c)}</span>`).join('')}</div>`:''}<div class="story-actions">${button('skip','SKIP INTRO')}${line===0?button('link','PLAYED BEFORE? LINK DEVICE'):''}<button type="button" class="music-toggle" data-action="music" title="Mycel’s theme">${lofi.enabled?'♪ MUSIC ON':'♪ MUSIC OFF'}</button>${button('next',line===INTRO.length-1?'BEGIN →':'NEXT ▸',true)}</div><small>Click NEXT or press Space to reveal a line, then again to continue.</small></div></div>`;
     const target=entry.querySelector('#spoken'),phrase=beat.text;let cursor=0;
     if(narrator){narrator.say(beat.mood,line>0);narrator.talking=true;}
-    typing=setInterval(()=>{target.textContent=phrase.slice(0,++cursor);if(cursor>=phrase.length)stopTyping();},26);
+    typing=setInterval(()=>{target.textContent=phrase.slice(0,++cursor);if(cursor%2)lofi.blip(phrase[cursor-1]);if(cursor>=phrase.length)stopTyping();},26);
     const finish=()=>{profile.introSeen=true;saveProfile();show('baseline');};
     entry.querySelector('[data-action="next"]').onclick=()=>{
       if(typing){stopTyping();target.textContent=phrase;return;}

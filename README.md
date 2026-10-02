@@ -97,6 +97,14 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (quieter theme, typing sounds)
+
+- **Mycel's theme is quieter and chiller** (`src/music.js`):
+  - About 8 dB quieter (`VOLUME = .28`).
+  - 62 BPM instead of 72, a darker filter (2.1 kHz) and a soft tape echo.
+  - Slow-rolled chords; one kick per bar (two every other bar) and lighter brushes; a softer flute that rests 4 bars in 16; fewer birds.
+- **Typing sounds:** a soft wooden tick on every other letter, with slightly varying pitch, throttled to at most one every 45 ms. It plays while Mycel's intro text types (`lofi.blip` in `src/shell.js`) and while NPC dialogue types in game (`typeBlip` in `updateDialogue`, `src/main.js`). It plays whether or not the music is on. `music.js` now exports a single `lofi` player shared by both.
+
 ## Latest shared state — 2026-10-02 (NPC memory, story decisions, overall ranking, Mycel's theme)
 
 - **NPCs share what you have been told** (`chronicles.heard`, saved in the world save; old saves start empty):

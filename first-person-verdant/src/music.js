@@ -8,7 +8,7 @@
 // the first one. MUSIC ON/OFF is remembered in localStorage.
 
 const PREF = 'hollow-roots-music';
-const BPM = 72, BEAT = 60 / BPM, BAR = BEAT * 4, SWING = .16;
+const BPM = 62, BEAT = 60 / BPM, BAR = BEAT * 4, SWING = .14, VOLUME = .28;
 const hz = midi => 440 * 2 ** ((midi - 69) / 12);
 // Chord voicings (MIDI) and their bass roots.
 const CHORDS = [
@@ -33,6 +33,10 @@ const PHRASES = [
 
 function enabledPref() { try { return localStorage.getItem(PREF) !== 'off'; } catch { return true; } }
 
+/** The one shared player (the intro uses the music; menus and dialogue use the blips). */
+export const lofi = createLofi();
+export const typeBlip = c => lofi.blip(c);
+
 export function createLofi() {
   let ctx = null, master = null, bus = null, noise = null, timer = null, nextBar = 0, bar = 0, wanted = false, enabled = enabledPref();
   const listeners = new Set();
@@ -42,8 +46,12 @@ export function createLofi() {
     try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return false; }
     master = ctx.createGain(); master.gain.value = 0;
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3;
-    const warm = ctx.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 3800;
+    const warm = ctx.createBiquadFilter(); warm.type = 'lowpass'; warm.frequency.value = 2100;
     bus = ctx.createGain(); bus.connect(warm).connect(comp).connect(master).connect(ctx.destination);
+    // A soft tape echo: everything trails off into the trees.
+    const echo = ctx.createDelay(1.5), fb = ctx.createGain(), wet = ctx.createGain(), dark = ctx.createBiquadFilter();
+    echo.delayTime.value = BEAT * .75; fb.gain.value = .32; wet.gain.value = .28; dark.type = 'lowpass'; dark.frequency.value = 1400;
+    warm.connect(echo); echo.connect(dark).connect(fb).connect(echo); dark.connect(wet).connect(comp);
     // One second of white noise, reused by the drums, the crackle and the flute's breath.
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -60,18 +68,18 @@ export function createLofi() {
     const g = ctx.createGain(), o = ctx.createOscillator(), o2 = ctx.createOscillator(), g2 = ctx.createGain();
     o.type = 'sine'; o.frequency.value = hz(midi); o2.type = 'triangle'; o2.frequency.value = hz(midi) * 2; g2.gain.value = .18;
     const trem = ctx.createOscillator(), tg = ctx.createGain(); trem.frequency.value = 4.2; tg.gain.value = vol * .25; trem.connect(tg).connect(g.gain);
-    o.connect(g); o2.connect(g2).connect(g); g.connect(bus); env(g, t, .04, vol, len * .6, .5);
+    o.connect(g); o2.connect(g2).connect(g); g.connect(bus); env(g, t, .09, vol, len * .7, .9);
     for (const x of [o, o2, trem]) { x.start(t); x.stop(t + len + 2); }
   }
   function bass(midi, t, len) {
     const g = ctx.createGain(), o = ctx.createOscillator(), f = ctx.createBiquadFilter();
     o.type = 'triangle'; o.frequency.value = hz(midi); f.type = 'lowpass'; f.frequency.value = 420;
-    o.connect(f).connect(g).connect(bus); env(g, t, .02, .11, len * .5, .18); o.start(t); o.stop(t + len + 1);
+    o.connect(f).connect(g).connect(bus); env(g, t, .04, .085, len * .5, .25); o.start(t); o.stop(t + len + 1);
   }
   function kick(t) {
     const g = ctx.createGain(), o = ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(42, t + .18);
-    g.gain.setValueAtTime(.32, t); g.gain.exponentialRampToValueAtTime(.001, t + .35); o.connect(g).connect(bus); o.start(t); o.stop(t + .4);
+    g.gain.setValueAtTime(.16, t); g.gain.exponentialRampToValueAtTime(.001, t + .4); o.connect(g).connect(bus); o.start(t); o.stop(t + .4);
   }
   function brush(t, vol, freq, len) {
     const s = noiseSrc(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -83,7 +91,7 @@ export function createLofi() {
   function flute(midi, t, len) {
     const g = ctx.createGain(), o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain();
     o.type = 'sine'; o.frequency.value = hz(midi); vib.frequency.value = 5.2; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(hz(midi) * .012, t + .35);
-    vib.connect(vg).connect(o.frequency); o.connect(g).connect(bus); env(g, t, .09, .045, len * .8, .25);
+    vib.connect(vg).connect(o.frequency); o.connect(g).connect(bus); env(g, t, .14, .026, len * .8, .4);
     const air = noiseSrc(), af = ctx.createBiquadFilter(), ag = ctx.createGain(); af.type = 'bandpass'; af.frequency.value = hz(midi) * 2; af.Q.value = 6;
     air.connect(af).connect(ag).connect(bus); env(ag, t, .05, .012, len * .5, .2);
     for (const x of [o, vib]) { x.start(t); x.stop(t + len + 1.2); } air.start(t, Math.random() * .5); air.stop(t + len + 1);
@@ -92,30 +100,30 @@ export function createLofi() {
     const g = ctx.createGain(), o = ctx.createOscillator(); o.type = 'sine';
     const f0 = 2600 + Math.random() * 1200;
     for (let i = 0; i < 3; i++) { const s = t + i * .11; o.frequency.setValueAtTime(f0, s); o.frequency.exponentialRampToValueAtTime(f0 * 1.35, s + .06); }
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.012, t + .02); g.gain.setTargetAtTime(0, t + .32, .05);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.007, t + .02); g.gain.setTargetAtTime(0, t + .32, .05);
     o.connect(g).connect(bus); o.start(t); o.stop(t + .5);
   }
   // Vinyl: a quiet hiss and random little clicks, running for as long as the music does.
   function crackle() {
     const hiss = noiseSrc(), hf = ctx.createBiquadFilter(), hg = ctx.createGain();
-    hf.type = 'highpass'; hf.frequency.value = 5000; hg.gain.value = .006; hiss.connect(hf).connect(hg).connect(bus); hiss.start();
+    hf.type = 'highpass'; hf.frequency.value = 5000; hg.gain.value = .004; hiss.connect(hf).connect(hg).connect(bus); hiss.start();
   }
   function scheduleBar(t, n) {
     const chord = CHORDS[n % 4];
     // Chords: on the one, with a lazy re-strike on the "and" of three.
-    chord.notes.forEach((m, i) => { keys(m, t + i * .012, BAR * .9, .038); });
-    chord.notes.slice(1, 4).forEach((m, i) => keys(m + 12, t + BEAT * 2.5 + SWING * BEAT + i * .01, BEAT * 1.2, .02));
+    chord.notes.forEach((m, i) => { keys(m, t + i * .035, BAR * .95, .032); });   // a slow, lazy roll
+    if (n % 2) chord.notes.slice(1, 4).forEach((m, i) => keys(m + 12, t + BEAT * 2.5 + SWING * BEAT + i * .03, BEAT * 1.2, .012));
     bass(chord.root, t, BEAT * 1.8); bass(chord.root, t + BEAT * 2.5 + SWING * BEAT, BEAT); bass(chord.root + 7, t + BEAT * 3.5 + SWING * BEAT, BEAT * .5);
     // Beat (from bar 2): kick on 1 and the "and" of 2, brushes on 2 and 4, swung hats.
     if (n >= 1) {
-      kick(t); kick(t + BEAT * 1.5 + SWING * BEAT);
-      brush(t + BEAT, .09, 1800, .22); brush(t + BEAT * 3, .09, 1800, .22);
-      for (let i = 0; i < 8; i++) brush(t + i * BEAT / 2 + (i % 2 ? SWING * BEAT : 0), i % 2 ? .016 : .028, 8000, .05);
+      kick(t); if (n % 2) kick(t + BEAT * 2.5 + SWING * BEAT);
+      brush(t + BEAT, .04, 1500, .3); brush(t + BEAT * 3, .04, 1500, .3);
+      for (let i = 0; i < 8; i += 2) brush(t + i * BEAT / 2, .009, 7000, .05);
     }
     // Flute (from bar 4), on an eight-bar phrase.
-    const phrase = n >= 4 ? PHRASES[(n - 4) % PHRASES.length] : null;
+    const phrase = n >= 4 && n % 16 < 12 ? PHRASES[(n - 4) % PHRASES.length] : null;   // rests for four bars in every sixteen
     if (phrase) for (const [b, step, len] of phrase) flute(SCALE[step], t + b * BEAT + (b % 1 ? SWING * BEAT : 0), len * BEAT);
-    if (Math.random() < .35) bird(t + Math.random() * BAR);
+    if (Math.random() < .2) bird(t + Math.random() * BAR);
   }
   function tick() {
     while (nextBar < ctx.currentTime + .6) { scheduleBar(nextBar, bar++); nextBar += BAR; }
@@ -124,7 +132,7 @@ export function createLofi() {
     if (!setup()) return;
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     const now = ctx.currentTime;
-    master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(master.gain.value, now); master.gain.linearRampToValueAtTime(.55, now + 2.5);
+    master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(master.gain.value, now); master.gain.linearRampToValueAtTime(VOLUME, now + 3);
     if (!timer) { nextBar = now + .1; bar = 0; tick(); timer = setInterval(tick, 150); }
   }
   function halt(fade = 2) {
@@ -133,9 +141,23 @@ export function createLofi() {
     master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(master.gain.value, now); master.gain.linearRampToValueAtTime(0, now + fade);
     clearInterval(timer); timer = null;
   }
+  // Typing blips: a soft wooden tick per letter (pitch wanders a little), throttled
+  // so fast text stays gentle. Plays whether or not the music is on.
+  let lastBlip = 0, blipBus = null;
+  function blip(char = 'a') {
+    if (!enabledBlips || /\s/.test(char) || !setup()) return;
+    if (ctx.state === 'suspended') { ctx.resume().catch(() => {}); return; }   // before the first click: stay silent
+    const t = ctx.currentTime; if (t - lastBlip < .045) return; lastBlip = t;
+    if (!blipBus) { blipBus = ctx.createGain(); blipBus.gain.value = 1; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2600; blipBus.connect(f).connect(ctx.destination); }
+    const o = ctx.createOscillator(), g = ctx.createGain(), vowel = /[aeiouy]/i.test(char);
+    o.type = 'triangle'; o.frequency.setValueAtTime((vowel ? 640 : 520) * (1 + (Math.random() - .5) * .12), t); o.frequency.exponentialRampToValueAtTime(380, t + .045);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.035, t + .004); g.gain.exponentialRampToValueAtTime(.0005, t + .05);
+    o.connect(g).connect(blipBus); o.start(t); o.stop(t + .06);
+  }
+  let enabledBlips = true;
   const sync = () => { if (wanted && enabled) run(); else halt(); listeners.forEach(f => f()); };
   // The first click or key press lets the browser start audio.
-  const unlock = () => { if (wanted && enabled) run(); };
+  const unlock = () => { if (wanted && enabled) run(); else if (ctx?.state === 'suspended') ctx.resume().catch(() => {}); };
   addEventListener('pointerdown', unlock); addEventListener('keydown', unlock);
   return {
     get enabled() { return enabled; },
@@ -143,6 +165,8 @@ export function createLofi() {
     /** Should Mycel's theme be playing now? (the view decides; the player's setting has the last word) */
     want(on) { if (wanted === on) return; wanted = on; sync(); },
     toggle() { enabled = !enabled; try { localStorage.setItem(PREF, enabled ? 'on' : 'off'); } catch { /* private mode */ } sync(); return enabled; },
-    onChange(f) { listeners.add(f); }
+    onChange(f) { listeners.add(f); },
+    /** A typing blip for one revealed character. */
+    blip
   };
 }
