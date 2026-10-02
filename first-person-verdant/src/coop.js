@@ -152,7 +152,7 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     get guest() { return connected && remotes.size > 0 && !isHost(); },
     get teamSize() { return connected ? remotes.size + 1 : 1; },
     /** Other explorers, for creatures to choose whom to chase (the host uses this). */
-    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y })); },
+    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y, name: r.name || 'Wayfarer' })); },
     sendWorld: world => send('world', { ...world, from: id }),
     sendHit: hit => send('hit', { ...hit, from: id }),
     /** A guest reached a nest: ask the host to raise it. */

@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level, units } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -33,32 +33,32 @@ export const levelDamage = (lv = level()) => 1 + (lv - 1) * .15;
 export const levelVitality = (lv = level()) => Math.min(2, Math.floor(lv / 4));
 
 export function mechanics() {
-  const s = stats(), klass = profile.appearance.discipline || 'fighter', jumpCm = profile.inputs.verticalJumpCm, body = frame();
+  const s = stats(), klass = profile.appearance.discipline || 'fighter', w = classWeights(), jumpCm = profile.inputs.verticalJumpCm, body = frame();
   const staminaCost = clamp(.98 - (s.stamina - 10) * .025, .62, 1.2);
   const m = {
     klass, frame: body,
     // Strength: every strike; fighters add more on top.
-    damage: 1 + clamp((s.strength - 10) * .05, -.3, .65) + (klass === 'fighter' ? Math.max(0, s.strength - 8) * .015 : 0),
-    stagger: klass === 'fighter' ? 1.2 : 1,
+    damage: 1 + clamp((s.strength - 10) * .05, -.3, .65) + w.fighter * Math.max(0, s.strength - 8) * .015,
+    stagger: 1 + .2 * w.fighter,
     // Speed: running, dash distance and dash invulnerability; rangers go further.
-    runSpeed: (5.1 + (s.speed - 10) * .08) * (klass === 'ranger' ? 1.06 : 1),
+    runSpeed: (5.1 + (s.speed - 10) * .08) * (1 + .06 * w.ranger),
     guardSpeed: 3.2 + (s.speed - 10) * .04,
-    dash: clamp(.86 + s.speed * .018 + (klass === 'ranger' ? .2 : 0), .85, 1.45),
+    dash: clamp(.86 + s.speed * .018 + .2 * w.ranger, .85, 1.45),
     iframeBonus: clamp((s.speed - 10) * .006, 0, .06),
     // Vertical jump: jump height, and a double jump from 55 cm.
     jumpVelocity: 7.1 + Math.min(110, jumpCm) * .03,
     doubleJump: jumpCm >= 55,
     // Stamina: what actions cost, and how fast Breath returns; support recovers fastest.
     staminaCost,
-    regen: (1 + (s.stamina - 10) * .04) * (klass === 'support' ? 1.38 : 1),
+    regen: (1 + (s.stamina - 10) * .04) * (1 + .38 * w.support),
     // Defense: vitality and guarding; tanks get one more heart and cheaper guards.
-    maxHealth: clamp(3 + Math.floor(s.defense / 7) + (klass === 'tank' ? 1 : 0), 3, 8),
-    guardCost: staminaCost * (klass === 'tank' ? .7 : 1),
+    maxHealth: clamp(3 + Math.floor(s.defense / 7) + (w.tank >= .5 ? 1 : 0), 3, 8),
+    guardCost: staminaCost * (1 - .3 * w.tank),
     // Intelligence: charged Rootbreaker power for mages, and how far memories answer.
-    chargePower: klass === 'mage' ? 1 + Math.max(0, s.intelligence - 8) * .025 : 1,
+    chargePower: 1 + w.mage * Math.max(0, s.intelligence - 8) * .025,
     echoReach: Math.max(0, s.intelligence - 10) * .18,
     // Discipline: a better parry reward for support.
-    parryReward: klass === 'support' ? 22 : 10,
+    parryReward: 10 + 12 * w.support,
     steadfast: false, secondWind: false,
     poise: 1, chargedDamage: 1, parryBonus: 0, flasks: FLASK.charges, flaskHeal: FLASK.heal, abilities: []
   };
@@ -91,7 +91,7 @@ export function mechanicsTable() {
     ['STAMINA', `Action cost ${pct(m.staminaCost)} · Breath recovery ${pct(m.regen)}`],
     ['DEFENSE', `${m.maxHealth} vitality · guard cost ${pct(m.guardCost)}`],
     ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · ${m.echoReach > 0 ? `memories answer from ${units.short(m.echoReach)} farther` : 'memories answer from farther at INT 11+'}`],
-    ['CLASS', `${m.klass.toUpperCase()} · parry restores ${m.parryReward} Breath`],
+    ['CLASS', `${pathInfo().label}${pathInfo().hybrid ? ` (${pathInfo().bonus})` : ''} · parry restores ${Math.round(m.parryReward)} Breath`],
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],
     ['LEVEL', `LV ${m.level} · strikes ${pct(levelDamage(m.level))} to keep pace with enemies (+15% health per level)${levelVitality(m.level) ? ` · +${levelVitality(m.level)} vitality` : ' · +1 vitality at LV 4'}`],

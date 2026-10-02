@@ -97,6 +97,28 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (lift log page, faster levels, minimap, hybrid classes)
+
+- **Lift log has its own page.** WEEKLY QUEST shows a PERSONAL LIFT LOG › button under OTHER ACTIVITY (with sets and PRs); it opens view `lifts` (`renderLifts()` in `src/shell.js`).
+- **Leveling, the owner's pace.** A full first week of the plan (about 570 XP) is level 3; two weeks (about 1,200) is level 5.
+  - `xpForLevel(n) = 227·(n−1)^1.14`, and `level()` is the highest level reached. Levels then slow: about level 7 after week 3 and the high 20s by the end of the 90 days.
+  - The menu shows the XP to the next level. Existing players simply show their new level.
+  - Orrun now scales his health with the level damage bonus (`warden.scaleHealth`, applied when he wakes), like the creatures already did, so faster levels don't trivialise him.
+- **Minimap** (`#minimap`, `updateMinimap()` in `src/main.js`): north-up, 60 m around you.
+  - It shows: your arrow, friends in the lobby (blue, named, pinned to the rim with their name when far), townsfolk (gold), awake creatures (red) and the objective (diamond, pinned to the rim).
+  - `coop.others()` now includes names. Tested with two tabs over `&net=local`.
+- **Hybrid classes** (`HYBRIDS`, `pathInfo()`, `classWeights()`, `recommendedPath()` in `src/profile.js`):
+  - An optional SECOND CLASS in CUSTOMIZE blends two classes, with a name for each of the 10 pairs: Skirmisher (fighter+ranger), Vanguard, Spellblade, Warcaller, Pathguard, Runeguard (tank+mage), Protector, Windcaller, Pathfinder, Sage.
+  - A hybrid gets 65% of each class's bonus (`mechanics.js` scales every class bonus by its weight); a pure class gets 100%.
+  - Mycel recommends a hybrid when your top two class scores are within 8%.
+  - The leaderboard still stores the primary class.
+- **Sela no longer stands on a crate stack.** A crate stack by house 3's door was placed on her spot; it moved to the other side of the door (`BY_DOOR` in `src/sites.js`). A browser check finds no NPC overlapping any collider.
+- **Click fuzzing:**
+  - 260 random clicks and drags across 12 menu screens (59 distinct buttons); then 150 actions on the world map (globe clicks and drags, realm buttons, ENTER, BACK, M in game).
+  - No errors and no stuck states.
+  - ENTER on a locked or unbuilt realm is now visibly disabled instead of a live button that did nothing.
+- **Open question for the owner:** the stat rebalance they floated (strength from weight lifted, speed from cardio, stamina from reps and duration, intelligence from exercise variety). A proposal is in the chat; nothing is changed until they confirm, because it would move everyone's stats on the board mid-challenge.
+
 ## Latest shared state — 2026-10-02 (hair and outfits fixed, optional tests)
 
 - **Hair in front of the face, and messy outfits: fixed.** `tools/blender/build_customization.py` wrote three.js coordinates (y up) straight into Blender (z up), so every hair and outfit piece came out turned 90°: hair over the face, plates sideways. The script now converts each piece (`to_blender`), and the GLB is rebuilt.

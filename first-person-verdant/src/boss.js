@@ -216,7 +216,7 @@ export class Warden {
     if (this.state === 'charge' && !this.chargeRun) return this.attack;
     return null;
   }
-  wake() { if (this.awake || !this.alive) return; this.awake = true; this.setState('awaken'); this.pending.push({ type: 'awaken' }); }
+  wake() { if (this.awake || !this.alive) return; if (this.scaleHealth) { this.maxHealth = Math.round(1000 * this.scaleHealth()); this.health = this.maxHealth; } this.awake = true; this.setState('awaken'); this.pending.push({ type: 'awaken' }); }
   /** Back to sleep in its bed, whole again (the explorer fell or fled). */
   reset() {
     this.alive = true; this.awake = false; this.health = this.maxHealth; this.poise = POISE; this.phase = 1; this.enraged = false; this.pendingPhase = false;

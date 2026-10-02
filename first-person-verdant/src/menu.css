@@ -170,3 +170,6 @@
 .metric .feeds{font:500 9px 'DM Mono',monospace;letter-spacing:.1em;color:#f0d897;margin-left:4px}
 .metric.optional input::placeholder{color:#6f8a78}
 .stat-grid .sources{font-style:normal;font-size:9px;letter-spacing:.06em;color:#9fbca7;margin-top:4px;line-height:1.35}
+#entry button.lift-open{display:grid;gap:4px;width:100%;margin-top:14px;text-align:left;border-color:#b9ce8a}
+#entry button.lift-open small{font-size:9px;letter-spacing:.1em;color:#a9c996}
+.lift-card .lift-log{margin-top:0;border-top:0;padding-top:0}

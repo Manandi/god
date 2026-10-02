@@ -57,3 +57,6 @@
 #dialogueChoices button:hover{background:#c6de9e;color:#142018}#dialogueChoices b{font:700 11px 'DM Mono',monospace;color:#f0d98f}#dialogueChoices button:hover b{color:#142018}
 #sideObjective{color:#f0d98f}
 .dev-panel button.danger{border-color:#a4553f;color:#f3c2b3}.dev-panel button.danger:hover{background:#a4553f;color:#fff}
+
+#minimap{display:block;width:150px;height:150px;margin:12px 0 0 auto;border-radius:50%;border:1px solid #9fc39a88;background:#0a1d18cc;box-shadow:0 6px 24px #0008}
+@media(max-width:700px){#minimap{width:96px;height:96px}}

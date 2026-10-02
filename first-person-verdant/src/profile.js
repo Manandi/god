@@ -127,6 +127,7 @@ export function loadProfile(){
     profile.appearance.outfit=['ranger','warden','wanderer','sentinel'].includes(appearance.outfit)?appearance.outfit:'ranger';
     profile.appearance.weapon=['rootbound','groveblade','stonebreaker'].includes(appearance.weapon)?appearance.weapon:'rootbound';
     profile.appearance.discipline=Object.hasOwn(CLASS_INFO,appearance.discipline)?appearance.discipline:'fighter';
+    profile.appearance.secondary=Object.hasOwn(CLASS_INFO,appearance.secondary)&&appearance.secondary!==profile.appearance.discipline?appearance.secondary:'';
     profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
     profile.appearance.shirt=['moss','ochre','slate','clay','ivory','violet','navy'].includes(appearance.shirt)?appearance.shirt:({sunroot:'ochre',moonfern:'slate',guardian:'violet'}[appearance.cloak]||'moss');
     profile.appearance.pants=['charcoal','umber','olive','indigo'].includes(appearance.pants)?appearance.pants:'charcoal';
@@ -156,7 +157,11 @@ export const units={
   cm(cm){return this.us?`${Math.round(cm/2.54)} in`:`${Math.round(cm)} cm`;},
   speed(ms){return this.us?`${(ms*2.23694).toFixed(1)} mph`:`${ms.toFixed(1)} m/s`;}
 };
-export function level(){return 1+Math.floor(Math.sqrt(profile.xp/250));}
+// Level from XP. Paced so a full first week of the plan (about 570 XP) reaches
+// level 3 and two weeks (about 1,200) reach level 5; later levels come slower.
+// The XP needed for level n is 227·(n−1)^1.14 (500 for level 3, 1,100 for level 5).
+export const xpForLevel=n=>n<=1?0:Math.round(227*Math.pow(n-1,1.14));
+export function level(xp=profile.xp){let n=1;while(n<999&&xp>=xpForLevel(n+1))n++;return n;}
 /** Stats straight from a set of measurements (and the mind check and training log). */
 function rawStats(inputs=profile.inputs){
   const s=Object.fromEntries(METRICS.filter(m=>m.norms).map(m=>[m.key,score(m,inputs)]));
@@ -323,11 +328,47 @@ export function classScores(){
   return scores;
 }
 export function recommendedClass(){return Object.entries(classScores()).sort((a,b)=>b[1]-a[1])[0][0];}
+// Hybrid paths: a second class blends in. A pure class gets its whole bonus; a
+// hybrid gets 65% of each of its two classes' bonuses (mechanics.js), so it
+// trades peak strength for balance.
+export const HYBRID_SHARE=.65;
+export const HYBRIDS={
+  'fighter+ranger':{label:'SKIRMISHER',description:'Hit hard and keep moving: damage with a quicker step.'},
+  'fighter+tank':{label:'VANGUARD',description:'Lead the charge and take the answer: damage backed by a sturdier body.'},
+  'fighter+mage':{label:'SPELLBLADE',description:'Steel and charged Rootbreaker strikes together.'},
+  'fighter+support':{label:'WARCALLER',description:'Strike, and keep your Breath coming back for the next push.'},
+  'ranger+tank':{label:'PATHGUARD',description:'Quick on your feet and hard to drop.'},
+  'mage+tank':{label:'RUNEGUARD',description:'A shield that thinks: vitality and cheap guards with charged power.'},
+  'support+tank':{label:'PROTECTOR',description:'Hold the line and outlast it: guards, hearts and fast Breath.'},
+  'mage+ranger':{label:'WINDCALLER',description:'Mobile and clever: a long dash and charged strikes.'},
+  'ranger+support':{label:'PATHFINDER',description:'Endless legs: speed with the fastest Breath recovery.'},
+  'mage+support':{label:'SAGE',description:'Charged power, better parries and steady Breath.'}
+};
+const pairKey=(a,b)=>[a,b].sort().join('+');
+/** The class (or hybrid) to show for a primary and optional second class. */
+export function pathInfo(primary=profile.appearance.discipline,secondary=profile.appearance.secondary){
+  const base=CLASS_INFO[primary]||CLASS_INFO.fighter;
+  if(!secondary||secondary===primary||!CLASS_INFO[secondary])return {label:base.label,description:base.description,bonus:base.bonus,hybrid:false};
+  const h=HYBRIDS[pairKey(primary,secondary)];
+  return {label:h.label,description:h.description,bonus:`${base.label} + ${CLASS_INFO[secondary].label} · ${Math.round(HYBRID_SHARE*100)}% of each bonus`,hybrid:true};
+}
+/** How much of each class's bonus applies (1 for a pure class). */
+export function classWeights(primary=profile.appearance.discipline||'fighter',secondary=profile.appearance.secondary){
+  const w=Object.fromEntries(Object.keys(CLASS_INFO).map(k=>[k,0]));
+  if(secondary&&secondary!==primary&&w[secondary]!==undefined){w[primary]=HYBRID_SHARE;w[secondary]=HYBRID_SHARE;}else w[primary]=1;
+  return w;
+}
+/** Mycel's pick: a hybrid when the top two classes score within 8% of each other. */
+export function recommendedPath(){
+  const [a,b]=Object.entries(classScores()).sort((x,y)=>y[1]-x[1]);
+  return {primary:a[0],secondary:b[1]>=a[1]*.92?b[0]:''};
+}
 /** Why Mycel recommends it, in words. */
 export function classReason(){
   const s=stats(),top=Object.entries(s).filter(([k])=>k!=='discipline').sort((a,b)=>b[1]-a[1])[0],rec=recommendedClass(),{role,instinct}=profile.personality;
   const plays=role===rec&&instinct===rec?'You told me this is how you play, and your instincts agree.':role===rec?'It is the role you told me you play.':instinct===rec?'It is how you react when a fight turns.':'Your numbers point here more than your answers do.';
-  return `Your strongest attribute is ${top[0].toUpperCase()} (${top[1]}). ${plays}`;
+  const path=recommendedPath(),blend=path.secondary?` Your ${CLASS_INFO[path.primary].label} and ${CLASS_INFO[path.secondary].label} sides are close, so a blend of both fits you.`:'';
+  return `Your strongest attribute is ${top[0].toUpperCase()} (${top[1]}). ${plays}${blend}`;
 }
 export function weaponEligibility(weapon){
   const s=stats(),rules={

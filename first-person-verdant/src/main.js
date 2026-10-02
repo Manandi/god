@@ -13,7 +13,7 @@ import { loadSites } from './sites.js';
 import { createCollisionGrid,moveWithCollision } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
-import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides } from './mechanics.js';
+import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamage } from './mechanics.js';
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
@@ -490,7 +490,7 @@ devPanel.addEventListener('click',e=>{
     else{devOverrides.anyWeapon=true;profile.appearance.weapon=b.dataset.weapon;saveProfile();toast('DEV · WEAPON',b.dataset.weapon.toUpperCase());}
     equipWeapon();
   }
-  else if(b.dataset.class){profile.appearance.discipline=b.dataset.class;saveProfile();mech=mechanics();player.health=Math.min(player.health,maxHealth());toast('DEV · CLASS',b.dataset.class.toUpperCase());}
+  else if(b.dataset.class){profile.appearance.discipline=b.dataset.class;if(profile.appearance.secondary===b.dataset.class)profile.appearance.secondary='';saveProfile();mech=mechanics();player.health=Math.min(player.health,maxHealth());toast('DEV · CLASS',b.dataset.class.toUpperCase());}
   else if(b.dataset.preset){
     // Presets are for testing: the real measurements are kept aside and MY REAL STATS puts them back.
     let real=null;try{real=JSON.parse(localStorage.getItem(DEV_REAL_INPUTS)||'null');}catch{}
@@ -854,7 +854,7 @@ function updateHUD(){
   const next=story.target();
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
-  updateWaypoint(next,distance);
+  updateWaypoint(next,distance);updateMinimap(next,1/30);
   $('objective').textContent=story.info.objective;
   const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
   const event=story.reached('gate')&&!story.reached('end')?`${bossWindowLabel()}${bossWindow().open&&coop.teamSize<2?' · 2 HUNTERS REQUIRED':''}`:'';
@@ -880,6 +880,37 @@ const COMPASS_SPAN=Math.PI*.9,HEADINGS=[['N',0],['NE',-Math.PI/4],['E',-Math.PI/
 $('compassTicks').innerHTML=HEADINGS.map(([n])=>`<span class="${n.length>1?'minor':''}">${n}</span>`).join('');
 const beacon=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,70,10,1,true),new THREE.MeshBasicMaterial({color:0xf0c86a,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));
 beacon.renderOrder=3;scene.add(beacon);
+// Minimap: north-up, 60 m around you. Friends in the lobby are named dots,
+// townsfolk small gold dots, awake creatures red, and the objective a diamond
+// (pinned to the rim when it is farther away).
+const minimap=$('minimap'),mm=minimap.getContext('2d'),MM_RANGE=60;let minimapT=0;
+function updateMinimap(target,dt){
+  if((minimapT-=dt)>0)return;minimapT=.1;
+  const W=minimap.width,R=W/2,k=(R-10)/MM_RANGE;mm.clearRect(0,0,W,W);
+  mm.save();mm.beginPath();mm.arc(R,R,R-1,0,Math.PI*2);mm.clip();
+  mm.fillStyle='#0d241ccc';mm.fillRect(0,0,W,W);
+  mm.strokeStyle='#9fc39a22';mm.lineWidth=2;for(const f of [.33,.66])mm.beginPath(),mm.arc(R,R,(R-10)*f,0,Math.PI*2),mm.stroke();
+  const at=(x,z)=>[R+(x-player.x)*k,R+(z-player.z)*k],inside=(x,z)=>Math.hypot(x-player.x,z-player.z)<MM_RANGE;
+  const dot=(x,z,r,c)=>{const [px,py]=at(x,z);mm.fillStyle=c;mm.beginPath();mm.arc(px,py,r,0,Math.PI*2);mm.fill();};
+  for(const [,n] of Object.entries(NPCS))if(inside(n.x,n.z))dot(n.x,n.z,4,'#f0d897');
+  for(const c of creatures)if(c.alive&&c.root?.visible!==false&&c.state!=='dormant'&&inside(c.x,c.z))dot(c.x,c.z,4,'#e7856f');
+  // Objective: a diamond, clamped to the rim.
+  let [ox,oy]=at(target.x,target.z);const od=Math.hypot(ox-R,oy-R),rim=R-12;if(od>rim){ox=R+(ox-R)/od*rim;oy=R+(oy-R)/od*rim;}
+  mm.fillStyle='#f0c86a';mm.beginPath();mm.moveTo(ox,oy-8);mm.lineTo(ox+6,oy);mm.lineTo(ox,oy+8);mm.lineTo(ox-6,oy);mm.closePath();mm.fill();
+  // Friends: always shown, pinned to the rim with their name when out of range.
+  mm.font='600 18px "DM Mono",monospace';mm.textAlign='center';
+  for(const o of coop.others()){
+    let [px,py]=at(o.x,o.z);const d=Math.hypot(px-R,py-R);if(d>rim){px=R+(px-R)/d*rim;py=R+(py-R)/d*rim;}
+    mm.fillStyle='#7fd8ff';mm.strokeStyle='#04121a';mm.lineWidth=3;mm.beginPath();mm.arc(px,py,7,0,Math.PI*2);mm.fill();mm.stroke();
+    const label=String(o.name||'Wayfarer').slice(0,10).toUpperCase(),lx=Math.max(62,Math.min(W-62,px)),ly=py<R?py+26:py-12;mm.lineWidth=4;mm.strokeText(label,lx,ly);mm.fillStyle='#d8f3ff';mm.fillText(label,lx,ly);
+  }
+  // You: an arrow pointing where the camera looks.
+  const v=camera.getWorldDirection(new THREE.Vector3()),len=Math.hypot(v.x,v.z)||1,fx=v.x/len,fz=v.z/len;
+  mm.fillStyle='#e9f6dc';mm.strokeStyle='#0a1d18';mm.lineWidth=3;mm.beginPath();
+  mm.moveTo(R+fx*13,R+fz*13);mm.lineTo(R-fx*8-fz*8,R-fz*8+fx*8);mm.lineTo(R-fx*4,R-fz*4);mm.lineTo(R-fx*8+fz*8,R-fz*8-fx*8);mm.closePath();mm.stroke();mm.fill();
+  mm.restore();
+  mm.fillStyle='#cfe6bf';mm.font='600 20px "DM Mono",monospace';mm.textAlign='center';mm.fillText('N',R,22);
+}
 function updateWaypoint(target,distance){
   const width=$('compassBar').clientWidth||420,view=camera.getWorldDirection(new THREE.Vector3()),viewYaw=yawOf(view.x,view.z);
   const place=yaw=>{const d=angleTo(viewYaw,yaw);return{d,x:width/2-d/COMPASS_SPAN*width};};
@@ -1128,7 +1159,8 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
-  warden=res.warden;warden.netId='warden';gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
+  warden=res.warden;warden.netId='warden';warden.scaleHealth=()=>levelDamage();   // keeps pace with level, like the creatures
+  gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
   warden.setSealed(story.before('gate')||!bossWindow().open||coop.teamSize<2);
   if(story.reached('end')||cloudWorld.boss_defeated){warden.release(true);if(gateRoots)gateRoots.visible=false;}
 }).catch(err=>console.warn('The Warden or its arena failed to load.',err));
