@@ -33,12 +33,7 @@ export const METRICS=[
   {key:'benchPressKg',label:'Max bench press',unit:'kg',min:0,max:300,step:2.5,value:35,stat:'strength',feeds:['strength','defense'],imperial:{unit:'lb',factor:2.20462,step:5},
     norms:[[5,1],[12,5],[20,15],[27,30],[35,50],[45,70],[57,85],[75,95],[102,99],[140,99.9]]},
   // Optional tests (added 2026-10-02): leave them blank and the stat is worked out
-  // exactly as before. Estimates for all adults, most of whom never lift: about a
-  // third more than the bench for the squat and two thirds more for the deadlift.
-  {key:'squatKg',label:'Max back squat',unit:'kg',min:0,max:400,step:2.5,value:null,optional:true,stat:'strength',feeds:['strength'],imperial:{unit:'lb',factor:2.20462,step:5},
-    norms:[[10,1],[18,5],[28,15],[38,30],[48,50],[60,70],[77,85],[102,95],[143,99],[200,99.9]]},
-  {key:'deadliftKg',label:'Max deadlift',unit:'kg',min:0,max:450,step:2.5,value:null,optional:true,stat:'strength',feeds:['strength'],imperial:{unit:'lb',factor:2.20462,step:5},
-    norms:[[15,1],[25,5],[36,15],[47,30],[58,50],[72,70],[92,85],[125,95],[175,99],[240,99.9]]},
+  // exactly as before.
   // Core endurance, the closest home test of being hard to break. Adults hold a
   // plank for about a minute; past five minutes is rare.
   {key:'plankSeconds',label:'Plank hold',unit:'seconds',min:0,max:3600,step:1,value:null,optional:true,stat:'defense',feeds:['defense'],
@@ -172,9 +167,11 @@ function rawStats(inputs=profile.inputs){
   const days=new Set(profile.activities.filter(a=>a.date>=new Date(Date.now()-27*86400000).toISOString().slice(0,10)).map(a=>a.date)).size;
   return {
     // Weights keep the original split when the optional tests are blank.
-    strength:s.squatKg==null&&s.deadliftKg==null?Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25):blend(s,{pushups:.32,pullups:.28,benchPressKg:.2,squatKg:.1,deadliftKg:.1}),
+    // Strength is bodyweight first (push-ups and pull-ups, 75%), with the bench for the rest.
+    strength:Math.round(s.pushups*.4+s.pullups*.35+s.benchPressKg*.25),
     speed:Math.round(s.dashSeconds*.7+s.verticalJumpCm*.3),
     stamina:s.restingHeartRate==null?s.mileSeconds:blend(s,{mileSeconds:.7,restingHeartRate:.3}),
+    // Defense is holding the line: the bench is the shield arm, push-ups and the mile keep it up.
     defense:s.plankSeconds==null?Math.round(s.benchPressKg*.45+s.pushups*.3+s.mileSeconds*.25):blend(s,{plankSeconds:.4,benchPressKg:.27,pushups:.18,mileSeconds:.15}),
     intelligence:reason,discipline:Math.min(20,10+Math.round(days*10/24))   // starts at 10; 24 active days in 4 weeks reaches 20
   };

@@ -97,6 +97,11 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (squat and deadlift removed)
+
+- Owner's call: no squat or deadlift tests. Strength stays bodyweight first (push-ups 40%, pull-ups 35%, bench 25%), and the bench also feeds Defense (the shield arm, 45%). The optional tests are now plank (→ DEF) and resting heart rate (→ STA). Squat and deadlift stay in the lift log's exercise list (cosmetic titles only).
+- Not built: the activity-based stat idea (stats moving with logged training between monthly tests). Asked the owner; no answer yet.
+
 ## Latest shared state — 2026-10-02 (lift log page, faster levels, minimap, hybrid classes)
 
 - **Lift log has its own page.** WEEKLY QUEST shows a PERSONAL LIFT LOG › button under OTHER ACTIVITY (with sets and PRs); it opens view `lifts` (`renderLifts()` in `src/shell.js`).
@@ -132,7 +137,7 @@ How the story uses the ChatGPT NPCs:
   - Cloth pieces follow the chosen shirt colour (materials `Customization_Cloth`/`DarkCloth`).
   - `?dresstest` exposes `window.__dressAngle(radians)` to turn the preview for screenshots.
 - **Optional tests** (measurement form, "OPTIONAL · MORE TESTS, SHARPER STATS"):
-  - The tests: back squat and deadlift (→ STR), plank hold (→ DEF), resting heart rate (→ STA).
+  - The tests: plank hold (→ DEF) and resting heart rate (→ STA). (Back squat and deadlift were added here too, then removed at the owner's request.)
   - Blank tests are stored as `null` and drop out. When they are blank, the stat uses the old formula exactly (checked over 20,000 random inputs: 0 differences), so existing saves keep their stats.
   - Every test shows the stats it feeds (→ STR · DEF), and each stat tile lists its tests (`STAT_SOURCES`).
   - Norms for the new tests are estimates (see the 3D README).
