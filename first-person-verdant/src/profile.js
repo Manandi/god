@@ -324,7 +324,26 @@ export function classScores(){
   for(const k of Object.keys(scores))scores[k]+=(role===k?5:0)+(instinct===k?3:0);
   return scores;
 }
-export function recommendedClass(){return Object.entries(classScores()).sort((a,b)=>b[1]-a[1])[0][0];}
+export function recommendedClass(){return Object.entries(classScores()).filter(([k])=>classUnlock(k).ok).sort((a,b)=>b[1]-a[1])[0][0];}
+// Class unlocks: a class opens when its key stat reaches the adult average (10);
+// a hybrid when both of its stats reach 12 (the first ability tier). Your best
+// class (highest key stat) is always open, so nobody is locked out. A class you
+// hold whose stat drops below (a new test, or a 🧢 cap) keeps its name but loses
+// its bonus until the stat is back, like an ability that slips.
+export const CLASS_REQ=10,HYBRID_REQ=12;
+const STAT_SHORT={strength:'STR',defense:'DEF',speed:'SPD',intelligence:'INT',discipline:'DIS'};
+/** The always-open starter class: the one whose key stat is highest. */
+export function starterClass(s=stats()){const sc=classScores();return Object.keys(CLASS_STAT).sort((a,b)=>s[CLASS_STAT[b]]-s[CLASS_STAT[a]]||sc[b]-sc[a])[0];}
+/** Whether a class (or a hybrid pair) is open, and what it needs. */
+export function classUnlock(primary,secondary=''){
+  const s=stats();
+  if(secondary&&secondary!==primary){
+    const need=[primary,secondary].map(k=>CLASS_STAT[k]).filter(k=>s[k]<HYBRID_REQ);
+    return {ok:!need.length,requirement:`${STAT_SHORT[CLASS_STAT[primary]]} ${HYBRID_REQ} + ${STAT_SHORT[CLASS_STAT[secondary]]} ${HYBRID_REQ}`,missing:need};
+  }
+  const k=CLASS_STAT[primary];
+  return {ok:s[k]>=CLASS_REQ||primary===starterClass(s),requirement:`${STAT_SHORT[k]} ${CLASS_REQ}`,missing:s[k]>=CLASS_REQ?[]:[k]};
+}
 // Hybrid paths: a second class blends in. A pure class gets its whole bonus; a
 // hybrid gets 65% of each of its two classes' bonuses (mechanics.js), so it
 // trades peak strength for balance.
@@ -352,14 +371,19 @@ export function pathInfo(primary=profile.appearance.discipline,secondary=profile
 /** How much of each class's bonus applies (1 for a pure class). */
 export function classWeights(primary=profile.appearance.discipline||'fighter',secondary=profile.appearance.secondary){
   const w=Object.fromEntries(Object.keys(CLASS_INFO).map(k=>[k,0]));
-  if(secondary&&secondary!==primary&&w[secondary]!==undefined){w[primary]=HYBRID_SHARE;w[secondary]=HYBRID_SHARE;}else w[primary]=1;
+  if(secondary&&secondary!==primary&&w[secondary]!==undefined){
+    if(classUnlock(primary,secondary).ok){w[primary]=HYBRID_SHARE;w[secondary]=HYBRID_SHARE;return w;}
+  }
+  if(classUnlock(primary).ok)w[primary]=1;   // a locked class (or a locked blend's locked primary) gives no bonus
   return w;
 }
 /** Mycel's pick: a hybrid when the top two classes score within 8% of each other. */
 export function recommendedPath(){
-  const [a,b]=Object.entries(classScores()).sort((x,y)=>y[1]-x[1]);
-  return {primary:a[0],secondary:b[1]>=a[1]*.92?b[0]:''};
+  const open=Object.entries(classScores()).filter(([k])=>classUnlock(k).ok).sort((x,y)=>y[1]-x[1]),[a,b]=open;
+  return {primary:a[0],secondary:b&&b[1]>=a[1]*.92&&classUnlock(a[0],b[0]).ok?b[0]:''};
 }
+/** True when the class you hold is below its requirement right now. */
+export function pathLocked(){return !classUnlock(profile.appearance.discipline,profile.appearance.secondary).ok;}
 /** Why Mycel recommends it, in words. */
 export function classReason(){
   const s=stats(),top=Object.entries(s).filter(([k])=>k!=='discipline').sort((a,b)=>b[1]-a[1])[0],rec=recommendedClass(),{role,instinct}=profile.personality;

@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -91,7 +91,7 @@ export function mechanicsTable() {
     ['STAMINA', `Action cost ${pct(m.staminaCost)} · Breath recovery ${pct(m.regen)}`],
     ['DEFENSE', `${m.maxHealth} vitality · guard cost ${pct(m.guardCost)}`],
     ['INTELLIGENCE', `Rootbreaker charge ${pct(m.chargePower)} · ${m.echoReach > 0 ? `memories answer from ${units.short(m.echoReach)} farther` : 'memories answer from farther at INT 11+'}`],
-    ['CLASS', `${pathInfo().label}${pathInfo().hybrid ? ` (${pathInfo().bonus})` : ''} · parry restores ${Math.round(m.parryReward)} Breath`],
+    ['CLASS', `${pathInfo().label}${pathInfo().hybrid ? ` (${pathInfo().bonus})` : ''}${pathLocked() ? ' · LOCKED: below its stat requirement, no class bonus' : ''} · parry restores ${Math.round(m.parryReward)} Breath`],
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],
     ['LEVEL', `LV ${m.level} · strikes ${pct(levelDamage(m.level))} to keep pace with enemies (+15% health per level)${levelVitality(m.level) ? ` · +${levelVitality(m.level)} vitality` : ' · +1 vitality at LV 4'}`],

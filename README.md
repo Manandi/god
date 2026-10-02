@@ -97,6 +97,17 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-02 (named hybrid classes, class unlocks)
+
+- **Hybrids are their own choices.** CUSTOMIZE shows COMBAT CLASS (5 pure) and HYBRID CLASS (all 10 by name, e.g. SKIRMISHER, FIGHTER + RANGER) instead of a hidden "second class" row. Mycel's recommendation card has a TAKE button, or shows ✓ THIS IS YOUR CLASS. Buttons use `data-path="primary+secondary"`; picking a hybrid keeps your current primary first (the leaderboard shows the primary).
+- **Class unlocks** (owner's request; `classUnlock()`, `starterClass()`, `CLASS_REQ`, `HYBRID_REQ` in `src/profile.js`):
+  - A pure class opens at **10** in its stat (FIGHTER STR, TANK DEF, RANGER SPD, MAGE INT, SUPPORT DIS).
+  - A hybrid opens at **12 in both** of its stats.
+  - The class with your highest key stat is always open. Discipline starts at 10, so SUPPORT is always open in practice.
+  - Locked choices are greyed out, with what they need. Caps count, because unlocks use the capped stats.
+  - If your current class drops below its requirement, you keep it, but `classWeights()` gives no bonus until the stat is back. The stats screen and customize screen say so.
+  - Mycel only recommends open classes.
+
 ## Latest shared state — 2026-10-02 (squat and deadlift removed)
 
 - Owner's call: no squat or deadlift tests. Strength stays bodyweight first (push-ups 40%, pull-ups 35%, bench 25%), and the bench also feeds Defense (the shield arm, 45%). The optional tests are now plank (→ DEF) and resting heart rate (→ STA). Squat and deadlift stay in the lift log's exercise list (cosmetic titles only).
