@@ -184,3 +184,10 @@
 .board td.ovr{font-weight:600;color:#f0d897}
 #entry button.music-toggle{border-color:#3f5f4a;background:transparent;color:#a9c996}
 .plan-main .plan-note{display:block;font-style:normal;font-size:10px;color:#a9c996;margin-top:3px;line-height:1.4}
+
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:8px 0 16px}
+.inv-item{display:grid;gap:4px;align-content:start;padding:12px;border:1px solid #577265;background:#10251f99}
+.inv-item small{font-size:9px;letter-spacing:.12em;color:#a9c996}.inv-item b{color:#f0d897;letter-spacing:.06em}.inv-item span{font-size:11px;color:#c9d8c9;line-height:1.45}
+.inv-item em{font-style:normal;font-size:10px;letter-spacing:.1em;color:#bce09c}.inv-item em.lock{color:#e7a88f}
+.inv-item.equipped{border-color:#e4f5c5;background:#1b382de8}.inv-item.locked{opacity:.62}.inv-item.other{opacity:.45}
+#entry .inv-item button{justify-self:start;padding:7px 12px;font-size:10px}

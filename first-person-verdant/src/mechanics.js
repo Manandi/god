@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked, HYBRID_MASTERY } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked, HYBRID_MASTERY, myClasses, CLASS_WEAPON } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -78,7 +78,10 @@ export function mechanics() {
 /** The weapon actually in hand: the chosen one if your stats allow it (or dev mode), else bare hands. */
 export function equippedWeapon() {
   const chosen = profile.appearance.weapon || 'rootbound';
-  return devOverrides.anyWeapon || weaponEligibility(chosen).ok ? chosen : 'unarmed';
+  if (devOverrides.anyWeapon || weaponEligibility(chosen).ok) return chosen;
+  // Not yours (yet): your class weapon if it is open, otherwise your fists.
+  const own = myClasses().map(k => CLASS_WEAPON[k]).find(w => weaponEligibility(w).ok);
+  return own || 'rootbound';
 }
 export const movesetFor = weapon => MOVESETS[weapon] || MOVESETS.unarmed;
 export const weaponPower = weapon => WEAPONS[weapon]?.power ?? 1;

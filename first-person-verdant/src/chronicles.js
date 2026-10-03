@@ -41,6 +41,7 @@ export const TOPICS = {
       'Q locks on. Watch for the glow before they move: that is the tell. Shift dashes, and a dash just as the blow lands passes straight through it.',
       'C raises your guard. Raise it just before the hit and you parry: no Breath lost, and they are open for a riposte.',
       'Shells turn blades, so go for the head and the legs. Topple them, then strike the belly.',
+      'At level 3 your class weapon opens (press I for your inventory) and you learn your class’s first move: press G. Level 5 brings a second move on T.',
       'The Warden’s hollow is sealed by thorns. On Thursdays the rift in the square opens to hunters strong enough for that week (level 3 the first week, more after). The first one through starts a five-minute gathering, and it wakes for two or more of you.']],
     ['training', 'Show me the Rootbreaker.', 'Hold R, then let it go to commit your weight. Don’t throw it without enough Breath to escape afterward.'],
     ['duty', 'How can I help Mossgate?', 'Wake the forest memories. Every one strengthens our wards and weakens the rot.'],

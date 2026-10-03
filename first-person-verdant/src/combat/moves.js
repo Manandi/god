@@ -130,6 +130,47 @@ MOVES.hammer_air = { ...MOVES.hammer2, label: 'Meteor Fall', lunge: { from: 0, t
 MOVES.hammer_counter = { ...MOVES.hammer1, label: 'Guard Counter', active: [.24, .36], damage: 28, poise: 14, next: null, armor: [0, .36] };
 MOVES.hammer_root = { ...MOVES.hammer2, label: 'Root Strike', kind: 'critical', damage: 42, poise: 0, stamina: 0, hitstop: .22, armor: [0, .52] };
 
+// --- Ranged and healing weapons (2026-10-03). These moves have no hitbox: at
+// `shot.at` they fire a projectile (main.js · combat/projectiles.js), and at
+// `pulse.at` the Bloom heals everyone near. Charging works as for any heavy.
+const NO_LUNGE = { from: 0, to: .1, distance: .08 };
+// Spore Wand (mage): quick bolts of spore light; the heavy is an orb that bursts.
+MOVES.wand1 = { label: 'Spore Bolt', clip: 'blade1', fp: 'fp_swing', duration: .46, kind: 'light',
+  active: [.14, .2], chainFrom: .22, heavyFrom: .22, evadeFrom: .2, moveFrom: .32, turnUntil: .12, lunge: NO_LUNGE, reach: 1.2, hitbox: null,
+  damage: 11, poise: 2, stamina: 9, hitstop: .04, push: .3, stagger: .25, next: 'wand2',
+  shot: { at: .15, speed: 30, range: 34, radius: .35, color: 0xb48cff } };
+MOVES.wand2 = { ...MOVES.wand1, clip: 'blade2', next: 'wand1', shot: { ...MOVES.wand1.shot, at: .16 } };
+MOVES.wand_heavy = { label: 'Spore Burst', clip: 'blade3', fp: 'fp_palm', duration: .8, kind: 'heavy',
+  active: [.28, .34], chainFrom: 99, heavyFrom: 99, evadeFrom: .46, moveFrom: .6, turnUntil: .24, lunge: NO_LUNGE, reach: 1.2, hitbox: null,
+  damage: 24, poise: 8, stamina: 20, hitstop: .08, push: 1.2, stagger: .7, next: null, armor: [.1, .34],
+  shot: { at: .3, speed: 20, range: 30, radius: .55, aoe: 2.6, color: 0xd8b8ff },
+  charge: { at: .2, levels: [.35, .75], max: 1.1, damage: [1, 1.35, 1.75], poise: [1, 1.5, 2.2], stamina: 6 } };
+MOVES.wand_air = { ...MOVES.wand_heavy, label: 'Falling Burst', charge: null, airborne: true, armor: [0, .34] };
+// Windstring Bow (ranger): fast arrows; the held heavy looses an arrow that pierces through.
+MOVES.bow1 = { label: 'Wind Arrow', clip: 'blade3', fp: 'fp_palm', duration: .52, kind: 'light',
+  active: [.2, .26], chainFrom: .3, heavyFrom: .28, evadeFrom: .24, moveFrom: .36, turnUntil: .16, lunge: NO_LUNGE, reach: 1.2, hitbox: null,
+  damage: 13, poise: 2, stamina: 9, hitstop: .04, push: .3, stagger: .25, next: 'bow1',
+  shot: { at: .22, speed: 46, range: 50, radius: .28, color: 0x9ef0cf, arrow: true } };
+MOVES.bow_heavy = { label: 'Piercing Shot', clip: 'blade3', fp: 'fp_palm', duration: .9, kind: 'heavy',
+  active: [.3, .36], chainFrom: 99, heavyFrom: 99, evadeFrom: .48, moveFrom: .62, turnUntil: .2, lunge: NO_LUNGE, reach: 1.2, hitbox: null,
+  damage: 24, poise: 7, stamina: 18, hitstop: .08, push: 1, stagger: .7, next: null, armor: [.1, .36],
+  shot: { at: .32, speed: 60, range: 60, radius: .32, color: 0xe9fff4, arrow: true, pierce: true },
+  charge: { at: .18, levels: [.35, .75], max: 1.1, damage: [1, 1.4, 1.85], poise: [1, 1.5, 2.2], stamina: 6 } };
+MOVES.bow_air = { ...MOVES.bow1, label: 'Falling Arrow', airborne: true };
+// Bloom Staff (support): two staff sweeps; the heavy is the Bloom, which heals you and every
+// hunter within 7 m (held: a fuller bloom). Its cost in Breath keeps it from being spammed.
+const STAFF = { from: 'RightForeArm', to: 'RightHand', blade: 1.1, radius: .16, weapon: true };
+MOVES.staff1 = { label: 'Staff Sweep', clip: 'blade1', fp: 'fp_swing', duration: .54, kind: 'light',
+  active: [.14, .23], chainFrom: .23, heavyFrom: .23, evadeFrom: .21, moveFrom: .38, turnUntil: .11,
+  lunge: { from: .02, to: .13, distance: .45 }, reach: 2, hitbox: STAFF,
+  damage: 10, poise: 3, stamina: 9, hitstop: .06, push: .4, stagger: .3, next: 'staff2' };
+MOVES.staff2 = { ...MOVES.staff1, label: 'Return Sweep', clip: 'blade2', damage: 11, next: 'staff1' };
+MOVES.staff_heavy = { label: 'Bloom', clip: 'rootbreaker', fp: 'fp_heavy', duration: 1.0, kind: 'heavy',
+  active: [.42, .5], chainFrom: 99, heavyFrom: 99, evadeFrom: .6, moveFrom: .8, turnUntil: .2, lunge: NO_LUNGE, reach: 1.2, hitbox: null,
+  damage: 0, poise: 0, stamina: 30, hitstop: 0, push: 0, stagger: 0, next: null, armor: [.1, .5],
+  pulse: { at: .45, radius: 7, heal: [1, 1, 2] },
+  charge: { at: .3, levels: [.35, .8], max: 1.2, damage: [1, 1, 1], poise: [1, 1, 1], stamina: 7 } };
+
 // Which move each input opens with, per weapon. Rootbound fists are the
 // unarmed style; unarmed (a weapon you are not yet strong enough for) uses the
 // same moves at lower power.
@@ -137,12 +178,18 @@ export const MOVESETS = {
   unarmed:      { first: 'palm', heavy: 'heel', dash_light: 'dash_palm', dash_heavy: 'dash_heel', air: 'air_heel', counter: 'guard_heel', root: 'root' },
   rootbound:    { first: 'palm', heavy: 'heel', dash_light: 'dash_palm', dash_heavy: 'dash_heel', air: 'air_heel', counter: 'guard_heel', root: 'root' },
   groveblade:   { first: 'blade1', heavy: 'blade_heavy', dash_light: 'blade_dash', dash_heavy: 'blade_dash_heavy', air: 'blade_air', counter: 'blade_counter', root: 'blade_root' },
-  stonebreaker: { first: 'hammer1', heavy: 'hammer_heavy', dash_light: 'hammer_dash', dash_heavy: 'hammer_dash_heavy', air: 'hammer_air', counter: 'hammer_counter', root: 'hammer_root' }
+  stonebreaker: { first: 'hammer1', heavy: 'hammer_heavy', dash_light: 'hammer_dash', dash_heavy: 'hammer_dash_heavy', air: 'hammer_air', counter: 'hammer_counter', root: 'hammer_root' },
+  sporewand:    { first: 'wand1', heavy: 'wand_heavy', dash_light: 'wand1', dash_heavy: 'wand_heavy', air: 'wand_air', counter: 'wand_heavy', root: 'blade_root' },
+  windstring:   { first: 'bow1', heavy: 'bow_heavy', dash_light: 'bow1', dash_heavy: 'bow_heavy', air: 'bow_air', counter: 'bow_heavy', root: 'blade_root' },
+  bloomstaff:   { first: 'staff1', heavy: 'staff_heavy', dash_light: 'staff1', dash_heavy: 'staff_heavy', air: 'blade_air', counter: 'blade_counter', root: 'blade_root' }
 };
 export const WEAPONS = {
   rootbound: { label: 'ROOTBOUND FISTS', power: 1, note: 'Fast palm, swing and heel string.' },
   groveblade: { label: 'GROVEBLADE', power: 1, note: 'Quick three-cut chain ending in a thrust; a rising heavy.' },
   stonebreaker: { label: 'STONEBREAKER', power: 1, note: 'Slow, heavy two-hit chain; cracks shells and armour.' },
+  sporewand: { label: 'SPORE WAND', power: 1, note: 'Ranged spore bolts; the heavy (hold to charge) bursts on impact.' },
+  windstring: { label: 'WINDSTRING BOW', power: 1, note: 'Fast arrows from range; the held heavy pierces through.' },
+  bloomstaff: { label: 'BLOOM STAFF', power: 1, note: 'Staff sweeps; the heavy Bloom heals you and every hunter within 7 m.' },
   unarmed: { label: 'BARE HANDS', power: .85, note: 'Your chosen weapon is still locked by your stats.' }
 };
 

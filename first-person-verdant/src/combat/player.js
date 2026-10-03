@@ -201,10 +201,13 @@ export class PlayerCombat {
           radius: m.slam.radius * k, damage: m.slam.damage * k, poise: m.slam.poise * k, pierce: m.pierce || 0, chargeLevel: this.chargeLevel });
       }
 
+      // A ranged move fires its projectile; the Bloom heals around you (main.js does the rest).
+      if (m.shot && t0 < m.shot.at && this.t >= m.shot.at) this.events.push({ type: 'shot', move: this.move, facing: this.facing, chargeLevel: this.chargeLevel, counter: this.countering });
+      if (m.pulse && t0 < m.pulse.at && this.t >= m.pulse.at) this.events.push({ type: 'pulse', move: this.move, chargeLevel: this.chargeLevel });
       // Hit detection runs only while the strike is active, against the posed limb.
       // The limb is also sampled during startup, so the first active frame sweeps
       // from the pose just before it instead of losing a frame.
-      if (this.t < m.active[1] && !this.blocked) {
+      if (m.hitbox && this.t < m.active[1] && !this.blocked) {
         strikeSegment(ctx.bones, m.hitbox, this.segment);
         if (this.t >= m.active[0] && this.prevSegment) {
           const obstacle = obstacleBetween(ctx.chest, this.segment.b, ctx.grid);
@@ -227,7 +230,7 @@ export class PlayerCombat {
         }
         this.prevSegment = { a: this.segment.a.clone(), b: this.segment.b.clone() };
       }
-      if (t0 < m.active[1] && this.t >= m.active[1] && !this.hitThisSwing.size && !this.blocked) {
+      if (m.hitbox && t0 < m.active[1] && this.t >= m.active[1] && !this.hitThisSwing.size && !this.blocked) {
         this.events.push({ type: 'whiff', move: this.move, nearest: this.nearest });
       }
       // Windows out of the move.

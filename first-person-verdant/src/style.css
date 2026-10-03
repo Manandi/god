@@ -62,3 +62,11 @@
 @media(max-width:700px){#minimap{width:96px;height:96px}}
 
 #riftFade{position:fixed;inset:0;background:radial-gradient(circle,#7ff0d0 0%,#0a2a22 45%,#020806 100%);opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:40}#riftFade.on{opacity:1}
+
+#skills{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+#skills .skill{display:grid;grid-template-columns:auto 1fr;column-gap:7px;align-items:center;padding:5px 9px;border:1px solid #9fc39a88;background:#0a1d18cc;font-size:9px;letter-spacing:.1em;min-width:118px}
+#skills .skill b{grid-row:span 2;font-size:14px;color:#f0d897}
+#skills .skill small{color:#bce09c}
+#skills .skill.cooling{opacity:.6}#skills .skill.cooling small{color:#e7c8a0}
+#skills .skill.locked{opacity:.4}#skills .skill.locked small{color:#a6b7a9}
+#skills .skill.buff{min-width:0;border-color:#f0d89788;color:#f0d897}

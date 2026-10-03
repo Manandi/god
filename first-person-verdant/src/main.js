@@ -8,6 +8,8 @@ import { createNpcs,updateNpcs } from './npcs.js';
 import { createStory,NPCS,CHAPTERS,STAGES,keeperName,GOSSIP,endingLines } from './story.js';
 import { createChronicles,CHRONICLES,TOPICS,replyLines } from './chronicles.js';
 import { typeBlip } from './music.js';
+import { createProjectiles } from './combat/projectiles.js';
+import { skillSlots } from './combat/skills.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
@@ -18,13 +20,13 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units,level,pathInfo } from './profile.js';
+import { profile,stats,saveProfile,units,level,pathInfo,myClasses } from './profile.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import {createBossEvent,RIFT,HOLLOW_ARRIVE,HOLLOW_RIFT,inHollow} from './bossEvent.js';
 import { PlayerCombat } from './combat/player.js';
-import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
+import { MOVES, STAMINA, GUARD, SPRINT, FLASK, COUNTER } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
 import { CombatDebug } from './combat/debug.js';
 import './style.css';
@@ -188,6 +190,8 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyF')attackPressed();
   if(e.code==='KeyR')heavyPressed(true);
   if(e.code==='KeyQ'||e.code==='Tab')toggleLock();
+  if((e.code==='KeyG'||e.code==='KeyT')&&!paused&&!dialogue&&!player.defeated)useSkill(e.code==='KeyG'?0:1);
+  if(e.code==='KeyI'&&started&&!paused&&!journalOpen&&!dialogue){paused=true;$('hud').classList.add('hidden');shell.inventory();if(document.pointerLockElement)document.exitPointerLock();return;}
   if(dialogue?.choices&&/^Digit[1-9]$/.test(e.code)){chooseDialogue(Number(e.code.slice(5))-1);return;}
   if(dialogue&&e.code==='Escape'){closeDialogue(false);return;}
   if(e.code==='KeyE'&&!paused&&!journalOpen){if(dialogue){advanceDialogue();return;}if(combat.busy)return;const n=nearestInteractable();if(n&&n.type!=='npc')player.interactT=0;interact();}
@@ -603,7 +607,7 @@ devPanel.addEventListener('click',e=>{
 // --------------------------------------------------------------------- co-op
 // Everyone enters the same weekly world. Positions and fights are shared, but
 // memories, nests and dialogue remain personal quest progress.
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
   defaultCode:weeklyLobbyCode()});
 
 // ---------------------------------------------------------------- encounters
@@ -660,10 +664,12 @@ function maxHealth(){return mech.maxHealth;}
 /** Show the weapon actually in hand (stat-gated; dev mode can override). */
 function equipWeapon(){const w=equippedWeapon();avatar.setWeapon?.(w);hands.setWeapon(w);}
 // Real-world strength scales strike damage; turtles never grant XP.
-const strikePower=()=>mech.damage*weaponPower(equippedWeapon());
+const strikePower=()=>mech.damage*weaponPower(equippedWeapon())*(elapsed<buffs.damage?1.25:1);
 function hurtPlayer(from,kind='light',damage=1){
   closeDialogue(false);
   if(dev.invulnerable){cue('DEV · NO DAMAGE',.45);return;}
+  // Barkshield soaks whole hits while it lasts.
+  if(buffs.shield>0&&elapsed<buffs.shieldUntil){buffs.shield--;cue(`BARKSHIELD · ${buffs.shield} LEFT`,.6);sound.guardUp();effects.ring(new THREE.Vector3(player.x,groundY(player.x,player.z)+.1,player.z));return;}
   // Stoneframe: heavy blows stagger instead of knocking you down (the damage still lands).
   if(kind==='heavy'&&mech.steadfast){kind='light';cue('STEADFAST',.5);}
   player.health=Math.max(0,player.health-damage);combat.hurt(from.x,from.z,player.x,player.z,kind);sound.bite();
@@ -674,6 +680,7 @@ function hurtPlayer(from,kind='light',damage=1){
   checkDefeated();
 }
 function checkDefeated(){
+  if(player.health<=0&&elapsed<buffs.ward){buffs.ward=0;player.health=1;slowMo(.3,.6);cue('SECOND SPRING',1.1);toast('SECOND SPRING','The bloom holds you up with 1 heart.');return;}
   // Trueframe: once per rest, a blow that would drop you leaves you standing.
   if(player.health<=0&&mech.secondWind&&!player.secondWindUsed){player.health=1;player.secondWindUsed=true;slowMo(.3,.6);cue('SECOND WIND',1.1);toast(mech.frame==='balanced'?'SECOND WIND':'UNBROKEN WILL',`${mech.frame==='balanced'?'Your balanced frame':'Your discipline'} keeps you standing · rest to renew it`);return;}
   if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
@@ -714,11 +721,107 @@ function critTarget(){
   // A toppled or parried creature within reach opens the Root Strike.
   return creatures.find(c=>c.alive&&c.exposed&&Math.hypot(c.x-player.x,c.z-player.z)-c.radius<1.7)||null;
 }
+// ------------------------------------------- ranged weapons, class moves, support
+// Projectiles (Spore Wand, Windstring Bow, Volley), the Bloom Staff's heal, and the
+// class moves on G and T (combat/skills.js). Help for teammates goes out as co-op
+// `support` messages; applySupport() takes what reaches this explorer.
+const projectiles=createProjectiles(scene);
+const buffs={damage:0,speed:0,ward:0,shield:0,shieldUntil:0};const skillReady={};let freeDash=false;
+const chest=()=>new THREE.Vector3(player.x,groundY(player.x,player.z)+player.height+1.35,player.z);
+/** Where a ranged strike goes: the lock target, else a creature roughly ahead (gentle aim help), else straight ahead. */
+function aimFrom(from,facing,range){
+  const fx=-Math.sin(facing),fz=-Math.cos(facing);
+  let target=lockTarget&&lockTarget.alive?lockTarget:null;
+  if(!target){let best=.32;for(const c of creatures){if(!c.alive||(c===warden&&warden.sealed))continue;const dx=c.x-from.x,dz=c.z-from.z,d=Math.hypot(dx,dz);if(d>range||d<.5)continue;const off=Math.acos(Math.max(-1,Math.min(1,(dx*fx+dz*fz)/d)));if(off<best){best=off;target=c;}}}
+  if(target)return new THREE.Vector3(target.x,groundY(target.x,target.z)+(target.focusHeight||1),target.z).sub(from).normalize();
+  if(!player.thirdPerson){const v=camera.getWorldDirection(new THREE.Vector3());return v.normalize();}
+  return new THREE.Vector3(fx,0,fz);
+}
+function fireShot(ev,{spread=0,damageScale=1}={}){
+  const m=MOVES[ev.move],s=m.shot,from=chest().add(new THREE.Vector3(-Math.sin(ev.facing)*.55,0,-Math.cos(ev.facing)*.55));
+  const dir=aimFrom(from,ev.facing,s.range);if(spread)dir.applyAxisAngle(new THREE.Vector3(0,1,0),spread);
+  const charge=m.charge?{damage:m.charge.damage[ev.chargeLevel||0],poise:m.charge.poise[ev.chargeLevel||0]}:{damage:1,poise:1};
+  const wand=/^wand/.test(ev.move),power=strikePower()*(wand?mech.chargePower:1)*(ev.counter?COUNTER.damage:1)*damageScale;
+  projectiles.spawn({from,dir,speed:s.speed,range:s.range,radius:s.radius*(1+(ev.chargeLevel||0)*.2),color:s.color,arrow:s.arrow,pierce:s.pierce,aoe:s.aoe?s.aoe*(1+(ev.chargeLevel||0)*.25):0,
+    payload:{damage:m.damage*charge.damage*power,poise:m.poise*charge.poise*power*mech.poise,push:m.push,stagger:m.stagger*mech.stagger,heavy:m.kind!=='light',move:ev.move}});
+  sound.swing(ev.move);
+}
+function landShot(h){
+  const p=h.shot,load=p.payload;
+  if(h.aoe){
+    const at=new THREE.Vector3(h.point.x,groundY(h.point.x,h.point.z),h.point.z);effects.shockwave(at,.4,p.aoe,.3);sound.attack('slam');shoulderCam.punch(.15);
+    for(const c of creatures){if(!c.alive||(c===warden&&warden.sealed)||Math.hypot(c.x-h.point.x,c.z-h.point.z)>p.aoe+(c.radius||1))continue;
+      const res=strikeCreature(c,{damage:load.damage,poise:load.poise,fromX:h.point.x,fromZ:h.point.z,push:load.push,stagger:load.stagger,part:'body'});
+      if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1.2,c.z),res.damage,res.effect);if(res.toppled){sound.topple();cue('TOPPLED',.6);}if(res.defeated)creatureDefeated(c);}}
+    return;
+  }
+  const c=h.target,res=strikeCreature(c,{damage:load.damage,poise:load.poise,fromX:p.from.x,fromZ:p.from.z,push:load.push,stagger:load.stagger,part:'body'});
+  if(!res)return;
+  sound.hit(load.move,res.effect,++combo);comboTimer=2;effects.burst(h.point,p.dir.clone().negate(),load.heavy);damageNumber(h.point,res.damage,res.effect);player.engaged=4;
+  if(res.toppled){sound.topple();cue('TOPPLED',.6);}if(res.defeated)creatureDefeated(c);
+}
+function updateProjectiles(dt){
+  if(!projectiles.count)return;
+  const blocked=v=>collisionGrid.near(v.x,v.z).some(o=>v.y<o.top&&Math.hypot(v.x-o.x,v.z-o.z)<o.r);
+  for(const h of projectiles.update(dt,{targets:creatures.filter(c=>c.alive&&!(c===warden&&warden.sealed)),blocked,ground:groundY}))landShot(h);
+}
+/** The Bloom (Bloom Staff heavy) and Mending Bloom: heal yourself and every hunter in reach. */
+function healAround(amount,radius,label){
+  player.health=Math.min(maxHealth(),player.health+amount);sound.heal();cue(label,.8);
+  effects.shockwave(new THREE.Vector3(player.x,groundY(player.x,player.z)+.05,player.z),.4,radius,.6);
+  coop.sendSupport({kind:'heal',x:player.x,z:player.z,radius,amount,label,name:profile.name||'A friend'});
+}
+function bloomPulse(ev){const m=MOVES[ev.move];healAround(m.pulse.heal[ev.chargeLevel||0],m.pulse.radius,'BLOOM');}
+/** A teammate's help arrives. */
+function applySupport(p){
+  const near=Math.hypot(p.x-player.x,p.z-player.z)<=(p.radius||0),who=String(p.name||'A friend').toUpperCase();
+  if(p.kind==='heal'&&near&&!player.defeated){player.health=Math.min(maxHealth(),player.health+(p.amount||1));sound.heal();cue(`${who}’S ${p.label||'BLOOM'} HEALS YOU`,1);}
+  else if(p.kind==='shield'&&p.to===coop.id){buffs.shield=2;buffs.shieldUntil=elapsed+12;cue(`${who} SHIELDS YOU · BARKSHIELD`,1.1);}
+  else if(p.kind==='warcry'&&near){buffs.damage=elapsed+10;cue(`${who}’S WAR CRY · +25% DAMAGE`,1.1);}
+  else if(p.kind==='ward'&&near){buffs.ward=elapsed+15;cue(`${who}’S SECOND SPRING HOLDS YOU`,1.1);}
+}
+/** The class move in slot 0 (G) or 1 (T). */
+function useSkill(i){
+  const slot=skillSlots(myClasses(),level())[i],sk=slot.skill;
+  if(!slot.unlocked&&!dev.bossUnlocked){cue(`${sk.name.toUpperCase()} · LEVEL ${slot.level}`,1);return;}
+  if(elapsed<(skillReady[sk.id]||0)){cue(`${sk.name.toUpperCase()} · ${Math.ceil(skillReady[sk.id]-elapsed)} S`,.6);return;}
+  if(sk.stamina&&(player.winded||player.stamina<=0)){sound.tired();return;}
+  skillReady[sk.id]=elapsed+sk.cooldown;spend(sk.stamina);endEmote();coop.sendAct();cue(sk.name.toUpperCase(),.8);
+  const at=new THREE.Vector3(player.x,groundY(player.x,player.z),player.z),f=combat.facing;
+  const area=(x,z,radius,params)=>{effects.shockwave(new THREE.Vector3(x,groundY(x,z)+.05,z),.4,radius,.35);
+    for(const c of creatures){if(!c.alive||(c===warden&&warden.sealed)||Math.hypot(c.x-x,c.z-z)>radius+(c.radius||1))continue;
+      const res=strikeCreature(c,{fromX:x,fromZ:z,part:'body',...params});
+      if(res){damageNumber(new THREE.Vector3(c.x,groundY(c.x,c.z)+1.2,c.z),res.damage,res.effect);if(res.toppled){sound.topple();cue('TOPPLED',.6);}if(res.defeated)creatureDefeated(c);}}};
+  const ahead=()=>{const t=lockTarget&&lockTarget.alive?lockTarget:null;return t?{x:t.x,z:t.z}:{x:player.x-Math.sin(f)*6,z:player.z-Math.cos(f)*6};};
+  switch(sk.id){
+    case 'whirlwind':avatar.emote?.('idle');area(player.x,player.z,3.2,{damage:28*strikePower(),poise:10*strikePower()*mech.poise,push:1.4,stagger:.9});sound.attack('spin');shoulderCam.punch(.3);break;
+    case 'warcry':buffs.damage=elapsed+10;sound.roar();coop.sendSupport({kind:'warcry',x:player.x,z:player.z,radius:9,name:profile.name});break;
+    case 'barkshield':{buffs.shield=2;buffs.shieldUntil=elapsed+12;sound.guardUp();effects.ring(at);
+      const mate=coop.others().map(o=>({o,d:Math.hypot(o.x-player.x,o.z-player.z)})).filter(v=>v.d<=10).sort((a,b)=>a.d-b.d)[0];
+      if(mate){coop.sendSupport({kind:'shield',to:mate.o.key,x:player.x,z:player.z,radius:10,name:profile.name});toast('BARKSHIELD',`You and ${mate.o.name} are shielded for the next 2 hits.`);}else toast('BARKSHIELD','Shielded for the next 2 hits. A hunter within 10 m would be shielded too.');break;}
+    case 'rootstomp':area(player.x,player.z,4,{damage:12*strikePower(),poise:22,push:1.8,stagger:1.2});sound.attack('slam');shoulderCam.punch(.35);break;
+    case 'volley':for(let k=-2;k<=2;k++)fireShot({move:'bow1',facing:f,chargeLevel:0},{spread:k*.14,damageScale:.8});break;
+    case 'windstep':buffs.speed=elapsed+8;sound.evade();effects.ring(at);break;
+    case 'sporenova':{const p=ahead();area(p.x,p.z,3,{damage:30*strikePower()*mech.chargePower,poise:9,push:1.2,stagger:.8});sound.attack('slam');break;}
+    case 'snare':{const p=ahead();area(p.x,p.z,4,{damage:6*strikePower(),poise:60,push:.2,stagger:1.4});break;}
+    case 'mend':healAround(1,9,'MENDING BLOOM');break;
+    case 'secondspring':buffs.ward=elapsed+15;sound.heal();effects.ring(at);coop.sendSupport({kind:'ward',x:player.x,z:player.z,radius:9,name:profile.name});break;
+  }
+}
+function updateSkillBar(){
+  const el=$('skills');if(!el)return;
+  el.innerHTML=skillSlots(myClasses(),level()).map(s=>{const left=Math.max(0,(skillReady[s.skill.id]||0)-elapsed),lock=!s.unlocked&&!dev.bossUnlocked;
+    return `<div class="skill ${lock?'locked':left>0?'cooling':''}"><b>${s.key}</b><span>${s.skill.name.toUpperCase()}</span><small>${lock?`LV ${s.level}`:left>0?`${Math.ceil(left)} S`:'READY'}</small></div>`;}).join('')+
+    (elapsed<buffs.shieldUntil&&buffs.shield>0?`<div class="skill buff"><span>BARKSHIELD ×${buffs.shield}</span></div>`:'')+(elapsed<buffs.damage?'<div class="skill buff"><span>WAR CRY</span></div>':'')+
+    (elapsed<buffs.speed?'<div class="skill buff"><span>WIND STEP</span></div>':'')+(elapsed<buffs.ward?'<div class="skill buff"><span>SECOND SPRING</span></div>':'');
+}
 function handleCombatEvents(){
   for(const ev of combat.events){
     if(ev.type==='swing'){coop.sendAct();sound.swing(ev.move);cue(MOVES[ev.move].label.toUpperCase(),.22);}
-    else if(ev.type==='spend')spend(ev.amount);
-    else if(ev.type==='evade'){sound.evade();cue('DASH',.3);}
+    else if(ev.type==='spend'){if(freeDash){freeDash=false;continue;}spend(ev.amount);}
+    else if(ev.type==='evade'){sound.evade();cue('DASH',.3);freeDash=elapsed<buffs.speed;}
+    else if(ev.type==='shot')fireShot(ev);
+    else if(ev.type==='pulse')bloomPulse(ev);
     else if(ev.type==='perfect'){sound.evadedAttack();slowMo(.3,.4);player.stamina=Math.min(100,player.stamina+15);cue('PERFECT EVADE · COUNTER',.9);debug.note('PERFECT EVADE → slow motion, counter window 1.4 s',elapsed);}
     else if(ev.type==='rootbreaker'){cue(`${MOVES[ev.move].label.toUpperCase()} · HOLD TO CHARGE`,.6);sound.charge(0);}
     else if(ev.type==='slam'){
@@ -914,7 +1017,9 @@ function incomingStrike(c,ev){
 }
 
 // -------------------------------------------------------------------- update
+let skillBarT=0;
 function updateHUD(){
+  if((skillBarT-=1/30)<=0){skillBarT=.2;updateSkillBar();}
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(mech.flasks-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
@@ -1051,7 +1156,7 @@ function update(rawDt){
   comboTimer-=dt;if(comboTimer<=0)combo=0;
   const nearFight=creatures.some(c=>c.alive&&['approach','circle','windup','attack','recover','stagger','alert','toppled','rising','reeling'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<9);
   const guarded=!!lockTarget||player.engaged>0||nearFight;
-  const runSpeed=mech.runSpeed,guardSpeed=mech.guardSpeed;
+  const runSpeed=mech.runSpeed*(elapsed<buffs.speed?1.3:1),guardSpeed=mech.guardSpeed;
   let desiredX=0,desiredZ=0;
   if(combat.mobile&&hasInput&&!player.defeated){const s=combat.state==='guard'?GUARD.speed:combat.state==='flask'?runSpeed*FLASK.moveSpeed:player.sprinting?runSpeed*SPRINT.speed:guarded?guardSpeed:runSpeed;desiredX=input.x*s;desiredZ=input.z*s;}
   player.vx=THREE.MathUtils.damp(player.vx,desiredX,hasInput?14:18,dt);
@@ -1089,7 +1194,7 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);coop.update(rawDt,elapsed);
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);updateProjectiles(dt);coop.update(rawDt,elapsed);
   if(coop.teamSize>1&&coop.authority)sendWorld(rawDt);
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}

@@ -120,7 +120,7 @@ export function loadProfile(){
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
     profile.appearance.hairStyle=['short','curly','swept','tied','braid'].includes(appearance.hairStyle)?appearance.hairStyle:'short';
     profile.appearance.outfit=['ranger','warden','wanderer','sentinel'].includes(appearance.outfit)?appearance.outfit:'ranger';
-    profile.appearance.weapon=['rootbound','groveblade','stonebreaker'].includes(appearance.weapon)?appearance.weapon:'rootbound';
+    profile.appearance.weapon=['rootbound','groveblade','stonebreaker','sporewand','windstring','bloomstaff'].includes(appearance.weapon)?appearance.weapon:'rootbound';
     profile.appearance.discipline=Object.hasOwn(CLASS_INFO,appearance.discipline)?appearance.discipline:'fighter';
     profile.appearance.secondary=Object.hasOwn(CLASS_INFO,appearance.secondary)&&appearance.secondary!==profile.appearance.discipline?appearance.secondary:'';
     profile.appearance.hairColor=['raven','earth','copper','silver','gold'].includes(appearance.hairColor)?appearance.hairColor:['raven','earth','silver'].includes(appearance.hair)?appearance.hair:'raven';
@@ -387,13 +387,20 @@ export function classReason(){
   const path=recommendedPath(),blend=path.secondary?` You have unlocked the ${CLASS_INFO[path.primary].label} + ${CLASS_INFO[path.secondary].label} hybrid, and it suits you.`:'';
   return `Your strongest attribute is ${top[0].toUpperCase()} (${top[1]}). ${plays}${blend}`;
 }
+// Class weapons (owner's rules, 2026-10-03): fists for everyone; every weapon opens at
+// level 3, and only for its class. An unlocked hybrid carries both classes' weapons.
+export const WEAPON_LEVEL=3;
+export const CLASS_WEAPON={fighter:'groveblade',tank:'stonebreaker',ranger:'windstring',mage:'sporewand',support:'bloomstaff'};
+const WEAPON_CLASS=Object.fromEntries(Object.entries(CLASS_WEAPON).map(([k,w])=>[w,k]));
+/** The classes whose weapons you may carry right now. */
+export function myClasses(){const a=profile.appearance,out=[a.discipline||'fighter'];if(a.secondary&&a.secondary!==out[0]&&classUnlock(out[0],a.secondary).ok)out.push(a.secondary);return out;}
 export function weaponEligibility(weapon){
-  const s=stats(),rules={
-    rootbound:{ok:s.intelligence>=8||s.discipline>=8,requirement:'INT 8 or DIS 8'},
-    groveblade:{ok:s.strength>=8&&s.speed>=8,requirement:'STR 8 and SPD 8'},
-    stonebreaker:{ok:s.strength>=12&&s.defense>=12,requirement:'STR 12 and DEF 12'}
-  };
-  return rules[weapon]||{ok:false,requirement:'Unknown discipline'};
+  if(weapon==='rootbound')return {ok:true,requirement:''};
+  const owner=WEAPON_CLASS[weapon];if(!owner)return {ok:false,requirement:'Unknown weapon'};
+  const cls=CLASS_INFO[owner].label;
+  if(!myClasses().includes(owner))return {ok:false,requirement:`${cls} CLASS`,classLocked:true};
+  if(level()<WEAPON_LEVEL)return {ok:false,requirement:`LEVEL ${WEAPON_LEVEL}`};
+  return {ok:true,requirement:''};
 }
 
 

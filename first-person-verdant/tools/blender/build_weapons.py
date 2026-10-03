@@ -9,6 +9,9 @@ The explorer's weapons (The Hollow Roots, Verdant Reach).
   Stonebreaker  a maul: a hewn stone head bound with bronze straps and roots,
                 a glowing rune on each striking face, on a long
                 root-bound haft with bronze collars
+  Sporewand     the mage's wand: twisted rootwood, a glowing mushroom tip
+  Windstring    the ranger's bow: curved heartwood limbs, a glowing string
+  Bloomstaff    the support's staff: a long haft crowned with a healing flower
 
 Each weapon is one object with its grip centred on the origin and its business
 end toward -Z (the game's -Y: out of the fist along the hand bone). Empties
@@ -41,6 +44,12 @@ MAT = {
     'bronze': material('W_Bronze', color=hexc('#b89554'), rough=.4, metallic=.8),
     'rune': material('W_Rune', color=hexc('#ffd79a'), emission=hexc('#ffb54f'), strength=4, rough=.4),
     'haft': material('W_Haft', color=hexc('#6b5238'), rough=.8),
+    'spore': material('W_Spore', color=hexc('#d8b8ff'), emission=hexc('#b48cff'), strength=5, rough=.3),
+    'cap': material('W_Cap', color=hexc('#5c3f7a'), rough=.6),
+    'petal': material('W_Petal', color=hexc('#ffe1a8'), emission=hexc('#ffc46b'), strength=2.5, rough=.5),
+    'bloom': material('W_Bloom', color=hexc('#fff6d8'), emission=hexc('#fff0a8'), strength=6, rough=.2),
+    'leaf': material('W_Leaf', color=hexc('#4f8a4c'), rough=.7),
+    'string': material('W_String', color=hexc('#e8e2c8'), emission=hexc('#9ef0cf'), strength=1.2, rough=.6),
 }
 
 class Part:
@@ -139,7 +148,64 @@ def build_stonebreaker():
     marker(o, 'WeaponBase', (0, 0, -.62)); marker(o, 'WeaponTip', (0, 0, -1.02))
     return o
 
-weapons = [build_groveblade(), build_stonebreaker()]
+# ---------------------------------------------------------------- Spore Wand
+def build_sporewand():
+    """The mage's wand: a twisted rootwood shaft ending in a glowing mushroom, spores circling it."""
+    p = Part('Sporewand')
+    p.add('haft', cyl(.022, .03, .5, 8), T(0, 0, -.17))
+    for i in range(7): p.add('root', cyl(.032, .032, .016, 8), T(0, 0, .02 - i * .055) @ R(.3 * (i % 2 - .5), 'X'))
+    p.add('leather', cyl(.034, .034, .12, 8), T(0, 0, .02))
+    p.add('heartwood', cyl(.03, .018, .05, 8), T(0, 0, .11))
+    cap = bmesh.new(); bmesh.ops.create_uvsphere(cap, u_segments=14, v_segments=8, radius=.075); p.add('cap', cap, T(0, 0, -.47) @ Matrix.Diagonal((1, 1, .55, 1)))
+    gill = bmesh.new(); bmesh.ops.create_uvsphere(gill, u_segments=12, v_segments=8, radius=.06); p.add('spore', gill, T(0, 0, -.45) @ Matrix.Diagonal((1, 1, .4, 1)))
+    for i in range(5):
+        a = i / 5 * math.tau; o = bmesh.new(); bmesh.ops.create_icosphere(o, subdivisions=1, radius=.016)
+        p.add('spore', o, T(math.cos(a) * .1, math.sin(a) * .1, -.5 - .03 * (i % 2)))
+    for s in (1, -1): p.add('leaf', cube(.07, .012, .03), T(s * .035, 0, -.38) @ R(s * .5, 'Y'))
+    o = p.build()
+    marker(o, 'WeaponBase', (0, 0, -.3)); marker(o, 'WeaponTip', (0, 0, -.52))
+    return o
+
+# ------------------------------------------------------------- Windstring Bow
+def build_windstring():
+    """The ranger's bow: two curved heartwood limbs from a wrapped grip, a glowing string."""
+    p = Part('Windstring')
+    p.add('leather', cyl(.034, .034, .14, 8), R(math.pi / 2, 'Y'))           # the grip runs across the fist
+    limbs = []
+    for s in (1, -1):
+        pts = [Vector((s * .06, 0, 0)), Vector((s * .25, .04, 0)), Vector((s * .45, .12, 0)), Vector((s * .6, .24, 0))]
+        limbs.append(tube(pts, [.03, .026, .02, .012], f'limb{s}'))
+        p.add('vein', cyl(.016, .016, .02, 6), T(s * .6, .25, 0))
+        for k, (x, y) in enumerate(((.3, .06), (.48, .15))):
+            p.add('leaf', cube(.06, .015, .03), T(s * x, y + .03, 0) @ R(s * .6, 'Z'))
+    for o in limbs: o.data.materials.append(MAT['heartwood'])
+    string = tube([Vector((.6, .25, 0)), Vector((0, .25, 0)), Vector((-.6, .25, 0))], [.005, .005, .005], 'string')
+    string.data.materials.append(MAT['string'])
+    o = p.build(limbs + [string])
+    marker(o, 'WeaponBase', (0, 0, 0)); marker(o, 'WeaponTip', (0, -.35, 0))
+    return o
+
+# -------------------------------------------------------------- Bloom Staff
+def build_bloomstaff():
+    """The support's staff: a long haft crowned with a glowing flower that heals."""
+    p = Part('Bloomstaff')
+    p.add('haft', cyl(.032, .036, 1.4, 10), T(0, 0, -.42))
+    for z in (.2, -.98): p.add('bronze', cyl(.044, .044, .04, 10), T(0, 0, z))
+    for i in range(4): p.add('leather', cyl(.04, .04, .022, 10), T(0, 0, -.06 + i * .04))
+    p.add('leaf', cyl(.05, .02, .08, 8), T(0, 0, -1.05))
+    bulb = bmesh.new(); bmesh.ops.create_uvsphere(bulb, u_segments=14, v_segments=10, radius=.07); p.add('bloom', bulb, T(0, 0, -1.17))
+    for i in range(6):
+        a = i / 6 * math.tau
+        petal = bmesh.new(); bmesh.ops.create_uvsphere(petal, u_segments=8, v_segments=6, radius=.07)
+        p.add('petal', petal, T(math.cos(a) * .09, math.sin(a) * .09, -1.2) @ R(a, 'Z') @ R(.7, 'Y') @ Matrix.Diagonal((.45, .2, 1, 1)))
+    for i in range(3):
+        a = i / 3 * math.tau + .5
+        p.add('leaf', cube(.14, .02, .045), T(math.cos(a) * .07, math.sin(a) * .07, -1.06) @ R(a, 'Z') @ R(.5, 'Y'))
+    o = p.build()
+    marker(o, 'WeaponBase', (0, 0, -.9)); marker(o, 'WeaponTip', (0, 0, -1.27))
+    return o
+
+weapons = [build_groveblade(), build_stonebreaker(), build_sporewand(), build_windstring(), build_bloomstaff()]
 tris = sum(len(p.vertices) - 2 for o in weapons for p in o.data.polygons)
 print('WEAPONS', [o.name for o in weapons], 'TRIANGLES', tris)
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -150,7 +216,7 @@ bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
 print('EXPORTED', OUT, os.path.getsize(OUT) // 1024, 'KB')
 
 if PREVIEW:
-    weapons[0].location = (-.25, 0, 1.3); weapons[1].location = (.25, 0, 1.3)
+    for i, w in enumerate(weapons): w.location = (-.8 + i * .4, 0, 1.3)
     world = bpy.data.worlds.new('w'); scene.world = world; world.use_nodes = True
     world.node_tree.nodes['Background'].inputs['Color'].default_value = (.3, .36, .34, 1)
     sun = link(bpy.data.objects.new('sun', bpy.data.lights.new('sun', 'SUN'))); sun.data.energy = 3.5; sun.rotation_euler = (math.radians(40), 0, math.radians(30))

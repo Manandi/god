@@ -19,7 +19,7 @@ import {supabase} from './supabase.js';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
 const clean = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-const EVENTS = ['pos', 'state', 'hello', 'world', 'hit', 'act', 'spawn'];
+const EVENTS = ['pos', 'state', 'hello', 'world', 'hit', 'act', 'spawn', 'support'];
 
 function nameTag(text) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 48;
@@ -65,7 +65,7 @@ function localTransport(code, id, on) {
   };
 }
 
-export function createCoop(scene, { player, groundY, getName, getAppearance, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, defaultCode='' }) {
+export function createCoop(scene, { player, groundY, getName, getAppearance, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, onSupport, defaultCode='' }) {
   const button = document.getElementById('lobbyButton'), status = document.getElementById('lobbyStatus');
   const params = new URLSearchParams(location.search), local = params.get('net') === 'local';
   // Each tab is its own player (sessionStorage), so two tabs can share a lobby.
@@ -107,6 +107,8 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
       else if (name === 'hit' && isHost()) onHit?.(payload);
       else if (name === 'spawn' && isHost()) onSpawn?.(payload.id);
       else if (name === 'act' && payload.id !== id) { const r = remotes.get(payload.id); if (r) r.act = .35; }
+      // Heals, shields and war cries from a teammate: each game applies what reaches its own explorer.
+      else if (name === 'support' && payload.from !== id) onSupport?.(payload);
     },
     async status(s) {
       if (s === 'up') {
@@ -159,6 +161,8 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     sendSpawn: chapter => send('spawn', { id: chapter, from: id }),
     /** This explorer attacked: friends see their figure lunge. */
     sendAct: () => send('act', { id }),
+    /** Help for teammates near a point: { kind, x, z, radius, ... } (see main.js applySupport). */
+    sendSupport: help => send('support', { ...help, from: id }),
     update(dt, time) {
       if (connected && (sendTimer -= dt) <= 0) {
         sendTimer = .1;

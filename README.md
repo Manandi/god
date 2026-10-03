@@ -97,6 +97,41 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-03 (class weapons, inventory, class moves)
+
+- **New Blender weapons** (`tools/blender/build_weapons.py` → `public/characters/weapons/weapons.glb`):
+  - **Spore Wand** (mage): twisted rootwood with a glowing mushroom tip.
+  - **Windstring Bow** (ranger): curved heartwood limbs with a glowing string.
+  - **Bloom Staff** (support): a long haft crowned with a healing flower.
+  - Fighter keeps the Groveblade and tank the Stonebreaker.
+  - Grips are in `src/weapons.js` (`GRIP`/`FP_GRIP`).
+- **Ranged and healing moves** (`src/combat/moves.js`):
+  - Moves without a `hitbox` fire a `shot` at a set time (`combat/projectiles.js`). Projectiles hit through `strikeCreature`, so co-op guests' hits still go to the host.
+  - The wand fires bolts; its heavy is a charged orb that bursts in an area (the mage's `chargePower` scales the wand).
+  - The bow fires arrows; its charged heavy pierces.
+  - The staff does two sweeps; its heavy is the **Bloom** (a `pulse`), which heals you and every hunter within 7 m.
+  - Aiming uses the lock target, else a creature within about 18° ahead, else straight ahead (in first person, where you look).
+- **Weapon rules** (`weaponEligibility` in `src/profile.js`):
+  - Fists for everyone. Each class weapon opens at **level 3**, for its own class only; an unlocked hybrid carries both classes' weapons.
+  - If your chosen weapon is locked you hold your class weapon (if open) or your fists. The old stat-gated "bare hands" penalty is gone.
+- **INVENTORY** (menu button, or **I** in game): your weapons, showing which are equipped, open or locked and why, plus your class moves. EQUIP picks one.
+- **Class moves** (`src/combat/skills.js`, keys **G** and **T**, a HUD bar under Breath with cooldowns and active buffs):
+  - Every class learns a move at **level 3 (G)** and **level 5 (T)**:
+    - **Fighter:** Whirlwind (360° heavy); War Cry (+25% damage for you and hunters within 9 m).
+    - **Tank:** Barkshield (you and the nearest hunter soak 2 hits); Root Stomp (stagger within 4 m).
+    - **Ranger:** Volley (5 arrows); Wind Step (+30% speed, free dashes).
+    - **Mage:** Spore Nova (area burst at the target); Rooting Snare (they reel, open to a Root Strike).
+    - **Support:** Mending Bloom (heal 1 for you and hunters within 9 m); Second Spring (survive one fatal blow).
+  - An unlocked hybrid gets its first class's level-3 move on G and its second class's on T.
+  - Team effects travel as co-op `support` messages (`coop.sendSupport`, `applySupport` in `main.js`).
+- Orin's tutorial now mentions level 3 weapons, I, and G/T. The dev panel can equip any weapon.
+- **Tested in the browser:**
+  - Wand bolts and burst, bow arrows and Volley, and the Bloom and Mending Bloom (+1 heart each) all work.
+  - Barkshield is up for the tank.
+  - At level 1, moves and weapons are locked.
+  - The inventory equips a weapon.
+  - Grips were checked in third and first person (the bow was rolled upright).
+
 ## Latest shared state — 2026-10-03 (Thursday hunt, Hollow Rift, week 1 quest)
 
 - **Week 1 quest:** learning is **one 20-minute session** (was two). Every learning task now says that anything counts: a hobby, cooking, an instrument, a language and so on (`note` on `learn()` in `src/training.js`). Week 1 is still about 560 XP, which is level 3.

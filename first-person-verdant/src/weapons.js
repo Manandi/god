@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// The Groveblade and Stonebreaker, built in Blender (tools/blender/build_weapons.py).
+// The class weapons, built in Blender (tools/blender/build_weapons.py): Groveblade
+// (fighter), Stonebreaker (tank), Spore Wand (mage), Windstring Bow (ranger) and Bloom Staff (support).
 // Each model has its grip on the origin and its business end toward -Y; the
 // empties WeaponBase and WeaponTip mark the striking segment, which the combat
 // code uses as the hitbox (moves.js), so the blade you see is the blade that hits.
 
 const BASE = import.meta.env?.BASE_URL || '/';
-export const WEAPON_MODELS = ['groveblade', 'stonebreaker'];
+export const WEAPON_MODELS = ['groveblade', 'stonebreaker', 'sporewand', 'windstring', 'bloomstaff'];
 
 // How each weapon sits in the block fist (RightHand bone space; the fist is
 // centred at y -0.05 and the forearm continues along -Y). Rotations are
@@ -18,12 +19,20 @@ export const WEAPON_MODELS = ['groveblade', 'stonebreaker'];
 // forward in a ready stance, the Stonebreaker held upright.
 export const GRIP = {
   groveblade: { position: [0, -.05, -.01], rotation: [-.5, Math.PI / 2, 0], carry: [2, Math.PI / 2, 0] },
-  stonebreaker: { position: [0, -.05, -.01], rotation: [.5, 0, 0], carry: [2.4, 0, 0], shift: -.18 }
+  stonebreaker: { position: [0, -.05, -.01], rotation: [.5, 0, 0], carry: [2.4, 0, 0], shift: -.18 },
+  // The wand points out of the fist like a short blade; the staff is held like the maul, upright at rest;
+  // the bow's grip runs across the fist with the limbs up and down.
+  sporewand: { position: [0, -.05, -.01], rotation: [-.5, 0, 0], carry: [1.6, 0, 0] },
+  windstring: { position: [0, -.05, -.01], rotation: [0, Math.PI / 2, 0], carry: [0, Math.PI / 2, 0] },
+  bloomstaff: { position: [0, -.05, -.01], rotation: [.5, 0, 0], carry: [2.6, 0, 0], shift: .12 }
 };
 // First-person arms reach along -Z (the fist is at z -0.275): the same grips turned a quarter.
 export const FP_GRIP = {
   groveblade: { position: [0, 0, -.27], rotation: [Math.PI / 2 + .5, Math.PI / 2, 0] },
-  stonebreaker: { position: [0, 0, -.27], rotation: [Math.PI / 2 + .5, 0, 0], shift: -.18 }
+  stonebreaker: { position: [0, 0, -.27], rotation: [Math.PI / 2 + .5, 0, 0], shift: -.18 },
+  sporewand: { position: [0, 0, -.27], rotation: [Math.PI / 2 + .3, 0, 0] },
+  windstring: { position: [0, 0, -.27], rotation: [Math.PI / 2, Math.PI / 2, 0] },
+  bloomstaff: { position: [0, 0, -.27], rotation: [Math.PI / 2 + .5, 0, 0], shift: .12 }
 };
 
 let pending = null;
