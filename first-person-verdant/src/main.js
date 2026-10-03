@@ -22,6 +22,7 @@ import { profile,stats,saveProfile,units,level,pathInfo } from './profile.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
+import {createBossEvent,RIFT,HOLLOW_ARRIVE,HOLLOW_RIFT,inHollow} from './bossEvent.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, STAMINA, GUARD, SPRINT, FLASK } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
@@ -64,6 +65,7 @@ creatures.forEach((c,i)=>{c.netId='c'+i;});   // stable ids for team fights (cre
 // The keepers of the trail are solid, like everything else you can see.
 for(const n of Object.values(NPCS))world.colliders.push({x:n.x,z:n.z,r:.42*(n.scale||1),top:groundY(n.x,n.z)+2.2*(n.scale||1)});
 const collisionGrid=createCollisionGrid(world.colliders);
+const bossEvent=createBossEvent(scene,{addCollider:c=>collisionGrid.add(c),groundY});
 const globe=createGlobe(),narrator=createNarrator();let shell;
 const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.08,540);camera.rotation.order='YXZ';
 const shoulderCam=new ShoulderCamera(camera,{obstacles:world.cameraObstacles,grid:collisionGrid,ground:groundY});
@@ -263,6 +265,8 @@ function nearestInteractable(){
   if(warden?.state==='released'&&story.stage==='gate'&&d(warden)<8)return{type:'orrun'};
   const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+mech.echoReach);
   if(echo)return{type:'echo',value:echo};
+  if(d(RIFT)<2.6)return{type:'rift'};
+  if(d(HOLLOW_RIFT)<2.6)return{type:'riftHome'};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
   if((d(world.city.rest)<4.2||d(world.home.rest)<4.2)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
@@ -278,7 +282,9 @@ function interact(){
     const c=CHAPTERS.find(c=>c.id===e.id);
     memories.add(e.id);story.remember(e.id);e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;persist();playTone(690,.7,.11,'sine');playTone(1040,.6,.05,'triangle');
     toast(`MEMORY FOUND · ${c.memoryTitle}`,`${c.memoryText}<br><br>${story.info.objective}`);toastTimer=7;
-  }else if(nearby.type==='gate'){
+  }else if(nearby.type==='rift')enterRift();
+  else if(nearby.type==='riftHome')travel(RIFT.x,RIFT.z-2.2,'MOSSGATE','Back through the rift.');
+  else if(nearby.type==='gate'){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
@@ -384,12 +390,53 @@ function finishStory(){
   $('endingChoices').textContent=parts.join(' ');
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
 }
+// --------------------------------------------------------- the weekly hunt
+// bossEvent.js: Thursdays (Central), level-gated, through the Hollow Rift, with a
+// shared five-minute gathering before Orrun wakes (two or more hunters needed).
+const huntersInHollow=()=>(inHollow(player)?1:0)+coop.others().filter(o=>inHollow(o)).length;
+function huntLive(){
+  if(dev.bossUnlocked)return true;
+  if(warden?.awake&&warden.alive)return true;                 // a fight in progress runs to its end
+  return bossEvent.phase()==='fight'&&huntersInHollow()>=2;
+}
+const mmss=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+function huntLabel(){
+  const w=bossWindow(),ph=bossEvent.phase();
+  if(cloudWorld.boss_defeated)return 'ORRUN RELEASED THIS WEEK';
+  if(inHollow(player)){
+    if(ph==='gathering')return `ORRUN WAKES IN ${mmss(bossEvent.countdown())} · ${huntersInHollow()} HUNTER${huntersInHollow()===1?'':'S'} HERE`;
+    if(ph==='fight'&&!warden?.awake)return huntersInHollow()<2?'WAITING FOR A SECOND HUNTER':'ORRUN STIRS';
+    return '';
+  }
+  if(!w.open)return bossWindowLabel();
+  if(ph==='gathering')return `THE HUNT GATHERS · RIFT IN MOSSGATE · ${mmss(bossEvent.countdown())} · LV ${w.level}+`;
+  if(ph==='fight')return 'THE HUNT HAS BEGUN';
+  return `THE HOLLOW RIFT IS OPEN · MOSSGATE · LV ${w.level}+`;
+}
+let travelling=false;
+/** A rift journey: fade out, move, fade in. */
+function travel(x,z,title,detail=''){
+  const veil=$('riftFade');veil.classList.add('on');travelling=true;
+  setTimeout(()=>{player.x=x;player.z=z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.jumpCount=0;lockTarget=null;combat.state='move';combat.t=0;
+    veil.classList.remove('on');travelling=false;toast(title,detail);playTone(380,.6,.05,'sine');},650);
+}
+async function enterRift(){
+  if(travelling)return;
+  const w=bossWindow(),lv=level();
+  if(cloudWorld.boss_defeated&&!dev.bossUnlocked){toast('ORRUN IS RELEASED','The hunt is won for this week. The rift opens again next Thursday.');return;}
+  if(!w.open&&!dev.bossUnlocked){const h=Math.ceil(w.remaining/3600000);toast('THE RIFT IS SEALED',`It opens on Thursday, Central time, for explorers of level ${w.level} and up: in ${h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h`}.`);return;}
+  if(lv<w.level&&!dev.bossUnlocked){toast(`LEVEL ${w.level} NEEDED`,`This week’s hunt needs level ${w.level}; you are level ${lv}. Log your training in WEEKLY QUEST.`);return;}
+  if(bossEvent.phase()==='fight'&&warden?.awake&&!bossEvent.state.joined&&!dev.bossUnlocked){toast('THE HUNT HAS BEGUN','The rift reopens if this attempt fails.');return;}
+  try{if(w.open)await bossEvent.enter();}
+  catch{if(!dev.bossUnlocked){toast('THE RIFT FLICKERS','Could not reach the hunt. Check your connection and try again.');return;}}
+  const ph=bossEvent.phase();
+  travel(HOLLOW_ARRIVE.x,HOLLOW_ARRIVE.z,'THE HOLLOW',ph==='gathering'?`Orrun wakes in ${mmss(bossEvent.countdown())}. Gather your hunters: two or more are needed.`:'Two or more hunters wake it.');
+}
 let witherT=-1;
 function updateBoss(rawDt){
   if(warden){
     if(cloudWorld.boss_defeated&&warden.state!=='released')warden.release(true);
-    const eventLocked=!dev.bossUnlocked&&(!bossWindow().open||coop.teamSize<2);
-    if(!cloudWorld.boss_defeated)warden.setSealed(story.before('gate')||eventLocked);
+    if(!cloudWorld.boss_defeated)warden.setSealed(!huntLive());
     if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
   }
   // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
@@ -413,6 +460,7 @@ function introShot(c,duration){
   shoulderCam.playCinematic({from:camera.position,to,lookFrom:new THREE.Vector3(player.x,groundY(player.x,player.z)+1.6,player.z),lookTo,duration});
 }
 function handleBossEvent(c,ev){
+  if(ev.type==='slept'){if(!coop.guest&&!dev.bossUnlocked)bossEvent.restart();toast('ORRUN SLEEPS AGAIN','The hunt failed. Step through the rift to gather again.');return true;}
   if(ev.type==='awaken'){introShot(c,2.2);sound.roar();toast('ORRUN, THE HOLLOW WARDEN','It wakes. Strike its head and legs to topple it; parry the bite.');lockTarget=lockTarget||c;return true;}
   if(ev.type==='roar'){sound.roar();cameraKick=Math.max(cameraKick,.12);cue('ROAR',.7);return true;}
   if(ev.type==='phase'){toast('THE HOLLOWING DEEPENS','The memories on its back burn brighter. Roots will rise beneath you.');return true;}
@@ -631,13 +679,15 @@ function checkDefeated(){
   if(player.health<=0){player.defeated=2.2;lockTarget=null;combat.state='move';}
 }
 function respawn(){
-  // You wake at the homestead; once the story reaches the gate, at Pip's lookout below the Hollow.
-  const checkpoint=story.reached('gate')&&!story.reached('end');
-  if(warden?.awake&&warden.alive)warden.reset();
-  player.defeated=0;player.health=maxHealth();player.x=checkpoint?2:world.home.spawn.x;player.z=checkpoint?-147:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  // You wake at the homestead; once the story reaches the gate, or if you fell in the hunt, by the
+  // Hollow Rift in Mossgate (you can step back through it while your hunt lasts).
+  const hunting=inHollow(player),checkpoint=hunting||(story.reached('gate')&&!story.reached('end'));
+  // Orrun only goes back to sleep if nobody is left fighting it (a guest's copy follows the host).
+  const othersHunting=coop.others().some(o=>inHollow(o));
+  if(warden?.awake&&warden.alive&&!othersHunting&&!coop.guest)warden.reset();
+  player.defeated=0;player.health=maxHealth();player.x=checkpoint?RIFT.x:world.home.spawn.x;player.z=checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
-  if(checkpoint){player.yaw=combat.facing=player.cameraYaw=yawOf(BED.x-player.x,BED.z-player.z);}
-  toast('THE ROOTS RETURN YOU TO THE TRAIL',checkpoint?'You wake below the Hollow. Orrun sleeps again.':'The memories you found remain with you.');
+  toast('THE ROOTS RETURN YOU TO MOSSGATE',hunting&&othersHunting?'Your hunters fight on. Step back through the rift to rejoin them.':checkpoint?'You wake by the Hollow Rift.':'The memories you found remain with you.');
 }
 
 // ------------------------------------------------------------ combat events
@@ -816,7 +866,7 @@ function scaleBosses(){
 
 /** A creature went down (by your hand, or in a team fight by anyone's). */
 function creatureDefeated(c){
-  if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL','The whole weekly world brought it down. Go to it and speak its name.');}
+  if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL',story.stage==='gate'?'The hunt brought it down. Go to it and speak its name.':'The hunt is won for this week.');}
   else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
@@ -868,13 +918,13 @@ function updateHUD(){
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(mech.flasks-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
-  const next=story.target();
+  const next=story.stage==='gate'&&inHollow(player)?{x:BED.x,z:BED.z,title:'ORRUN'}:story.target();
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
   updateWaypoint(next,distance);updateMinimap(next,1/30);
   $('objective').textContent=story.info.objective;
   const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
-  const event=story.reached('gate')&&!story.reached('end')?`${bossWindowLabel()}${bossWindow().open&&coop.teamSize<2?' · 2 HUNTERS REQUIRED':''}`:'';
+  const event=inHollow(player)||bossWindow().open||story.stage==='gate'?huntLabel():'';
   $('sideObjective').textContent=event||(cq?`CHRONICLE · ${cq.title} · ${chronicles.goalMet(cq)?'return to '+giver(cq):'recover the memory'}`:offer?`CHRONICLE · speak with ${giver(offer)} in Mossgate`:'');
   $('emoteStatus').textContent=player.emote==='idle'?'':`EMOTE · ${player.emote.toUpperCase()} · MOVE TO STAND`;
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
@@ -887,6 +937,8 @@ function updateHUD(){
   else if(crit)$('interaction').innerHTML='<b>CLICK</b> · ROOT STRIKE';
   else if(nearby?.type==='orrun')$('interaction').innerHTML='<b>E</b> · SPEAK ITS NAME <small>ORRUN</small>';
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
+  else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:'SEALED UNTIL THURSDAY'}</small>`;
+  else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
 // --------------------------------------------------------- quest waypoint
@@ -1037,7 +1089,7 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);coop.update(rawDt,elapsed);
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);coop.update(rawDt,elapsed);
   if(coop.teamSize>1&&coop.authority)sendWorld(rawDt);
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
@@ -1053,7 +1105,7 @@ function update(rawDt){
     // The host's creatures go after their explorer (assignTargets); a guest's follow the host's snapshots.
     const pick=targets?.get(c),target=pick?.o||playerPos;
     c.target=target;c.targetKey=pick?.key??'me';
-    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:story.stage==='gate'&&(dev.bossUnlocked||bossWindow().open&&coop.teamSize>=2)});
+    const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:huntLive()});
     if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
     // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
     if(target!==playerPos){const key=c.state+c.attack;if(c.localKey!==key){c.localKey=key;c.localHit=false;}
@@ -1178,7 +1230,7 @@ loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGe
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;warden.netId='warden';warden.scaleHealth=()=>levelDamage();   // keeps pace with level, like the creatures
   gateRoots=res.gateRoots;res.colliders.forEach(c=>collisionGrid.add(c));creatures.push(warden);
-  warden.setSealed(story.before('gate')||!bossWindow().open||coop.teamSize<2);
+  warden.setSealed(!huntLive());
   if(story.reached('end')||cloudWorld.boss_defeated){warden.release(true);if(gateRoots)gateRoots.visible=false;}
 }).catch(err=>console.warn('The Warden or its arena failed to load.',err));
 // The block explorer (ChatGPT Sites design) is the player. ?legacyCharacters
@@ -1220,6 +1272,6 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
 

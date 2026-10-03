@@ -60,3 +60,5 @@
 
 #minimap{display:block;width:150px;height:150px;margin:12px 0 0 auto;border-radius:50%;border:1px solid #9fc39a88;background:#0a1d18cc;box-shadow:0 6px 24px #0008}
 @media(max-width:700px){#minimap{width:96px;height:96px}}
+
+#riftFade{position:fixed;inset:0;background:radial-gradient(circle,#7ff0d0 0%,#0a2a22 45%,#020806 100%);opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:40}#riftFade.on{opacity:1}

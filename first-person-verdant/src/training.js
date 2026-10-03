@@ -73,9 +73,9 @@ const steps = (n, count) => ({ id: 'steps', kind: 'steps', label: `Reach ${n.toL
 const home = (w, count) => ({ id: 'home', kind: 'workout', workout: w, label: `${WORKOUTS[w].title[0]}${WORKOUTS[w].title.slice(1).toLowerCase()} · home workout`, amount: 1, count, unit: 'session' });
 // Distances come in round numbers for both systems: km for metric, miles for US units.
 const move = (km, mi, count = 1) => ({ id: 'run', kind: 'run', label: `Walk or run ${km} km in one go`, labelUS: `Walk or run ${mi} mile${mi === 1 ? '' : 's'} in one go`, amount: km, amountUS: mi * 1.609, count, unit: 'outing' });
-const learn = (min, count) => ({ id: 'study', kind: 'study', label: `Learn something for ${min} minutes`, amount: min, count, unit: 'session' });
+const learn = (min, count) => ({ id: 'study', kind: 'study', label: `Learn something for ${min} minutes`, note: 'Anything counts: a hobby, cooking a new dish, an instrument, a language, a book, a skill for work.', amount: min, count, unit: 'session' });
 export const PLAN = [
-  { tier: 'BEGINNER', items: [steps(5000, 2), home('A', 2), learn(20, 2)] },
+  { tier: 'BEGINNER', items: [steps(5000, 2), home('A', 2), learn(20, 1)] },   // week 1: one 20-minute session of learning
   { tier: 'BEGINNER', items: [steps(5000, 3), home('A', 2), learn(20, 2)] },
   { tier: 'FOUNDATION', items: [steps(6000, 3), home('B', 3), move(2, 1.25), learn(20, 2)] },
   { tier: 'FOUNDATION', items: [steps(7000, 3), home('B', 3), move(3, 2), learn(30, 2)] },

@@ -238,3 +238,57 @@ begin
 end;$$;
 revoke all on function public.submit_hunter(uuid, text, text, int, int, text, jsonb, text) from public;
 grant execute on function public.submit_hunter(uuid, text, text, int, int, text, jsonb, text) to anon, authenticated;
+
+
+-- The weekly hunt (migration boss_thursday_central_gathering, 2026-10-03).
+-- Orrun opens on Thursdays, Central time (America/Chicago), from 2026-10-08. The
+-- first hunter through the Hollow Rift starts a shared five-minute gathering
+-- (gathering_at); a gathering older than 25 minutes is stale, and p_restart
+-- clears the current one after a wipe. This replaces the weekend check above.
+alter table public.weekly_worlds add column if not exists gathering_at timestamptz;
+grant select (gathering_at) on public.weekly_worlds to anon, authenticated;
+
+create or replace function public.boss_day_open()
+returns boolean language sql stable set search_path = public as $$
+  select extract(dow from now() at time zone 'America/Chicago') = 4
+     and (now() at time zone 'America/Chicago')::date >= date '2026-10-08';
+$$;
+create or replace function public.check_boss_week(p_week text)
+returns void language plpgsql stable set search_path = public as $$
+begin
+  if p_week is null or p_week !~ '^\d{4}-\d{2}-\d{2}$'
+     or abs(p_week::date - date_trunc('week', now() at time zone 'America/Chicago')::date) > 1 then
+    raise exception 'not this week';
+  end if;
+end;$$;
+create or replace function public.defeat_weekly_boss(p_week text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.boss_day_open() then raise exception 'boss is sealed until Thursday (Central)'; end if;
+  perform public.check_boss_week(p_week);
+  insert into public.weekly_worlds(week_id,boss_defeated,defeated_at) values(left(p_week,16),true,now())
+  on conflict(week_id) do update set boss_defeated=true,defeated_at=coalesce(public.weekly_worlds.defeated_at,now());
+end;$$;
+create or replace function public.boss_gather(p_week text, p_restart timestamptz default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare g timestamptz;
+begin
+  if not public.boss_day_open() then raise exception 'boss is sealed until Thursday (Central)'; end if;
+  perform public.check_boss_week(p_week);
+  insert into public.weekly_worlds(week_id) values(left(p_week,16)) on conflict(week_id) do nothing;
+  if p_restart is not null then
+    update public.weekly_worlds set gathering_at = null where week_id = left(p_week,16) and gathering_at = p_restart;
+    return jsonb_build_object('at', null, 'now', now());
+  end if;
+  update public.weekly_worlds set gathering_at = now()
+   where week_id = left(p_week,16) and (gathering_at is null or gathering_at < now() - interval '25 minutes')
+   returning gathering_at into g;
+  if g is null then select gathering_at into g from public.weekly_worlds where week_id = left(p_week,16); end if;
+  return jsonb_build_object('at', g, 'now', now());
+end;$$;
+revoke all on function public.boss_gather(text, timestamptz) from public;
+revoke all on function public.boss_day_open() from public;
+revoke all on function public.check_boss_week(text) from public;
+grant execute on function public.boss_gather(text, timestamptz) to anon, authenticated;
+grant execute on function public.boss_day_open() to anon, authenticated;
+grant execute on function public.check_boss_week(text) to anon, authenticated;

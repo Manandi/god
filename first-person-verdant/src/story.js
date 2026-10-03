@@ -82,7 +82,7 @@ export const STAGES = [
     { id: `${c.id}_memory`, chapter: c.id, step: 'memory', objective: c.memory, target: c.id },
     { id: `${c.id}_report`, chapter: c.id, step: 'report', objective: c.report, target: c.npc }
   ]),
-  { id: 'gate', objective: 'Face the Hollow Warden at the Canopy Gate', target: { ...GATE, title: 'THE CANOPY GATE' } },
+  { id: 'gate', objective: 'Face the Hollow Warden: on Thursday, step through the Hollow Rift in Mossgate', target: { x: 0, z: 61.6, title: 'THE HOLLOW RIFT' } },
   { id: 'end', objective: 'The Canopy Gate stands open', target: { ...GATE, title: 'THE CANOPY GATE' } }
 ];
 const index = id => STAGES.findIndex(s => s.id === id);

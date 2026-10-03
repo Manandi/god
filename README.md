@@ -97,6 +97,23 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-03 (Thursday hunt, Hollow Rift, week 1 quest)
+
+- **Week 1 quest:** learning is **one 20-minute session** (was two). Every learning task now says that anything counts: a hobby, cooking, an instrument, a language and so on (`note` on `learn()` in `src/training.js`). Week 1 is still about 560 XP, which is level 3.
+- **The weekly hunt** (`src/bossEvent.js`, `bossWindow()` in `src/weeklyWorld.js`):
+  - **When:** Orrun opens every **Thursday, Central time** (America/Chicago), all day. The first hunt is **2026-10-08**, a week after launch.
+  - **Level required:** 3 for the first boss, then 2 more each week (5, 7, …), which tracks the plan's pace. Doing the full plan reaches it, with little slack in week 2.
+  - **Getting in:** the hollow is **sealed by a ring of thorns** (colliders at 24 m; you can't walk or jump in). The only way in is the **Hollow Rift** in Mossgate's square (0, 61.6), and a gold rift inside takes you home.
+  - **The gathering:** the first hunter through starts a **shared 5-minute gathering** (`boss_gather` RPC; `weekly_worlds.gathering_at`, server time, so every player sees the same clock). When it ends, Orrun wakes if **2+ hunters** are in the hollow; otherwise the HUD says "WAITING FOR A SECOND HUNTER".
+  - **During the fight:** once it starts, the rift only lets back in people who already joined this attempt. If you fall while others still fight, Orrun keeps going and you wake by the rift in Mossgate. If everyone falls and Orrun sleeps again, the host clears the gathering so the next attempt starts fresh. Gatherings older than 25 minutes also go stale.
+  - The story is no longer needed to fight Orrun. Players at the gate stage still get the release scene and the ending, and the gate objective now points to the rift.
+  - The server checks Thursday Central for both `boss_gather` and `defeat_weekly_boss` (migration `boss_thursday_central_gathering`, in `supabase/schema.sql`).
+  - **Tested** with a faked Thursday clock and mocked RPCs, so nothing was written live:
+    - Level 2 is turned away; on a Saturday the rift is sealed.
+    - At level 3 the rift teleports you and starts the 4:59 countdown.
+    - Alone after 5 minutes: "waiting". With two hunters (tabs over `&net=local`), Orrun wakes.
+    - Walking at the hollow stops at the thorns (25 m).
+
 ## Latest shared state — 2026-10-02 (quieter theme, typing sounds)
 
 - **Mycel's theme is quieter and chiller** (`src/music.js`):
