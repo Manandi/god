@@ -97,6 +97,16 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-03 (weapon charge tiers by level)
+
+- **Charging grows with level** (owner's idea; `chargeCap()`/`CHARGE_TIERS` in `src/combat/moves.js`, applied in `combat/player.js`):
+  - Below **level 3** the heavy can't be held (no charge).
+  - **Level 3:** charge I. **Level 5:** charge II.
+  - **Level 10:** holding the heavy turns it into the weapon's **signature blow**: Rootbreaker (fists), Verdant Spiral (Groveblade), Faultline (Stonebreaker), and new ones for the new weapons: **Spore Storm** (wand: a bigger burst), **Gale Shot** (bow: a faster, harder piercing arrow) and **Grove Bloom** (staff: heals 2–3 within 9 m).
+  - This applies to every weapon, fists included. Dev mode ignores it.
+- The inventory shows each weapon's three tiers and which are unlocked. Orin's "Show me the Rootbreaker" and the controls hint explain it.
+- Tested holding heavy: level 1 doesn't charge; level 3 reaches charge I; level 5 charge II; level 11 turns into the signature blow (spiral, storm, grove), with no errors.
+
 ## Latest shared state — 2026-10-03 (class weapons, inventory, class moves)
 
 - **New Blender weapons** (`tools/blender/build_weapons.py` → `public/characters/weapons/weapons.glb`):

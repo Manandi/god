@@ -26,7 +26,7 @@ import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import {createBossEvent,RIFT,HOLLOW_ARRIVE,HOLLOW_RIFT,inHollow} from './bossEvent.js';
 import { PlayerCombat } from './combat/player.js';
-import { MOVES, STAMINA, GUARD, SPRINT, FLASK, COUNTER } from './combat/moves.js';
+import { MOVES, STAMINA, GUARD, SPRINT, FLASK, COUNTER, chargeCap } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
 import { CombatDebug } from './combat/debug.js';
 import './style.css';
@@ -1138,7 +1138,7 @@ function update(rawDt){
   const motion=frozen||player.defeated?{dx:0,dz:0}:combat.update(dt,{input,aimWithMovement:player.thirdPerson,lockTarget,pickTarget,bones:avatar.bones,grid:collisionGrid,
     targets:creatures.filter(c=>c.alive),stamina:player.stamina,x:player.x,z:player.z,chest,critTarget:critTarget(),
     sprinting:player.sprinting,airborne:!player.grounded,flasks:player.flasks,winded:player.winded,
-    moveset:movesetFor(equippedWeapon()),iframeBonus:mech.iframeBonus,parryBonus:mech.parryBonus});
+    moveset:movesetFor(equippedWeapon()),iframeBonus:mech.iframeBonus,parryBonus:mech.parryBonus,chargeCap:dev.bossUnlocked||devOverrides.anyWeapon?chargeCap(99):chargeCap(level())});
   // Speed stretches the dash (and rangers go further still).
   if(combat.state==='evade'){motion.dx*=mech.dash;motion.dz*=mech.dash;}
   if(!frozen)handleCombatEvents();

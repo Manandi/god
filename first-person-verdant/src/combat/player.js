@@ -166,15 +166,17 @@ export class PlayerCombat {
     if (this.state === 'attack') {
       let m = MOVES[this.move];
       // Charging: hold at the chamber pose while the heavy input is held.
-      if (m.charge && t0 < m.charge.at + 1e-6 && this.t >= m.charge.at && (this.heavyHeld || this.charging)) {
-        // Still holding at the chamber: the heavy becomes this weapon's Rootbreaker.
-        if (this.heavyHeld && m.charge.into && !this.charging) {
+      // How far you may charge depends on your level (moves.js chargeCap); none below level 3.
+      const cap = ctx.chargeCap || { levels: 2, into: true };
+      if (m.charge && cap.levels > 0 && t0 < m.charge.at + 1e-6 && this.t >= m.charge.at && (this.heavyHeld || this.charging)) {
+        // Still holding at the chamber: from level 10 the heavy becomes this weapon's signature blow.
+        if (this.heavyHeld && m.charge.into && cap.into && !this.charging) {
           const from = m; this.move = m.charge.into; m = MOVES[this.move]; this.t = m.charge.at;
           this.events.push({ type: 'rootbreaker', move: this.move }, { type: 'spend', amount: Math.max(0, m.stamina - from.stamina) });
         }
         if (this.heavyHeld && this.chargeTime < m.charge.max) {
           this.charging = true; this.chargeTime += dt; this.t = m.charge.at;
-          const level = m.charge.levels.filter(l => this.chargeTime >= l).length;
+          const level = Math.min(cap.levels, m.charge.levels.filter(l => this.chargeTime >= l).length);
           if (level > this.chargeLevel) { this.chargeLevel = level; this.events.push({ type: 'charge', level }, { type: 'spend', amount: m.charge.stamina }); }
           if (this.buffered('evade')) { this.charging = false; this.startEvade(ctx); }
           return out;

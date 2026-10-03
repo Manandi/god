@@ -191,3 +191,4 @@
 .inv-item em{font-style:normal;font-size:10px;letter-spacing:.1em;color:#bce09c}.inv-item em.lock{color:#e7a88f}
 .inv-item.equipped{border-color:#e4f5c5;background:#1b382de8}.inv-item.locked{opacity:.62}.inv-item.other{opacity:.45}
 #entry .inv-item button{justify-self:start;padding:7px 12px;font-size:10px}
+.inv-item .tiers{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}.inv-item .tiers i{font-style:normal;font-size:8px;letter-spacing:.08em;padding:2px 5px;border:1px solid #3f5f4a;color:#7f9a86}.inv-item .tiers i.on{border-color:#bce09c;color:#bce09c}

@@ -171,6 +171,24 @@ MOVES.staff_heavy = { label: 'Bloom', clip: 'rootbreaker', fp: 'fp_heavy', durat
   pulse: { at: .45, radius: 7, heal: [1, 1, 2] },
   charge: { at: .3, levels: [.35, .8], max: 1.2, damage: [1, 1, 1], poise: [1, 1, 1], stamina: 7 } };
 
+// Signature blows for the new weapons (held heavy at level 10, like the Rootbreaker).
+MOVES.wand_heavy.charge = { ...MOVES.wand_heavy.charge, into: 'wand_storm' };
+MOVES.wand_storm = { ...MOVES.wand_heavy, label: 'Spore Storm', damage: 34, poise: 12, stamina: 28,
+  shot: { at: .3, speed: 18, range: 30, radius: .8, aoe: 4, color: 0xe7d4ff }, charge: { ...MOVES.wand_heavy.charge, into: null } };
+MOVES.bow_heavy.charge = { ...MOVES.bow_heavy.charge, into: 'bow_storm' };
+MOVES.bow_storm = { ...MOVES.bow_heavy, label: 'Gale Shot', damage: 34, poise: 10, stamina: 26,
+  shot: { at: .32, speed: 72, range: 70, radius: .42, color: 0xffffff, arrow: true, pierce: true }, charge: { ...MOVES.bow_heavy.charge, into: null } };
+MOVES.staff_heavy.charge = { ...MOVES.staff_heavy.charge, into: 'staff_grove' };
+MOVES.staff_grove = { ...MOVES.staff_heavy, label: 'Grove Bloom', stamina: 38,
+  pulse: { at: .45, radius: 9, heal: [2, 2, 3] }, charge: { ...MOVES.staff_heavy.charge, into: null } };
+
+// Charging grows with your level (owner's design, 2026-10-03): hold the heavy to charge
+// from level 3 (up to charge I), deeper from level 5 (charge II), and from level 10 the held
+// heavy becomes the weapon's signature blow (Rootbreaker, Verdant Spiral, Faultline, Spore
+// Storm, Gale Shot, Grove Bloom). Below level 3 the heavy cannot be held.
+export const CHARGE_TIERS = [[3, 'CHARGE I'], [5, 'CHARGE II'], [10, 'SIGNATURE BLOW']];
+export const chargeCap = level => ({ levels: level >= 5 ? 2 : level >= 3 ? 1 : 0, into: level >= 10 });
+
 // Which move each input opens with, per weapon. Rootbound fists are the
 // unarmed style; unarmed (a weapon you are not yet strong enough for) uses the
 // same moves at lower power.

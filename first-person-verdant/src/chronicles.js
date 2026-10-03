@@ -43,7 +43,7 @@ export const TOPICS = {
       'Shells turn blades, so go for the head and the legs. Topple them, then strike the belly.',
       'At level 3 your class weapon opens (press I for your inventory) and you learn your class’s first move: press G. Level 5 brings a second move on T.',
       'The Warden’s hollow is sealed by thorns. On Thursdays the rift in the square opens to hunters strong enough for that week (level 3 the first week, more after). The first one through starts a five-minute gathering, and it wakes for two or more of you.']],
-    ['training', 'Show me the Rootbreaker.', 'Hold R, then let it go to commit your weight. Don’t throw it without enough Breath to escape afterward.'],
+    ['training', 'Show me the Rootbreaker.', ['From level 3 you can hold R to charge a heavy blow; level 5 lets you charge it deeper.', 'At level 10, holding R turns your heavy into your weapon’s signature blow: the Rootbreaker with bare hands, a Verdant Spiral with the Groveblade, a Faultline with the Stonebreaker.', 'Don’t throw one without enough Breath to escape afterward.']],
     ['duty', 'How can I help Mossgate?', 'Wake the forest memories. Every one strengthens our wards and weakens the rot.'],
     ['boast', 'I can handle the turtles.', 'Confidence is useful. Noise is not. Come back after a perfect parry.']],
   sela: [['learn-move', 'How do I get around?', [
