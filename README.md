@@ -99,12 +99,12 @@ How the story uses the ChatGPT NPCs:
 
 ## Latest shared state — 2026-10-04 (class picker dropdown)
 
-- **CUSTOMIZE's class section is one dropdown** (`classTable()`/`classDetail()` in `src/shell.js`):
-  - Closed, it's one line: the current class and CHANGE ▾.
-  - Open, it shows Mycel's recommendation (with TAKE) and a **5×5 table**: rows are the main class, columns the blend; the diagonal holds the pure classes and every other cell a hybrid. Locked hybrids are dimmed.
-  - **Hover or tap** a cell to see its details underneath: description, bonus, key stats, G/T moves, weapons, and open or locked with what it needs. Clicking an open cell takes it and closes the dropdown.
-  - This replaces the two long button rows and the big recommendation card.
-  - Checked at desktop and phone widths.
+- **CUSTOMIZE's class section is a dropdown** (`classTable()`/`classDetail()` in `src/shell.js`):
+  - Closed, it's one line: the current class and ▾.
+  - Open, the **left** side is a list: Mycel's recommendation (with TAKE), then the 5 CLASSES, then the 10 HYBRIDS. Locked hybrids are dimmed and say LOCKED.
+  - The **right** side shows the details of the hovered (or current) class: description, bonus, key stats, G/T moves, weapons, and open or locked with what it needs. On phones the details sit below the list.
+  - Clicking an open class takes it and closes the dropdown.
+- The owner first got a 5×5 table and didn't like it ("just keep it a drop down for each class, and on the right side the detail"), so don't bring the table back.
 
 ## Latest shared state — 2026-10-03 (weapon charge tiers by level)
 

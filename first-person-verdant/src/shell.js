@@ -268,12 +268,16 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
       <dt>STATUS</dt><dd class="${u.ok?'ok':'no'}">${u.ok?(mine?(pathLocked()?'LOCKED':'IN USE'):'OPEN · CLICK TO TAKE'):`LOCKED · NEEDS ${esc(u.requirement)}`}</dd></dl>`;
   }
   function classTable(a){
-    const cell=(r,c)=>{const sec=r===c?'':c,info=pathInfo(r,sec),u=classUnlock(r,sec),on=a.discipline===r&&(a.secondary||'')===sec;
-      return `<td><button type="button" class="cls ${r===c?'pure':''} ${on?'selected':''} ${u.ok?'':'locked'}" data-cell="${r}+${sec}" aria-disabled="${!u.ok}">${esc(r===c?CLASS_INFO[r].label:info.label)}</button></td>`;};
+    // A dropdown: the five classes, then the ten hybrids; the details of the hovered (or
+    // current) one show on the right. A hybrid keeps your current main class first.
     const now=pathInfo(),r=recommendedPath(),ri=pathInfo(r.primary,r.secondary),recMine=a.discipline===r.primary&&(a.secondary||'')===r.secondary;
-    return `<h3>CLASS</h3><details class="class-picker" ${classPickerOpen?'open':''}><summary><b>${esc(now.label)}</b><small>${now.hybrid?`${CLASS_INFO[a.discipline].label} + ${CLASS_INFO[a.secondary].label}`:'PURE CLASS'}${pathLocked()?' · LOCKED':''}</small><i>CHANGE ▾</i></summary><div class="class-pop">
-      <div class="class-rec"><small>MYCEL RECOMMENDS</small><b>${esc(ri.label)}</b>${recMine?'<em>✓ YOURS</em>':`<button type="button" class="take-rec" data-path="${r.primary}+${r.secondary}">TAKE</button>`}</div>
-      <small class="class-hint">ROW = MAIN CLASS · COLUMN = BLEND · HOVER OR TAP FOR DETAILS</small><div class="class-table-wrap"><table class="class-table"><thead><tr><th></th>${CLASS_KEYS.map(k=>`<th>${CLASS_INFO[k].label}</th>`).join('')}</tr></thead><tbody>${CLASS_KEYS.map(r=>`<tr><th>${CLASS_INFO[r].label}</th>${CLASS_KEYS.map(c=>cell(r,c)).join('')}</tr>`).join('')}</tbody></table></div><div class="class-detail">${classDetail(a.discipline,a.secondary||'')}</div><small>Pure classes are open to all. Hybrids are the chase: 12 in both key stats unlocks one, with the full bonus of both classes plus Hybrid Mastery.</small></div></details>`;
+    const item=(x,y)=>{const info=pathInfo(x,y),u=classUnlock(x,y),on=a.discipline===x&&(a.secondary||'')===y;
+      return `<button type="button" class="dd-item ${on?'selected':''} ${u.ok?'':'locked'}" data-cell="${x}+${y}" aria-disabled="${!u.ok}"><b>${esc(info.label)}</b><small>${y?`${CLASS_INFO[x].label} + ${CLASS_INFO[y].label}`:CLASS_INFO[x].bonus}${u.ok?'':' · LOCKED'}${on?' · YOURS':''}</small></button>`;};
+    const hybrids=Object.keys(HYBRIDS).map(p=>{let [x,y]=p.split('+');if(y===a.discipline)[x,y]=[y,x];return item(x,y);}).join('');
+    return `<h3>CLASS</h3><div class="class-dd ${classPickerOpen?'open':''}"><button type="button" class="dd-toggle"><b>${esc(now.label)}</b><small>${now.hybrid?`${CLASS_INFO[a.discipline].label} + ${CLASS_INFO[a.secondary].label}`:'PURE CLASS'}${pathLocked()?' · LOCKED':''}</small><i>${classPickerOpen?'▴':'▾'}</i></button>
+      <div class="dd-panel"><div class="dd-list"><div class="dd-rec"><small>MYCEL RECOMMENDS</small><b>${esc(ri.label)}</b>${recMine?'<em>✓</em>':`<button type="button" class="take-rec" data-path="${r.primary}+${r.secondary}">TAKE</button>`}</div>
+      <small class="dd-group">CLASSES</small>${CLASS_KEYS.map(k=>item(k,'')).join('')}<small class="dd-group">HYBRIDS · ${HYBRID_REQ} IN BOTH KEY STATS</small>${hybrids}</div>
+      <div class="class-detail">${classDetail(a.discipline,a.secondary||'')}</div></div></div>`;
   }
   function renderCustomize(){
     const a=profile.appearance;
@@ -298,8 +302,8 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
         if(!classUnlock(r,c||'').ok){b.classList.add('shake');setTimeout(()=>b.classList.remove('shake'),400);return;}
         profile.appearance.discipline=r;profile.appearance.secondary=c||'';classPickerOpen=false;saveProfile();onAppearance();renderCustomize();};
     });
-    entry.querySelector('.class-picker')?.addEventListener('toggle',e=>{classPickerOpen=e.target.open;});
-    entry.querySelector('.class-table')?.addEventListener('mouseleave',()=>showDetail(`${a.discipline}+${a.secondary||''}`));
+    entry.querySelector('.dd-toggle')?.addEventListener('click',()=>{classPickerOpen=!classPickerOpen;renderCustomize();});
+    entry.querySelector('.dd-list')?.addEventListener('mouseleave',()=>showDetail(`${a.discipline}+${a.secondary||''}`));
     entry.querySelectorAll('[data-path]').forEach(b=>b.onclick=()=>{
       let [x,y]=b.dataset.path.split('+');if(y&&y===a.discipline)[x,y]=[y,x];
       profile.appearance.discipline=x;profile.appearance.secondary=y||'';classPickerOpen=false;saveProfile();onAppearance();renderCustomize();
