@@ -97,6 +97,15 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-04 (class picker dropdown)
+
+- **CUSTOMIZE's class section is one dropdown** (`classTable()`/`classDetail()` in `src/shell.js`):
+  - Closed, it's one line: the current class and CHANGE ▾.
+  - Open, it shows Mycel's recommendation (with TAKE) and a **5×5 table**: rows are the main class, columns the blend; the diagonal holds the pure classes and every other cell a hybrid. Locked hybrids are dimmed.
+  - **Hover or tap** a cell to see its details underneath: description, bonus, key stats, G/T moves, weapons, and open or locked with what it needs. Clicking an open cell takes it and closes the dropdown.
+  - This replaces the two long button rows and the big recommendation card.
+  - Checked at desktop and phone widths.
+
 ## Latest shared state — 2026-10-03 (weapon charge tiers by level)
 
 - **Charging grows with level** (owner's idea; `chargeCap()`/`CHARGE_TIERS` in `src/combat/moves.js`, applied in `combat/player.js`):
