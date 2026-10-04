@@ -70,3 +70,15 @@
 #skills .skill.cooling{opacity:.6}#skills .skill.cooling small{color:#e7c8a0}
 #skills .skill.locked{opacity:.4}#skills .skill.locked small{color:#a6b7a9}
 #skills .skill.buff{min-width:0;border-color:#f0d89788;color:#f0d897}
+/* Quest tracker (2026-10-04): a framed card under the region name, wrapping inside the screen. */
+.location{max-width:min(360px,calc(100vw - 64px))}
+.quest-card{position:relative;margin-top:4px;padding:9px 13px 10px;background:linear-gradient(90deg,#0b211dd9,#0b211d8c);border:1px solid #8fb08a55;border-left:3px solid #c9b46a;text-shadow:none;transition:border-color .4s,box-shadow .4s}
+.quest-card.fresh{border-left-color:#f6dd82;box-shadow:0 0 18px #f0d98f55}
+.quest-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;letter-spacing:.2em;color:#bce0a4}
+#questSteps{display:flex;gap:4px}#questSteps i{width:7px;height:7px;transform:rotate(45deg);border:1px solid #9fbf98;display:block}#questSteps i.done{background:#9fbf98}#questSteps i.now{background:#f0d98f;border-color:#f0d98f}
+.quest-flag{display:none;font:600 9px 'DM Mono',monospace;letter-spacing:.24em;color:#f6dd82;margin-top:5px}.quest-card.fresh .quest-flag{display:block}
+#objective{margin:5px 0 4px;font:600 15px/1.35 'Cinzel',serif;color:#f1f5e6;overflow-wrap:anywhere}
+#questMeta{display:block;font-size:11px;letter-spacing:.08em;color:#cfe0c0}
+.quest-progress{height:2px;margin-top:8px;background:#ffffff1c}.quest-progress i{display:block;height:100%;width:0;background:#c9b46a;transition:width .6s}
+#sideObjective:not(:empty){padding:6px 13px;background:#0b211d99;border-left:3px solid #f0d98f88;overflow-wrap:anywhere}
+@media(max-width:700px){.hud-top .compass,.location .eyebrow{display:none}.quest-card{padding:7px 10px}#objective{font-size:13px}.location{max-width:calc(100vw - 190px)}}

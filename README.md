@@ -97,6 +97,30 @@ How the story uses the ChatGPT NPCs:
 - GitHub Actions [Pages workflow](.github/workflows/pages.yml) publishes this branch's 3D game at `https://manandi.github.io/god/`; `/god/verdant/` redirects there, keeping `?lobby=` codes.
 - The existing owner-private 3D Site is `https://verdant-reach-first-person.manandi.chatgpt.site`, configured by `first-person-verdant/.openai/hosting.json`. Its source repository has some independent character/performance work. Merge deliberately; do not overwrite it wholesale with the GitHub tree.
 
+## Latest shared state — 2026-10-04 (no more getting stuck, 3 dialogue choices, stronger story, quest tracker)
+
+- **Getting stuck** (the owner was wedged between crates and posts in Mossgate, and on some rocks):
+  - `src/collision.js` `canOccupy`: if you already overlap something (after landing a jump on a rock's edge, a dash, or a knockback), any step that moves you out of it is allowed.
+  - The crate stack by house 3's door is gone (`BY_DOOR` in `src/sites.js`). With the cart and lantern posts it boxed walkers in.
+  - Automatic unstick: `escapePocket()` in `collision.js`, called from the movement code in `main.js`. If you push for a second without moving, it flood-fills the 0.5 m cells around you. If no open path leads 6 m out, it moves you to the nearest open ground. Out in the open it does nothing, so walking into a wall never teleports you.
+  - Checked by a full-map flood fill: the only enclosed area is the sealed hollow, plus 1–4 cell slivers, and the unstick walks out of every one.
+- **Dialogue shows at most 3 choices** (`showChoices` in `main.js`): the chronicle step, if there is one, then the freshest topics (heard ones only when nothing new is left), then Farewell. Keepers' decisions still show only their 2 answers.
+- **Story pacing and plot** (`src/story.js`; stage ids unchanged, so saves are untouched):
+  - **The clock:** the Forgetting. Each night Mossgate loses something (a lantern, the baker's name), and when the last lantern goes dark the town forgets itself.
+  - **The beats:**
+    - Orin says the Warden may have to die.
+    - The Rootwell memory shows wardens in Mosswatch green drinking at the pool.
+    - Ysolde confesses it was Mosswatch, and the plot turns: Orrun is the only thing still holding the rot back.
+    - Pip makes it personal: Sela forgot Pip's name.
+    - The carving says "If it forgets, remind it. Don't kill it."
+    - The finale: beat it down until it can hear you, then let it rest, through the Thursday rift.
+  - The main conversations are 4–5 lines, and each ends on a hook into the next place. The memories, the journal and some objectives were rewritten to match. The gate objective is now "Free Orrun: on Thursday, step through the Hollow Rift in Mossgate".
+- **Quest tracker** (top left; `updateQuestCard` in `main.js`, `story.progress` in `story.js`, `.quest-card` in `style.css`):
+  - A framed card shows the act ("CHAPTER II · MOSSWATCH RUINS") with diamond pips for its 4 steps, the objective (it wraps, never clipped), an arrow and distance to the target, and a thin bar for the whole story.
+  - A new objective flashes gold with "NEW OBJECTIVE" for 4 s.
+  - The chronicle or hunt line sits under the card.
+  - On phones the compass strip is hidden, because the card already shows the direction and distance.
+
 ## Latest shared state — 2026-10-04 (class picker dropdown)
 
 - **CUSTOMIZE's class section is a dropdown** (`classTable()`/`classDetail()` in `src/shell.js`):

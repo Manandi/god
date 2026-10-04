@@ -20,12 +20,12 @@ const TOWN = [
   ['Signpost', 5.6, 42.4, .4],
   ['Bench', 0, 57.6, facing(0, 57.6, 0, 53)], ['Bench', -3.8, 55.6, facing(-3.8, 55.6, 0, 53)], ['Bench', 3.8, 55.6, facing(3.8, 55.6, 0, 53)]
 ];
-// (House 3's crate stack sits left of its door: on the right it stood where Sela stands.)
+// (House 3 keeps only its barrel: a crate stack left of its door boxed walkers in against the cart and posts.)
 // Around each house, in the house's own frame (x across, z toward its back; the door faces -z).
 const AT_HOUSE = [
   ['WindowBox', 2.82, 2.45, .2, 0], ['WindowBox', -2.82, 2.45, .2, Math.PI], ['WindowBox', 0, 2.45, 2.32, -Math.PI / 2], ['Chimney', 1.5, 3.9, 1.1, 0]
 ];
-const BY_DOOR = [[['Sacks', -2.4, -3.0]], [['Firewood', 0, 3.3, Math.PI / 2]], [['Barrel', -2.3, -2.9], ['CrateStack', -3.9, -2.6, .3]], [['Barrel', 2.3, -2.9], ['Barrel', 2.9, -2.4]], [['Firewood', 0, 3.3, Math.PI / 2], ['Crate', -2.5, -3.0, .5]]];
+const BY_DOOR = [[['Sacks', -2.4, -3.0]], [['Firewood', 0, 3.3, Math.PI / 2]], [['Barrel', -2.3, -2.9]], [['Barrel', 2.3, -2.9], ['Barrel', 2.9, -2.4]], [['Firewood', 0, 3.3, Math.PI / 2], ['Crate', -2.5, -3.0, .5]]];
 const RADIUS = { Well: 1.3, StallCounter: 1.25, Cart: 1.4, Planter: .7, LanternPost: .22, Signpost: .2, Barrel: .45, Crate: .5, CrateStack: .9, Sacks: .6, Firewood: .8 };
 const HEIGHT = { Well: 1.0, StallCounter: 1.0, Cart: 1.2, Planter: .5, LanternPost: 3, Signpost: 2.9, Barrel: 1, Crate: .8, CrateStack: 1.5, Sacks: .8, Firewood: 1 };
 

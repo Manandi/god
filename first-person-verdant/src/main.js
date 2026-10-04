@@ -13,7 +13,7 @@ import { skillSlots } from './combat/skills.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
-import { createCollisionGrid,moveWithCollision } from './collision.js';
+import { createCollisionGrid,moveWithCollision,escapePocket } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
 import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamage } from './mechanics.js';
@@ -80,6 +80,7 @@ const player={x:world.home.spawn.x,z:world.home.spawn.z,yaw:0,cameraYaw:0,pitch:
 const keyState=new Set();let started=false,paused=true,done=false,journalOpen=false,toastTimer=0,elapsed=0,audio,hitstop=0,lockTarget=null,slowmo={scale:1,left:0},staminaRest=0,combo=0,comboTimer=0;
 let viewBlend=0,viewFromPosition=new THREE.Vector3(),viewFromRotation=new THREE.Quaternion();
 let cueText='',cueUntil=0,cameraKick=0;
+let unstickIn=0;
 let save;try{save=cloudHunter?.world||JSON.parse(localStorage.getItem('verdant-reach-3d-v1')||'{}');}catch{save={};}
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
@@ -341,7 +342,9 @@ function showChoices(){
   }
   const quest=chronicles.choiceFor(d.id),topics=TOPICS[d.id]||[],heard=chronicles.heard;
   const fresh=topics.filter(t=>!heard.has(t[0])),old=topics.filter(t=>heard.has(t[0])).map(([k,l,r])=>[k,`✓ ${l}`,r]);
-  d.choices=[...(quest?[quest]:[]),...fresh,...old,['farewell','Farewell.','']];
+  // Three options at most (owner, 2026-10-04): the chronicle step if there is one, the
+  // freshest topics (heard ones only when nothing new is left), and Farewell.
+  d.choices=[...(quest?[quest]:[]),...fresh,...old].slice(0,2).concat([['farewell','Farewell.','']]);
   if(document.pointerLockElement)document.exitPointerLock();renderDialogue();
 }
 function chooseDialogue(index){
@@ -1027,7 +1030,7 @@ function updateHUD(){
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
   updateWaypoint(next,distance);updateMinimap(next,1/30);
-  $('objective').textContent=story.info.objective;
+  updateQuestCard(next,distance);
   const cq=chronicles.active,offer=!cq&&chronicles.available(),giver=q=>NPCS[q.giver].name[0]+NPCS[q.giver].name.slice(1).toLowerCase();
   const event=inHollow(player)||bossWindow().open||story.stage==='gate'?huntLabel():'';
   $('sideObjective').textContent=event||(cq?`CHRONICLE · ${cq.title} · ${chronicles.goalMet(cq)?'return to '+giver(cq):'recover the memory'}`:offer?`CHRONICLE · speak with ${giver(offer)} in Mossgate`:'');
@@ -1045,6 +1048,18 @@ function updateHUD(){
   else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:'SEALED UNTIL THURSDAY'}</small>`;
   else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
+}
+// The quest tracker (top left): the act, its steps as pips, the objective, which way
+// and how far, and a thin bar for the whole story. A new objective flashes in gold.
+let questShown='',questFlash=0;
+function updateQuestCard(next,distance){
+  const pr=story.progress,obj=story.info.objective;
+  if(obj!==questShown){if(questShown)questFlash=4;questShown=obj;$('objective').textContent=obj;$('questAct').textContent=pr.act;
+    $('questSteps').innerHTML=Array.from({length:pr.steps},(_,i)=>`<i class="${i<pr.step?'done':i===pr.step?'now':''}"></i>`).join('');$('questBar').style.width=`${Math.round(pr.overall*100)}%`;}
+  questFlash=Math.max(0,questFlash-1/30);$('questCard').classList.toggle('fresh',questFlash>0);
+  const view=camera.getWorldDirection(new THREE.Vector3()),d=angleTo(yawOf(view.x,view.z),yawOf(next.x-player.x,next.z-player.z));
+  const arrow=distance<4?'●':['↑','↖','←','↙','↓','↘','→','↗'][((Math.round(d/(Math.PI/4))%8)+8)%8];
+  $('questMeta').textContent=`${arrow}  ${(next.title||'').toUpperCase()} · ${units.dist(distance)}`;
 }
 // --------------------------------------------------------- quest waypoint
 // A compass strip that turns with the view, a diamond pinned to the objective
@@ -1182,6 +1197,9 @@ function update(rawDt){
     for(const b of c.bodyCircles?.()||[{x:c.x,z:c.z,r:c.radius}]){const dx=player.x-b.x,dz=player.z-b.z,d=Math.hypot(dx,dz),min=b.r+.36;
     if(d<min&&d>1e-4){const push=(min-d);const nx=player.x+dx/d*push,nz=player.z+dz/d*push;moveWithCollision(player,nx-player.x,nz-player.z,collisionGrid,groundY);}}}
   const moved=Math.hypot(player.x-oldX,player.z-oldZ)/Math.max(dt,1e-4);
+  // Wedged in a pocket between props or rocks: after a second of pushing with no way
+  // out, step to the nearest open ground (escapePocket returns null in the open).
+  if(hasInput&&combat.mobile&&!dev.noclip&&moved<.25){if((unstickIn+=dt)>1){unstickIn=0;const out=escapePocket(player.x,player.z,collisionGrid,groundY);if(out){player.x=out.x;player.z=out.z;player.vx=player.vz=0;}}}else unstickIn=0;
 
   const oldFeet=groundY(player.x,player.z)+player.height;
   player.velocityY-=22*dt;player.height+=player.velocityY*dt;
