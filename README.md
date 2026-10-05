@@ -2,15 +2,15 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
-## Latest handoff — 2026-10-05 · Shadowmere in progress
+## Latest handoff — 2026-10-05 · Shadowmere published
 
-- **Branch:** `claude/practical-babbage-tbonr1`. Latest remote state fetched before editing: `785ae615a33a432942ad14b3c9c7a2e050255c96`. Check for newer PC commits before continuing.
+- **Branch:** `claude/practical-babbage-tbonr1`. Shadowmere game commit: `12cc7f36f4757183073851735f6ee1ab91fe03bc`. Fetch the branch and check for newer PC commits before continuing.
 - **New destination:** Shadowmere is selectable as the second playable atlas realm inside the connected grassland. It adds dark soil, a dense canopy and amber seed lights; green monkey enemies; and the Rootbound Gorilla with a sword, telegraphed slam and expanding seed-burst attack. Test route: `?shadowmere&debug`.
 - **Concept image:** `first-person-verdant/public/concepts/shadowmere-forest-concept.png`. Blender scene source: `first-person-verdant/tools/blender/build_shadowmere.py`.
 - **Data safety:** no save, account-linking, leaderboard, Supabase or world-record code/data was changed. Keep existing storage keys and shared player records intact. The new direct-entry route does not mark the profile complete.
 - **Checks:** `npm ci` and `npm run build` pass (using the official npm CLI with the bundled Node runtime); the build reports the existing large JavaScript chunk warning. Changed JavaScript passes `node --check`; a Three.js smoke check created both enemy types, confirmed the forest trees block movement while the entry stays open, and observed gorilla wind-up, slam and seed-burst events. The local browser preview was blocked by the admin policy check, so visual playtesting is still pending.
 - **Blender status:** the scene builder has not yet produced `.blend`/GLB exports. The bundled Blender command-line binary crashes before executing Python on this Mac. Finish the Blender export in a working Blender environment before describing those exports as complete.
-- **Deployment:** not pushed or live yet. GitHub Pages publishes at `https://manandi.github.io/god/`; verify its Actions run and live route after pushing. The separate Sites config is independent.
+- **Deployment:** game commit `12cc7f36f4757183073851735f6ee1ab91fe03bc` was fast-forwarded to the existing branch without a force push. Its GitHub Pages Actions run completed successfully. The public page serves the new JavaScript bundle with the Rootbound Gorilla and Shadowmere route, and the concept image returns HTTP 200. Play at `https://manandi.github.io/god/?shadowmere`. The separate Sites config is independent and was not updated.
 
 ## Rules for AI assistants: read first
 
