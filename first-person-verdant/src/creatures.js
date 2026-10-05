@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { groundY } from './world.js';
+import { groundY, SHADOWMERE } from './world.js';
 import { canOccupy } from './collision.js';
 import { angleTo } from './angles.js';
 import { level } from './profile.js';
@@ -23,6 +23,8 @@ const damp = THREE.MathUtils.damp;
 const KINDS = {
   shellback: { size: .64, pace: 1, health: 45, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
   thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
+  monkey: { size: .72, pace: .78, health: 38, poise: 9, walk: 1.7, chase: 3.6, turn: 5.2, notice: 15, spacing: 2.0, cooldown: [.75, 1.4], biteRadius: .44 },
+  gorilla: { size: 1.22, pace: 1.12, health: 225, poise: 28, walk: .9, chase: 2.6, turn: 2.8, notice: 24, spacing: 3.1, cooldown: [1.25, 2.1], biteRadius: .8 },
   // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
   // from the game on the owner's request; its isBoss / quake code paths below are unused.
 };
@@ -46,6 +48,54 @@ const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL
 export const SHOCKWAVE = { start: .02, duration: .4, from: .5, to: 3.1 };
 const shockwaveRadius = t => SHOCKWAVE.from + (SHOCKWAVE.to - SHOCKWAVE.from) * Math.min(1, Math.max(0, (t - SHOCKWAVE.start) / SHOCKWAVE.duration));
 
+function buildPrimateVisual(c) {
+  const big=c.type==='gorilla', bodyMat=new THREE.MeshStandardMaterial({color:big?0x173b2c:0x347b37,roughness:.94,flatShading:true}),
+    lightMat=new THREE.MeshStandardMaterial({color:big?0x285943:0x6d9b45,roughness:.95,flatShading:true}),
+    faceMat=new THREE.MeshStandardMaterial({color:big?0x3c4536:0x8d704c,roughness:.92,flatShading:true}),
+    goldEye=new THREE.MeshStandardMaterial({color:0xf0cb69,emissive:0x67420a,emissiveIntensity:.7,roughness:.28}),
+    leather=new THREE.MeshStandardMaterial({color:0x4a3020,roughness:1}),rootglass=new THREE.MeshStandardMaterial({color:0x8be2b5,emissive:0x174d35,emissiveIntensity:.85,metalness:.3,roughness:.28}),seedMat=new THREE.MeshStandardMaterial({color:0x8d6129,roughness:.85});
+  c.body.clear();c.shellMat=bodyMat;c.skinMat=faceMat;c.eyeMat=goldEye;c.legs=[];c.arms=[];
+  const torso=part(c.body,sphere(),bodyMat,0,1.02,0,big?.72:.46,big?.83:.60,big?.50:.39);
+  if(big){
+    part(c.body,sphere(),lightMat,0,1.6,-.05,.82,.42,.53);
+    for(let i=0;i<7;i++){const leaf=part(c.body,new THREE.ConeGeometry(.25,.8,4),lightMat,Math.cos(i*.9)*.56,1.77,Math.sin(i*.9)*.42);leaf.rotation.z=Math.cos(i*.9)*.8;}
+    const belt=part(c.body,new THREE.CylinderGeometry(.63,.68,.16,12),leather,0,.84,0);belt.rotation.x=0;
+    for(let i=0;i<3;i++)part(c.body,sphere(.19),seedMat,-.34+i*.34,.85,.47,.8,1.2,.8);
+    // Oversized rootglass cleaver is attached to the right hand and reads at distance.
+    const sword=new THREE.Group();sword.position.set(.78,1.22,.2);sword.rotation.z=-.27;c.body.add(sword);
+    part(sword,new THREE.CylinderGeometry(.075,.095,.52,8),leather,0,0,0);
+    const guard=part(sword,new THREE.BoxGeometry(.48,.1,.13),leather,0,.28,0);guard.rotation.z=-.12;
+    const blade=part(sword,new THREE.BoxGeometry(.31,1.35,.12),rootglass,.03,.98,0);blade.rotation.z=-.12;
+    part(sword,new THREE.ConeGeometry(.19,.38,4),rootglass,.03,1.83,0).rotation.z=Math.PI;
+    c.sword=sword;
+  }
+  c.neck=new THREE.Group();c.neck.position.set(0,big?1.58:1.28,0);c.body.add(c.neck);
+  c.head=new THREE.Group();c.neck.add(c.head);
+  part(c.head,sphere(),bodyMat,0,.28,.04,big?.54:.38,big?.54:.4,big?.46:.36);
+  part(c.head,sphere(),faceMat,0,.08,.39,big?.35:.25,big?.22:.16,big?.17:.11);
+  for(const side of [-1,1]){
+    part(c.head,sphere(.14),faceMat,side*(big?.52:.36),.3,0,1,1.15,.55);
+    part(c.head,sphere(.07),goldEye,side*(big?.19:.15),.36,.36,.8,.95,.48);
+    part(c.head,sphere(.034),darkMaterial,side*(big?.19:.15),.36,.4);
+  }
+  for(const side of [-1,1]){
+    const arm=new THREE.Group();arm.position.set(side*(big?.63:.39),big?1.45:1.12,0);c.body.add(arm);
+    part(arm,sphere(),big?lightMat:bodyMat,side*.08,-.34,.02,big?.32:.19,big?.58:.43,big?.28:.21);
+    part(arm,sphere(),faceMat,side*.12,-.7,.18,big?.3:.17,big?.25:.16,big?.3:.18);
+    c.arms.push({mesh:arm,side});
+    const leg=new THREE.Group();leg.position.set(side*(big?.36:.19),.55,-.02);c.body.add(leg);
+    part(leg,sphere(),bodyMat,0,-.2,.02,big?.29:.18,big?.42:.33,big?.31:.26);
+    part(leg,sphere(),faceMat,0,-.42,.19,big?.34:.24,.13,.4);
+    c.legs.push({mesh:leg,phase:side===1?0:Math.PI});
+  }
+  if(!big){
+    const tail=new THREE.Group();tail.position.set(0,.87,-.31);c.body.add(tail);
+    for(let i=0;i<4;i++){const piece=part(tail,new THREE.CylinderGeometry(.06-i*.008,.085-i*.008,.33,7),bodyMat,0,.14+i*.09,-i*.12);piece.rotation.x=-.55-i*.2;}
+    c.tail=tail;
+  }
+  c.body.updateMatrixWorld(true);
+}
+
 /**
  * A creature driven by explicit states:
  *   wander → alert → approach ⇄ circle → windup(attack) → attack → recover → …
@@ -62,8 +112,9 @@ export class Creature {
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
     this.id = options.id || null; this.chapter = options.chapter || null;
-    this.isBoss = type === 'oldshell'; this.name = this.isBoss ? 'THE OLD SHELL' : ''; this.shellDamage = 0; this.shellBroken = false;
+    this.isBoss = type === 'oldshell'; this.isMajorEnemy = type === 'gorilla'; this.name = this.isBoss ? 'THE OLD SHELL' : this.isMajorEnemy ? 'ROOTBOUND GORILLA' : ''; this.shellDamage = 0; this.shellBroken = false;
     if (this.isBoss) { this.markerHeight = 3.6; this.focusHeight = 1.6; }
+    if (this.isMajorEnemy) { this.markerHeight = 4.2; this.focusHeight = 1.8; }
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
     this.state = 'wander'; this.t = 0; this.cooldown = 1; this.wanderTurn = 0;
     this.attack = null; this.attackYaw = 0; this.connected = false; this.enraged = false; this.combo = false;
@@ -118,6 +169,7 @@ export class Creature {
       for (let i = -1; i <= 1; i++) { const thorn = part(this.body, new THREE.ConeGeometry(.25, .85, 5), thornMaterial, i * .7, 2.0, -.4); thorn.rotation.z = i * .24; }
       for (let i = 0; i < 4; i++) { const leaf = part(this.body, new THREE.ConeGeometry(.28, .8, 4), thornMaterial, (i % 2 ? 1 : -1) * 1.0, 1.5, i < 2 ? -.9 : .35); leaf.rotation.z = (i % 2 ? 1 : -1) * .6; }
     }
+    if(type==='monkey'||type==='gorilla')buildPrimateVisual(this);
     // Health bar, only shown while the creature is hurt or targeted.
     this.bar = new THREE.Group(); this.bar.position.set(0, 2.9, 0); this.root.add(this.bar);
     const barBack = new THREE.Mesh(new THREE.PlaneGeometry(1.6, .12), new THREE.MeshBasicMaterial({ color: 0x14201a, transparent: true, opacity: .7, depthTest: false }));
@@ -153,6 +205,8 @@ export class Creature {
       // On its back only the belly is offered; the head is tucked against the ground.
       f.set(0, 1.0, -.2).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: 1.15 * s, part: 'belly' });
       return out;
+    } else if(this.type==='monkey'||this.type==='gorilla'){
+      f.set(0,this.type==='gorilla'?1.35:1.02,0).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:(this.type==='gorilla'?.72:.5)*s,part:'body'});
     } else {
       for (const [z, r] of [[.45, .98], [-.75, .98]]) {
         f.set(0, 1.05, z).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: r * s, part: 'shell' });
@@ -261,8 +315,8 @@ export class Creature {
       if (name === 'lunge') w = behind ? 0 : Math.abs(rel) < .5 ? 1.4 : .6;
       if (name === 'spin') w = behind || dist < 1.4 ? 2.4 : .35;
       // Shellbacks and thornlings only lunge and spin; the rearing slam is the Old Shell's.
-      if (name === 'slam') w = !this.isBoss || behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
-      if (a.boss) w = this.isBoss ? (dist < 4.5 ? 1.6 : .8) * (this.enraged ? 1.4 : 1) : 0;
+      if (name === 'slam') w = !(this.isBoss||this.isMajorEnemy) || behind ? 0 : Math.abs(rel) < .8 ? (this.enraged ? 1.4 : .9) : 0;
+      if (a.boss) w = (this.isBoss||this.isMajorEnemy) ? (dist < 4.5 ? 1.6 : .8) * (this.enraged ? 1.4 : 1) : 0;
       if (w > 0) options.push([name, w]);
     }
     let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
@@ -526,6 +580,16 @@ export class Creature {
       mesh.rotation.x = Math.sin(this.legPhase + phase) * .5 * moving;
       mesh.scale.setScalar(damp(mesh.scale.x, 1 - legsIn * .55, 14, dt));
     });
+    if(this.arms){
+      const wind=st==='windup'?Math.min(1,t/(tm?.windup||1)):0,attack=st==='attack'?Math.max(0,1-t/.22):0;
+      for(const {mesh,side} of this.arms){
+        const guard=st==='alert'?.18:0,lift=this.type==='gorilla'?(wind*.95+attack*-.75):wind*.52;
+        mesh.rotation.x=damp(mesh.rotation.x,guard+lift,st==='attack'?20:9,dt);
+        mesh.rotation.z=damp(mesh.rotation.z,side*(st==='recover'?.13:0),8,dt);
+      }
+      if(this.sword)this.sword.rotation.x=damp(this.sword.rotation.x,st==='windup'?.64:st==='attack'?-.48:0,st==='attack'?18:8,dt);
+    }
+    if(this.tail)this.tail.rotation.x=Math.sin(time*4+this.home.x)*.25;
     const rage = this.enraged ? 1 : 0;
     if (this.isBoss) {
       this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
@@ -581,6 +645,12 @@ export function createCreatures(scene, chapters = []) {
   for (const c of chapters) for (const [x, z, type] of c.mobs) {
     const m = new Creature(scene, x, z, type, { chapter: c.id }); m.sleep(); list.push(m);
   }
+  // Shadowmere patrols and its guardian belong to the second atlas destination.
+  // They keep their own home radius and never change Verdant Reach progression.
+  for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-3,SHADOWMERE.z-13]]){
+    const monkey=new Creature(scene,x,z,'monkey',{id:`shadow-monkey-${i}`});monkey.name='GREEN MONKEY';list.push(monkey);
+  }
+  const guardian=new Creature(scene,SHADOWMERE.guardian.x,SHADOWMERE.guardian.z,'gorilla',{id:'shadow-gorilla'});guardian.name='ROOTBOUND GORILLA';list.push(guardian);
   return list;
 }
 

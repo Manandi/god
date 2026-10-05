@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE, HUNT, ARENA } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE } from './world.js';
 import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
@@ -141,7 +141,10 @@ function updateJournal(){
     `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('')+chronicleEntries;
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
-function resume(){if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+function resume(realm){if(realm==='frost'){
+  player.x=SHADOWMERE.entry.x;player.z=SHADOWMERE.entry.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.yaw=player.cameraYaw=combat.facing=Math.PI;player.pitch=0;camera.rotation.set(0,Math.PI,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;
+  toast('SHADOWMERE','Follow the seed lanterns. Watch the canopy.');
+}if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
@@ -533,7 +536,7 @@ function teleport(x,z,label){
   lockTarget=null;combat.state='move';combat.t=0;cameraKick=0;viewBlend=0;toast(`DEV · ${label}`,'Moved to solid ground.');
 }
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
-  ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
+  ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],shadowmere:[SHADOWMERE.entry.x,SHADOWMERE.entry.z,'SHADOWMERE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
 // Real-life stat presets on the adult norms (profile.js): median adult, top ~5%, top 0.1%, and bottom ~5%.
 const DEV_REAL_INPUTS='hollow-roots-dev-real-inputs';
 const STAT_PRESETS={
@@ -973,7 +976,7 @@ function scaleBosses(){
 /** A creature went down (by your hand, or in a team fight by anyone's). */
 function creatureDefeated(c){
   if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL',story.stage==='gate'?'The hunt brought it down. Go to it and speak its name.':'The hunt is won for this week.');}
-  else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast('SHELLBACK DRIVEN BACK','Creatures never grant XP. Real effort does.');}
+  else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast(`${c.name||c.type.toUpperCase()} DRIVEN BACK`,'Creatures never grant XP. Real effort does.');}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
 function strikeCreature(c,params){
@@ -1238,12 +1241,12 @@ function update(rawDt){
       if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
-      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH'}[ev.attack],.7);debug.note(`${c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(c.type==='gorilla'&&ev.attack==='quake'?'SEED GRENADE · MOVE OR DASH THROUGH':({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:c.type==='monkey'?'CLAW LUNGE COMING':'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:c.type==='gorilla'?'SWORD SLAM · JUMP OR DASH':'SLAM · JUMP OR DASH THROUGH'}[ev.attack]),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
-      else if(ev.type==='enrage'){sound.enrage();toast(c.type==='thornling'?'THE THORNLING IS ENRAGED':'THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}
+      else if(ev.type==='enrage'){sound.enrage();toast(c.name?`${c.name} IS ENRAGED`:c.type==='thornling'?'THE THORNLING IS ENRAGED':'THE SHELLBACK IS ENRAGED','Faster attacks · shorter openings');}
       else if(ev.type==='rising')debug.note(`${c.type} rights itself`,elapsed);
     }
     if(ev_attack_slam(c)){const cx=c.x+Math.sin(c.heading)*.64,cz=c.z+Math.cos(c.heading)*.64;effects.shockwave(new THREE.Vector3(cx,groundY(cx,cz),cz),SHOCKWAVE.from,SHOCKWAVE.to,SHOCKWAVE.duration);kick(c,.05);}
@@ -1397,4 +1400,6 @@ if(params.has('arena')){
   player.z=37;player.cameraYaw=0;resume();
   window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
-
+// A non-destructive encounter route for checking the new realm and its combat.
+// Unlike ?arena, this never completes the profile or writes player progression.
+if(params.has('shadowmere'))resume('frost');

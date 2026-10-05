@@ -2,6 +2,16 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-05 · Shadowmere in progress
+
+- **Branch:** `claude/practical-babbage-tbonr1`. Latest remote state fetched before editing: `785ae615a33a432942ad14b3c9c7a2e050255c96`. Check for newer PC commits before continuing.
+- **New destination:** Shadowmere is selectable as the second playable atlas realm inside the connected grassland. It adds dark soil, a dense canopy and amber seed lights; green monkey enemies; and the Rootbound Gorilla with a sword, telegraphed slam and expanding seed-burst attack. Test route: `?shadowmere&debug`.
+- **Concept image:** `first-person-verdant/public/concepts/shadowmere-forest-concept.png`. Blender scene source: `first-person-verdant/tools/blender/build_shadowmere.py`.
+- **Data safety:** no save, account-linking, leaderboard, Supabase or world-record code/data was changed. Keep existing storage keys and shared player records intact. The new direct-entry route does not mark the profile complete.
+- **Checks:** `npm ci` and `npm run build` pass (using the official npm CLI with the bundled Node runtime); the build reports the existing large JavaScript chunk warning. Changed JavaScript passes `node --check`; a Three.js smoke check created both enemy types, confirmed the forest trees block movement while the entry stays open, and observed gorilla wind-up, slam and seed-burst events. The local browser preview was blocked by the admin policy check, so visual playtesting is still pending.
+- **Blender status:** the scene builder has not yet produced `.blend`/GLB exports. The bundled Blender command-line binary crashes before executing Python on this Mac. Finish the Blender export in a working Blender environment before describing those exports as complete.
+- **Deployment:** not pushed or live yet. GitHub Pages publishes at `https://manandi.github.io/god/`; verify its Actions run and live route after pushing. The separate Sites config is independent.
+
 ## Rules for AI assistants: read first
 
 These come from the owner. Follow them on every device and with every model.
@@ -51,9 +61,10 @@ How the story uses the ChatGPT NPCs:
 
 ### Next steps, in order
 
-1. **Test co-op and team fights with two real browsers.** Open `https://manandi.github.io/god/?lobby=ABC234` in two tabs or devices (both must finish setup) and walk both explorers into the Canopy Gate hollow. The status should read `ABC234 · 2 HUNTERS · HOST` in one and `· GUEST` in the other. If it stays on CO-OP OFFLINE, in the Supabase dashboard open Project Settings → Realtime and make sure public channels are allowed ("Allow public access" on). The sandbox this was built in blocks websockets, so co-op has never connected over Supabase (team fights were tested between tabs with `&net=local`). If it stays on CO-OP OFFLINE, check that Realtime is on for the Supabase project and allows public channels.
-2. **Tune the boss by feel** once the owner plays it: Orrun's health (1000), poise (70), attack cadence and eruption spacing in `src/boss.js`. Headless tests only check logic.
-3. **Town features.** A shop and more Mossgate life. Build them in the ChatGPT town, with block NPCs from `src/npcs.js`, and tie any new dialogue to the story stages in `src/story.js`.
+1. **Playtest Shadowmere in a real browser** with `?shadowmere&debug`: monkey and gorilla hits in first/third person, seed-burst tells, tree collisions and the atlas round trip.
+2. **Finish the Blender asset export** from `tools/blender/build_shadowmere.py` in a working Blender environment, then decide whether the exported model replaces or complements the procedural runtime forest/enemies.
+3. **Tune the guardian by feel** once the owner plays it. Headless combat checks verify state timing only; they cannot judge weight or readability.
+4. Continue the older co-op, Orrun-balance and Mossgate-shop tasks after this requested biome work is verified.
 
 ### Map of the 3D game (`first-person-verdant/src/`)
 
@@ -67,7 +78,7 @@ How the story uses the ChatGPT NPCs:
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
-| `creatures.js` | Shellbacks and thornlings (AI, poise, topple). Unused Old Shell code paths (`isBoss`, quake) remain |
+| `creatures.js` | Shellbacks, thornlings, green monkeys and Shadowmere's gorilla (AI, poise, attack tells and hit volumes) |
 | `dressingRoom.js` | The character screen's live 3D preview of the real avatar |
 | `identity.js` | This browser's hunter id and secret (the cloud save key) and LINK DEVICE codes |
 | `leaderboard.js` | The shared leaderboard, worn titles and 🧢 stat caps |
@@ -85,6 +96,7 @@ How the story uses the ChatGPT NPCs:
 
 **Testing:**
 - `?arena` skips the menus; add `&third` for third person, `&debug` or F3 for the combat readout, and `&capture` for stepped frames.
+- `?shadowmere&debug` opens Shadowmere directly without marking the profile complete.
 - **F2 then the password (`DEV_PASSWORD` in `src/main.js`) opens the dev panel** (asked once per tab): NEW GAME to replay the start as a new player, REDO MY TESTS to retake your measurements now, stat presets (MY REAL STATS undoes them), no damage, no-clip, infinite Breath, colliders, teleport to any place, any weapon, any class, stat presets, and jump to any story stage. F4 shows FPS.
 - `window.__verdant` exposes the game state and its test hooks.
 - The owner prefers to test game feel themselves. Don't run long capture or video pipelines; quick logic checks are fine.
@@ -754,4 +766,3 @@ The owner asked for a better camera and quest marker, a dev mode, Monster Hunter
 ## How to hand off work
 
 After each meaningful task, update this file with the date, the exact commit, what changed, what was tested, what was published and verified, and remaining issues. Keep the newest update above older notes; remove stale claims. Run `npm ci`, `npm run dev` and `npm run build` in `first-person-verdant/` for 3D changes. Use `?arena&debug` or F3 for combat testing. Run root checks when touching the 2D project. Commit and push to the existing branch, then verify the GitHub Actions run and live Pages result. If updating the 3D Site, push its **existing** source repository and verify the deployment separately. Never claim a deployment is live from a successful push alone.
-

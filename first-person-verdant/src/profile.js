@@ -2,7 +2,7 @@ import {PLAN,PLAN_BONUS,planStep,e1rm,TITLES} from './training.js';
 
 export const BIOMES=[
   {id:'grove',name:'VERDANT REACH',short:'VERDANT',longitude:.115,latitude:.20,level:1,color:'#a8db91',description:'Ancient roots, drowned temples, and the Shellbacks. The first realm is open.',creatures:'Shellbacks · Thornlings',guardian:'Verdant Guardian'},
-  {id:'frost',name:'FROSTBOUND CROWN',short:'FROST',longitude:.37,latitude:.43,level:5,color:'#a3dafa',description:'Glacial lakes beneath crystal peaks. A realm waiting beyond the first ascent.',creatures:'Rime Hares · Icebound Sentinels',guardian:'The White Maw'},
+  {id:'frost',name:'SHADOWMERE',short:'SHADOW',longitude:.37,latitude:.43,level:1,color:'#9bc58b',description:'A darker forest beyond the grasslands. Green monkeys stalk the old trail; a sword-bearing gorilla guards its heart.',creatures:'Green Monkeys',guardian:'The Rootbound Gorilla'},
   {id:'ember',name:'EMBER WASTES',short:'EMBER',longitude:.62,latitude:.23,level:10,color:'#ffa278',description:'Black citadels divided by living fire.',creatures:'Cinder Hounds · Ash Knights',guardian:'Pyreback Colossus'},
   {id:'wraith',name:'WRAITHMOOR',short:'WRAITH',longitude:.865,latitude:.20,level:15,color:'#d5a9fa',description:'Violet ruins where the dead still wander.',creatures:'Lantern Wraiths · Hollow Knights',guardian:'The Veiled Queen'}
 ];

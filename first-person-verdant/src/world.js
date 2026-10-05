@@ -17,6 +17,7 @@ export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
 // The Scorched Hollow: where the Old Shell (the ChatGPT Sites hunt) has nested.
 export const HUNT = { name: 'THE SCORCHED HOLLOW', x: 60, z: -18, r: 14 };
+export const SHADOWMERE = { name:'SHADOWMERE', x:130, z:-58, r:38, entry:{x:130,z:-20}, guardian:{x:130,z:-58} };
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -36,7 +37,7 @@ export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
 // Level ground: the town square, the homestead, the arena, the hunt, and the
 // three memory sites (their Blender set pieces sit on flat ground).
 const LEVELLED=[[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8],
-  [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7]];
+  [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7],[SHADOWMERE.x,SHADOWMERE.z,26,11]];
 // The exact ground shape; the terrain mesh samples it on a grid.
 function surfaceY(x,z) {
   // The town square, the homestead and the arena are level gameplay spaces;
@@ -343,9 +344,44 @@ export function buildWorld(scene){
     animated.push({mesh:crystal,type:'echo',baseY:y,index:i},{mesh:ring,type:'ring',baseY:y,index:i});
     return {...site,crystal,ring,light};
   });
+  // Shadowmere is a second destination inside the Reach: the ground remains
+  // connected to the existing world, while its dark soil, close canopy and
+  // amber seed-lights make the change in atmosphere clear at the gate.
+  const shadowGeo=new THREE.CircleGeometry(SHADOWMERE.r,64),shadowPos=shadowGeo.getAttribute('position'),shadowBase=groundY(SHADOWMERE.x,SHADOWMERE.z);
+  for(let i=0;i<shadowPos.count;i++){const x=shadowPos.getX(i),z=shadowPos.getY(i);shadowPos.setZ(i,groundY(SHADOWMERE.x+x,SHADOWMERE.z-z)-shadowBase+.07);}
+  shadowPos.needsUpdate=true;shadowGeo.computeVertexNormals();
+  const shadowGround=new THREE.Mesh(shadowGeo,new THREE.MeshStandardMaterial({color:0x252d1d,roughness:1}));
+  shadowGround.rotation.x=-Math.PI/2;shadowGround.position.set(SHADOWMERE.x,shadowBase,SHADOWMERE.z);shadowGround.receiveShadow=true;scene.add(shadowGround);
+  cameraObstacles.push(shadowGround);
+  const shadowBark=new THREE.MeshStandardMaterial({color:0x292b20,roughness:1}),shadowLeaf=[0x102d24,0x173c2a,0x1d472b,0x244a31].map(v=>new THREE.MeshStandardMaterial({color:v,roughness:1,flatShading:true}));
+  const shadowRand=rng(772013),trunkGeo=new THREE.CylinderGeometry(.36,.62,1,7),crownGeo=new THREE.IcosahedronGeometry(1,1),shadowTrunks=new THREE.InstancedMesh(trunkGeo,shadowBark,48),shadowCrowns=shadowLeaf.map(m=>new THREE.InstancedMesh(crownGeo,m,144)),shadowCounts=[0,0,0,0],shadowDummy=new THREE.Object3D();
+  shadowTrunks.castShadow=true;shadowTrunks.receiveShadow=true;shadowCrowns.forEach(m=>{m.castShadow=true;m.receiveShadow=true;});
+  for(let i=0;i<48;i++){
+    const a=i*2.39996,r=7+Math.sqrt(i/48)*28,x=SHADOWMERE.x+Math.cos(a)*r,z=SHADOWMERE.z+Math.sin(a)*r;
+    if(Math.hypot(x-SHADOWMERE.entry.x,z-SHADOWMERE.entry.z)<7)continue;
+    const h=groundY(x,z),height=8+shadowRand()*6.2,th=.82+shadowRand()*.38;
+    shadowDummy.position.set(x,h+height*.39,z);shadowDummy.scale.set(th*.7,height*.78,th*.7);shadowDummy.rotation.set(0,0,(shadowRand()-.5)*.1);shadowDummy.updateMatrix();shadowTrunks.setMatrixAt(i,shadowDummy.matrix);
+    colliders.push({x,z,r:th*.58,top:h+height*.78});
+    for(let j=0;j<3;j++){
+      const angle=a+j*2.094+shadowRand()*.8,reach=1.0+j*.3;
+      const kind=(i+j)%shadowLeaf.length,index=shadowCounts[kind]++;
+      shadowDummy.position.set(x+Math.cos(angle)*reach,h+height*.72+j*.46,z+Math.sin(angle)*reach);
+      shadowDummy.scale.set(2.2+j*.22,1.65+j*.18,2.0+j*.25);shadowDummy.rotation.set(shadowRand()*.2,shadowRand()*6.28,shadowRand()*.2);shadowDummy.updateMatrix();shadowCrowns[kind].setMatrixAt(index,shadowDummy.matrix);
+    }
+  }
+  shadowCrowns.forEach((m,i)=>{m.count=shadowCounts[i];});scene.add(shadowTrunks,...shadowCrowns);
+  const seedGlow=new THREE.MeshStandardMaterial({color:0xf1bb65,emissive:0x9e5523,emissiveIntensity:1.8,roughness:.4});
+  for(const side of [-1,1]){
+    const x=SHADOWMERE.entry.x+side*3.4,z=SHADOWMERE.entry.z-1,y=groundY(x,z);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(.32,.48,5,7),shadowBark);post.position.set(x,y+2.5,z);post.castShadow=true;scene.add(post);colliders.push({x,z,r:.55,top:y+5});
+    const seed=new THREE.Mesh(new THREE.OctahedronGeometry(.34),seedGlow);seed.position.set(x,y+5.2,z);scene.add(seed);
+  }
+  const forestLights=[-1,1].map(()=>{const l=new THREE.PointLight(0xd49a4d,1.8,13,2);scene.add(l);return l;});
+  forestLights[0].position.set(SHADOWMERE.x-5,groundY(SHADOWMERE.x-5,SHADOWMERE.z-3)+3,SHADOWMERE.z-3);
+  forestLights[1].position.set(SHADOWMERE.x+6,groundY(SHADOWMERE.x+6,SHADOWMERE.z+5)+3,SHADOWMERE.z+5);
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,city,home,nearTrail,cameraObstacles,sun,updateLanternLights,crownGeometry,leafMaterials,
+  return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,crownGeometry,leafMaterials,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }
