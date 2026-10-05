@@ -17,7 +17,20 @@ export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
 // The Scorched Hollow: where the Old Shell (the ChatGPT Sites hunt) has nested.
 export const HUNT = { name: 'THE SCORCHED HOLLOW', x: 60, z: -18, r: 14 };
-export const SHADOWMERE = { name:'SHADOWMERE', x:130, z:-58, r:48, entry:{x:130,z:-12}, guardian:{x:130,z:-65} };
+// Shadowmere is its own world (owner, 2026-10-05): reached through a Rootway or the atlas at
+// level 3, it lies far outside the Reach (beyond the camera's 540 m draw distance), with its
+// own ground, sky and walkable edge. Everything in it is placed relative to this centre.
+export const SHADOWMERE = { name:'SHADOWMERE', x:900, z:-55, r:48, entry:{x:900,z:-9}, guardian:{x:900,z:-62} };
+/** The worlds you can stand in: id, centre and walkable radius (collision.js keeps you inside one). */
+export const REALMS = [
+  { id:'grove', name:'THE VERDANT REACH', x:0, z:-55, r:205 },
+  { id:'shadow', name:'SHADOWMERE', x:SHADOWMERE.x, z:SHADOWMERE.z, r:SHADOWMERE.r-1.2 }
+];
+/** The Rootway in Mossgate's square: the door to Shadowmere (level 3). */
+export const ROOTWAY = { x:2.6, z:49.2 };
+/** Where Shadowmere's memory waits: a lantern seed on a root pedestal by the falls' pool. */
+export const SEED_SHRINE = { x:SHADOWMERE.x-5.4, z:SHADOWMERE.z-20.5 };
+export const realmAt = (x,z) => Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z) < SHADOWMERE.r+40 ? 'shadow' : 'grove';
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -37,9 +50,18 @@ export const ARENA_Y = terrainY(ARENA.x, ARENA.z);
 // Level ground: the town square, the homestead, the arena, the hunt, and the
 // three memory sites (their Blender set pieces sit on flat ground).
 const LEVELLED=[[CITY.x,CITY.z,14,5],[HOME.x,HOME.z,13,4],[ARENA.x,ARENA.z,25,9],[HUNT.x,HUNT.z,16,8],
-  [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7],[SHADOWMERE.x,SHADOWMERE.z,26,11]];
+  [SITES[0].x,SITES[0].z,11,6],[SITES[1].x,SITES[1].z,14,7],[SITES[2].x,SITES[2].z,13,7]];
 // The exact ground shape; the terrain mesh samples it on a grid.
+// Shadowmere's floor: gentle rolls, a level trail and clearing, banks rising past its edge.
+function shadowY(x,z){
+  const dx=x-SHADOWMERE.x,dz=z-SHADOWMERE.z,d=Math.hypot(dx,dz);
+  let h=(noise(x*.06,z*.06)-.5)*2.2+(noise(x*.17,z*.17)-.5)*.5;
+  const level=1-THREE.MathUtils.smoothstep(Math.min(Math.abs(dx)-3,Math.hypot(dx,dz+7)-14),0,8);
+  h*=1-Math.max(0,level);
+  return h+Math.max(0,d-(SHADOWMERE.r-3))**2*.09;
+}
 function surfaceY(x,z) {
+  if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+160)return shadowY(x,z);
   // The town square, the homestead and the arena are level gameplay spaces;
   // the land eases into each of them.
   let height=terrainY(x,z);
@@ -356,8 +378,11 @@ export function buildWorld(scene){
   const shadowGround=new THREE.Mesh(shadowGeo,new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.92}));
   shadowGround.rotation.x=-Math.PI/2;shadowGround.position.set(SHADOWMERE.x,shadowBase,SHADOWMERE.z);shadowGround.receiveShadow=true;scene.add(shadowGround);
   cameraObstacles.push(shadowGround);
+  const skirt=new THREE.Mesh(new THREE.RingGeometry(SHADOWMERE.r-1,SHADOWMERE.r+150,72,8),new THREE.MeshStandardMaterial({color:0x141a12,roughness:1}));
+  {const sp=skirt.geometry.getAttribute('position');for(let i=0;i<sp.count;i++){const x=sp.getX(i),z=sp.getY(i);sp.setZ(i,groundY(SHADOWMERE.x+x,SHADOWMERE.z-z)-shadowBase+.02);}skirt.geometry.computeVertexNormals();}
+  skirt.rotation.x=-Math.PI/2;skirt.position.set(SHADOWMERE.x,shadowBase,SHADOWMERE.z);skirt.receiveShadow=true;scene.add(skirt);
   const trailMat=new THREE.MeshStandardMaterial({color:0x514530,vertexColors:true,roughness:1,side:THREE.DoubleSide});
-  path(scene,[[130,-11],[129,-23],[133,-37],[127,-49],[130,-65]],5.2,trailMat);
+  path(scene,[[0,47],[-1,35],[3,21],[-3,9],[0,-7]].map(([x,z])=>[SHADOWMERE.x+x,SHADOWMERE.z+z]),5.2,trailMat);
   // The trees, lanterns, rocks, cliff, waterfall and creature models are Blender
   // assets placed by src/shadowmere.js once public/worlds/shadowmere.glb loads.
   const shadowRand=rng(772013),shadowDummy=new THREE.Object3D();
@@ -365,7 +390,7 @@ export function buildWorld(scene){
   const shadowFerns=new THREE.InstancedMesh(fernShape,shadowFernMat,420);let sf=0;
   for(let i=0;i<650&&sf<420;i++){
     const x=SHADOWMERE.x+(shadowRand()-.5)*88,z=SHADOWMERE.z+(shadowRand()-.5)*88;
-    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-130)<7.5&&z>-72&&z<-8)continue;
+    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-SHADOWMERE.x)<7.5&&z>SHADOWMERE.z-14&&z<SHADOWMERE.z+50)continue;
     shadowDummy.position.set(x,groundY(x,z)+.1,z);shadowDummy.rotation.set(0,shadowRand()*6.28,0);shadowDummy.scale.setScalar(.55+shadowRand()*.75);shadowDummy.updateMatrix();shadowFerns.setMatrixAt(sf++,shadowDummy.matrix);
   }
   shadowFerns.count=sf;scene.add(shadowFerns);
@@ -376,14 +401,15 @@ export function buildWorld(scene){
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
   // Entering Shadowmere fades the Reach's daylight into blue moonlit mist (the concept image);
   // the warm light comes from the lanterns and mushrooms (src/shadowmere.js).
-  let shade=0;const dayFog=color('#83a79a'),darkFog=color('#1e3a4e'),daySky=color('#779d92'),darkSky=color('#0c1a28'),
-    daySun=color('#f6dda0'),moonCol=color('#9fb6ff'),dayAmb=color('#c6e9e4'),nightAmb=color('#86a6d8'),dayGround=color('#33462b'),nightGround=color('#1a2216');
+  let shade=0;const dayFog=color('#83a79a'),darkFog=color('#0b1622'),daySky=color('#779d92'),darkSky=color('#050b13'),
+    daySun=color('#f6dda0'),moonCol=color('#9fb6ff'),dayAmb=color('#c6e9e4'),nightAmb=color('#4f6a9c'),dayGround=color('#33462b'),nightGround=color('#1a2216');
   function updateAtmosphere(x,z,dt){
-    const distance=Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z),target=1-THREE.MathUtils.smoothstep(distance,SHADOWMERE.r-17,SHADOWMERE.r+8);
-    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.015;
+    sky.position.set(x,0,z);           // the sky travels with you, so it surrounds you in every world
+    const target=Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+60?1:0;   // its own world: night all through
+    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.024;
     scene.background.copy(daySky).lerp(darkSky,shade);sky.material.uniforms.shade.value=shade*.92;
-    sun.intensity=2.45-shade*1.2;sun.color.copy(daySun).lerp(moonCol,shade);
-    ambient.intensity=1.8-shade*.45;ambient.color.copy(dayAmb).lerp(nightAmb,shade);ambient.groundColor.copy(dayGround).lerp(nightGround,shade);
+    sun.intensity=2.45-shade*1.95;sun.color.copy(daySun).lerp(moonCol,shade);
+    ambient.intensity=1.8-shade*1.28;ambient.color.copy(dayAmb).lerp(nightAmb,shade);ambient.groundColor.copy(dayGround).lerp(nightGround,shade);
     return shade;
   }
   return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,updateAtmosphere,crownGeometry,leafMaterials,

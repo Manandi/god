@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SHADOWMERE as SM } from './world.js';
+import { SHADOWMERE as SM, SEED_SHRINE } from './world.js';
+import { NPCS } from './story.js';
 
 // Shadowmere, built from the owner's concept image (public/concepts/shadowmere-forest-concept.png):
 // giant gnarled mossy trees, amber cage lanterns along the trail, glowing mushrooms, mossy
@@ -11,9 +12,13 @@ import { SHADOWMERE as SM } from './world.js';
 // creatures.js, keeping its joints (arms, legs, neck, tail, sword) so its animation drives them.
 
 const BASE = import.meta.env?.BASE_URL || '/';
-const TRAIL = [[130, -11], [129, -23], [133, -37], [127, -49], [130, -65]];
-const STREAM = [[134, -80], [141, -78], [147, -73], [153, -69], [160, -66]];
-const POOL = { x: 130, z: -81.5, r: 4.6 }, CLIFF = { x: 130, z: -88 }, ARCH = { x: 130, z: -16 };
+// Layout, as offsets from the realm's centre (world.js SHADOWMERE).
+const at = ([x, z]) => [SM.x + x, SM.z + z];
+const TRAIL = [[0, 47], [-1, 35], [3, 21], [-3, 9], [0, -7]].map(at);
+const STREAM = [[4, -22], [11, -20], [17, -15], [23, -11], [30, -8]].map(at);
+const POOL = { x: SM.x, z: SM.z - 23.5, r: 4.6 }, CLIFF = { x: SM.x, z: SM.z - 30 }, ARCH = { x: SM.x, z: SM.z + 42 };
+/** The Rootway home: a portal just inside the arch, back to Mossgate. */
+export const ROOTWAY_BACK = { x: SM.x - 6, z: SM.z + 44 };
 
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function segDist(px, pz, line) {
@@ -44,6 +49,22 @@ function rippleTexture() {
 /** The meshes of a GLB node (a node with several materials is a group of meshes). */
 function meshesOf(node) { const out = []; node.traverse(o => { if (o.isMesh) out.push(o); }); return out; }
 
+/** A Rootway: a ring of braided root around a green-gold veil, the way between worlds. */
+export function rootwayMesh(scene, x, y, z, rotY = 0) {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; scene.add(g);
+  const bark = new THREE.MeshStandardMaterial({ color: 0x3a2c1e, roughness: .95, flatShading: true });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, .2, 8, 36), bark); ring.position.y = 1.7; g.add(ring);
+  const vine = new THREE.Mesh(new THREE.TorusGeometry(1.35, .07, 6, 36, Math.PI * 1.6), new THREE.MeshStandardMaterial({ color: 0x4f8a3a, emissive: 0x1d4a1a, emissiveIntensity: .6, roughness: .8 }));
+  vine.position.set(0, 1.7, .12); vine.rotation.z = .4; g.add(vine);
+  const veil = new THREE.Mesh(new THREE.CircleGeometry(1.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0a6, transparent: true, opacity: .42, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  veil.position.y = 1.7; g.add(veil);
+  const swirl = new THREE.Mesh(new THREE.RingGeometry(.25, 1.1, 32, 1, 0, Math.PI * 1.4), new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: .3, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  swirl.position.set(0, 1.7, .01); g.add(swirl);
+  for (const s of [-1, 1]) { const root = new THREE.Mesh(new THREE.ConeGeometry(.42, 1.4, 6), bark); root.position.set(s * 1.1, .55, 0); root.rotation.z = s * .5; g.add(root); }
+  const light = new THREE.PointLight(0x9be8b0, 1.4, 8, 2); light.position.y = 1.7; g.add(light);
+  return { group: g, update(t) { swirl.rotation.z = -t * 1.3; veil.material.opacity = .36 + Math.sin(t * 2) * .07; } };
+}
+
 export function createShadowmere(scene, { groundY, addCollider, creatures }) {
   const root = new THREE.Group(); root.name = 'Shadowmere'; scene.add(root);
   const lanternSpots = [], halos = [], lights = [];
@@ -68,7 +89,7 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
   for (let i = 0; i < 26; i++) { const a = mr() * Math.PI * 2, d = 8 + mr() * (SM.r - 10), x = SM.x + Math.cos(a) * d, z = SM.z + Math.sin(a) * d, s = new THREE.Sprite(mistMat); s.position.set(x, groundY(x, z) + 1.2, z); s.scale.set(16 + mr() * 10, 5, 1); root.add(s); }
 
   // Four warm lights follow you from lantern to lantern (cheaper than one per lantern).
-  for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffa548, 0, 14, 1.6); scene.add(l); lights.push(l); }
+  for (let i = 0; i < 5; i++) { const l = new THREE.PointLight(0xffa548, 0, 15, 1.5); scene.add(l); lights.push(l); }
 
   // Water: the pool under the falls and the stream that runs east out of the clearing.
   const ripple = rippleTexture(); ripple.repeat.set(3, 3);
@@ -94,10 +115,18 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
     if (segDist(x, z, TRAIL) < 4.6 + r || segDist(x, z, STREAM) < 2 + r) return false;
     if (Math.hypot(x - SM.guardian.x, z - SM.guardian.z) < 13 + r || Math.hypot(x - SM.entry.x, z - SM.entry.z) < 6 + r) return false;
     if (Math.hypot(x - POOL.x, z - POOL.z) < POOL.r + 1.5 + r || (Math.abs(x - CLIFF.x) < 15 && z < CLIFF.z + 5.5)) return false;
-    if ((creatures || []).some(c => Math.hypot(x - c.home.x, z - c.home.z) < 2.5 + r)) return false;
+    if ((creatures || []).some(c => Math.hypot(x - c.home.x, z - c.home.z) < 2.5 + r) || Math.hypot(x - ROOTWAY_BACK.x, z - ROOTWAY_BACK.z) < 3.5 + r || Math.hypot(x - SEED_SHRINE.x, z - SEED_SHRINE.z) < 3 + r || Object.values(NPCS).some(n => Math.hypot(x - n.x, z - n.z) < 3 + r)) return false;
     return placed.every(p => Math.hypot(x - p.x, z - p.z) > p.r + r + 1.3);
   };
 
+  const back = rootwayMesh(root, ROOTWAY_BACK.x, groundY(ROOTWAY_BACK.x, ROOTWAY_BACK.z), ROOTWAY_BACK.z, Math.PI * .5);
+  // The lantern seed by the falls (Book II's memory): a glowing seed on a twist of root.
+  const shrineY = groundY(SEED_SHRINE.x, SEED_SHRINE.z);
+  const pedestal = new THREE.Mesh(new THREE.ConeGeometry(.45, 1.1, 7), new THREE.MeshStandardMaterial({ color: 0x3a2c1e, roughness: .95, flatShading: true }));
+  pedestal.position.set(SEED_SHRINE.x, shrineY + .55, SEED_SHRINE.z); root.add(pedestal);
+  const seed = new THREE.Mesh(new THREE.OctahedronGeometry(.22, 1), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa53a, emissiveIntensity: 2.2 }));
+  seed.position.set(SEED_SHRINE.x, shrineY + 1.45, SEED_SHRINE.z); root.add(seed);
+  const seedHalo = new THREE.Sprite(haloMat); seedHalo.position.copy(seed.position); seedHalo.scale.setScalar(1.8); root.add(seedHalo);
   const state = { ready: false, shade: 0 };
   const loaded = new GLTFLoader().loadAsync(`${BASE}worlds/shadowmere.glb`).then(gltf => {
     const proto = name => gltf.scene.getObjectByName(name);
@@ -172,7 +201,7 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
     state, loaded, lanternSpots,
     /** Per frame: moon and halo follow the camera's sky, fireflies drift, water flows, lights hop to the nearest lanterns. */
     update(dt, t, player, camera, shade) {
-      state.shade = shade;
+      state.shade = shade; back.update(t); seed.rotation.y = t * .8; seed.position.y = shrineY + 1.45 + Math.sin(t * 1.6) * .08;
       const on = shade > .02; moon.visible = moonHalo.visible = on; root.visible = on || Math.hypot(player.x - SM.x, player.z - SM.z) < SM.r + 60;
       if (on) {
         moon.position.copy(camera.position).addScaledVector(MOON_DIR, 400); moon.lookAt(camera.position); moon.material.opacity = shade;
@@ -194,7 +223,7 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
       }
       lights.forEach((l, i) => {
         const p = nearest[i]?.[1]; if (!p || !on) { l.intensity = 0; return; }
-        l.position.set(p[0], p[1] - 1.1, p[2]); l.intensity = shade * (9 + Math.sin(t * 7 + i * 2) * .6);
+        l.position.set(p[0], p[1] - 1.1, p[2]); l.intensity = shade * (16 + Math.sin(t * 7 + i * 2) * 1.1);
       });
     }
   };

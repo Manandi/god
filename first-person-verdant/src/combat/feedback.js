@@ -84,7 +84,13 @@ export class CombatSound {
     if (attack === 'lunge') { this.tone(base, .6, .045, 'sawtooth', 2.1); this.hiss(.5, .02, 300, 900, 3); }
     if (attack === 'spin') { for (let i = 0; i < 6; i++) this.tone(base * 2, .05, .03, 'square', 1, i * .09); }
     if (attack === 'slam') { this.tone(base * .6, .8, .06, 'sawtooth', 2.8); this.hiss(.7, .03, 200, 1400, 2); }
+    // Green monkeys: a chatter for the flurry, a rising shriek for the pounce, a click for the seed.
+    if (attack === 'flurry') { for (let i = 0; i < 4; i++) this.tone(520 + i * 40, .06, .03, 'square', 1.2, i * .07); }
+    if (attack === 'pounce') { this.tone(300, .6, .05, 'sawtooth', 3.2); this.hiss(.45, .03, 600, 2400, 2); }
+    if (attack === 'seed') { this.tone(700, .1, .03, 'triangle', .8); this.tone(900, .08, .025, 'triangle', .8, .12); }
   }
+  swipe() { this.hiss(.12, .07, 2600, 900, 1.4); }
+  thud() { this.tone(70, .35, .14, 'sine', .5); this.hiss(.3, .08, 500, 120, 1); }
   bite() { this.tone(120, .25, .16, 'sawtooth', .4); this.hiss(.12, .14, 1800, 500, 1); }
   alert() { this.tone(330, .12, .03, 'triangle', 1.3); }
   defeated() { this.tone(160, .6, .08, 'triangle', .35); this.tone(420, .4, .03, 'sine', 1.5, .2); }

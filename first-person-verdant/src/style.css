@@ -82,3 +82,17 @@
 .quest-progress{height:2px;margin-top:8px;background:#ffffff1c}.quest-progress i{display:block;height:100%;width:0;background:#c9b46a;transition:width .6s}
 #sideObjective:not(:empty){padding:6px 13px;background:#0b211d99;border-left:3px solid #f0d98f88;overflow-wrap:anywhere}
 @media(max-width:700px){.hud-top .compass,.location .eyebrow{display:none}.quest-card{padding:7px 10px}#objective{font-size:13px}.location{max-width:calc(100vw - 190px)}}
+
+/* Dev panel tabs (2026-10-05): one page at a time, compact grids, sticky header and resume. */
+.dev-panel{width:min(440px,calc(100vw - 36px));padding:0 16px 14px}
+.dev-panel header{position:sticky;top:0;z-index:2;background:#0a1d18;padding:14px 0 10px;margin:0}
+.dev-panel pre{margin:10px 0 0;font-size:10px;max-height:118px;overflow:auto}
+.dev-tabs{position:sticky;top:62px;z-index:2;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:10px 0 2px;background:#0a1d18;padding-bottom:6px}
+.dev-tabs button{padding:8px 4px;font-size:9.5px;background:#10261f;border-color:#3f5c4b;color:#b9cfb3}
+.dev-tabs button.on{background:#c6de9e;color:#142018;border-color:#c6de9e}
+.dev-page section{margin:13px 0}
+.dev-grid.three{grid-template-columns:repeat(3,1fr)}.dev-grid.six{grid-template-columns:repeat(6,1fr);margin-bottom:6px}.dev-grid.one{grid-template-columns:1fr;margin-top:6px}
+.dev-panel .dev-grid button{padding:8px 6px;font-size:9.5px}
+.dev-panel .dev-select{width:100%;margin-bottom:6px}
+.dev-panel .dev-resume{position:sticky;bottom:0;width:100%;margin-top:10px;background:#c6de9e;color:#142018;border-color:#c6de9e;padding:11px}
+.dev-panel>small{display:block;margin-top:8px;font-size:9.5px;line-height:1.5;color:#9db39b}

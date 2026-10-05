@@ -1,3 +1,4 @@
+import { REALMS } from './world.js';
 // A small spatial grid keeps collision checks local even when the woodland is dense.
 export function createCollisionGrid(colliders,cellSize=12){
   const cells=new Map(),key=(x,z)=>`${x},${z}`;let count=0;
@@ -17,8 +18,10 @@ export function createCollisionGrid(colliders,cellSize=12){
 // (fromX, fromZ): where you are now. If you are already overlapping something (you
 // landed a jump on a rock's edge, dashed or were knocked into it), a step that moves
 // you out of it is allowed, so nothing can pin you in place.
+// Every world you can stand in (world.js REALMS): the Reach, and Shadowmere far off on its own.
+const inWorld=(x,z)=>(x*x+(z+55)*(z+55)<=205*205&&z>=-202)||REALMS.some(r=>r.id!=='grove'&&(x-r.x)**2+(z-r.z)**2<=r.r*r.r);
 export function canOccupy(x,z,footY,grid,groundY,radius=.43,fromX=null,fromZ=null){
-  if(x*x+(z+55)*(z+55)>205*205||z< -202)return false;
+  if(!inWorld(x,z))return false;
   for(const o of grid.near(x,z)){
     if(footY>=o.top-.07)continue;
     const dx=x-o.x,dz=z-o.z,reach=(o.r+radius)**2,d2=dx*dx+dz*dz;

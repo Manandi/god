@@ -2,6 +2,65 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-05 (later) · Shadowmere as its own world, new monkeys, open-ended saga, dev panel (Claude)
+
+The owner asked for:
+- Shadowmere as another world in the green part of the globe, unlocked at **level 3**; the snow realm comes next at **level 5** ("by the end of week two").
+- A better monkey design, plus a new, harder combo of its own.
+- A darker forest.
+- An open-ended story that keeps connecting world to world.
+- A less congested dev panel that reaches everything.
+
+### Worlds
+- **Shadowmere is its own world.** It's centred at (900, −55) in `world.js` (`SHADOWMERE`, `REALMS`, `realmAt`), beyond the camera's 540 m draw distance from the Reach.
+  - It has its own height function (`shadowY`: a level trail and clearing, banks rising past the edge), a dark ground skirt, and a walkable edge (`collision.js` `inWorld`).
+  - The sky now follows the camera.
+- **Getting there and back:**
+  - The Rootway in Mossgate's square (`ROOTWAY` at (2.6, 49.2)) or the atlas, at level 3. Locked otherwise.
+  - In Shadowmere, a Rootway by the arch (`ROOTWAY_BACK`) takes you home.
+  - `crossRealm()` and `placeAt()` in `main.js` handle the move. Falling in Shadowmere respawns you at its arch.
+  - When the objective is in the other world, the quest marker points to the Rootway.
+- **Atlas (`profile.js` BIOMES):** SHADOWMERE (id `shadow`) at longitude .225, latitude .62 on the green, level 3. FROSTBOUND CROWN restored at level 5 ("COMING NEXT"), then Ember 10 and Wraith 15. ChatGPT's atlas let anyone enter at level 1; it now checks the level.
+- **Darker:** fully night everywhere in the realm (no fade). Deep blue fog and sky, a dim moon and fill, and 5 stronger lantern lights.
+
+### Monkeys
+- **New Blender model** (`build_shadowmere.py` `monkey()`; preview with `-- --preview x.png --monkey`): leaf crown and leafy collar, huge pink-lined ears, amber eyes with highlights, heart-shaped pale face, a crouched stance on long arms, a spiral tail. Size .82.
+- **New moveset** (`creatures.js` ATTACKS: `flurry`, `pounce`, `seed`; monkeys keep `lunge`):
+  - **Claw Flurry:** 3 swipes that step in and re-aim between hits. A lunge chains into it 55% of the time, with a faster tell.
+  - **Leaping Pounce:** from 4–8 m, it leaps to where you stood and lands a heavy blow.
+  - **Seed Pellet:** thrown from 5.5–13 m. `main.js` `throwSeed` flies it; you can dash through, guard, or parry it away.
+  - **Hop back:** when struck, a monkey often springs out of reach and counters.
+  - Stats: 50 health, 12 poise, faster, shorter cooldowns. Monkeys respawn after 45 s, Garrow after 150 s.
+
+### Story: an open-ended saga (`story.js` header explains it)
+- **Book I, The Verdant Reach:** unchanged up to Orrun. `end` is no longer the end: "Ask Halden what the roots are saying" (Halden's main dialogue). The ending card says BOOK I COMPLETE.
+- **Book II, Shadowmere:** `shadow_cross` → `shadow_meet` → `shadow_hunt` → `shadow_memory` → `shadow_guardian` → `shadow_report`.
+  - **Maren** the Lamplighter is a new NPC by the arch.
+  - The hunt counts 3 monkeys (`story.tally`, saved).
+  - The memory is a lantern seed by the falls (`SEED_SHRINE`): Ashmere fused crown-glass to Garrow's hand.
+  - Garrow is the Rootbound Gorilla. Freeing it breaks the shard.
+- **Book III, The Frostbound Crown:** `frost_wait`, "Grow to level 5". The shard points north to where what's left of Ashmere waits.
+- **To add the next world:** append its stages after `frost_wait` (saves keep their place), and give it a keeper, journal pages and a hook into the world after.
+- The quest card shows BOOK I / II / III.
+
+### Dev panel (F2, password unchanged)
+- Tabs: PLAYER, WORLD, FIGHT, STORY, STATS, with a sticky header and RESUME.
+- **New:**
+  - a level override (REAL/1/3/5/10/15, ±1). It's `profile.js` `devLevel`; real XP and the leaderboard (`realLevel()`) are untouched.
+  - world travel, IGNORE LEVEL LOCKS, OPEN THE HUNT NOW
+  - teleports to every place, Shadowmere spots, and every NPC
+  - a monkey or Garrow in front of you, FREEZE ENEMIES, REVIVE ALL
+  - story jumps by Book, plus ◀ PREV, and stage picker groups
+  - inventory and atlas shortcuts
+- The scratchpad test `devkey2` now opens the STORY tab before clicking NEW GAME.
+
+### Checks
+- Travel both ways, the level lock, respawn in the realm, and the edge holds.
+- The full Book II run: the 1/3–3/3 count, falls memory, Garrow, the Book III hook, journal pages, and saved tally.
+- Monkey attacks picked by range, and the pounce, flurry (multi-hit) and seeds all land. 8 of 20 struck monkeys hop back.
+- Shadowmere flood fill: no pockets, and every point reachable.
+- story, smoke3, weap, talkmem2, devkey2 and saves pass. Screens: the atlas, the dark forest, the new monkeys, all dev tabs.
+
 ## Latest handoff — 2026-10-05 · Shadowmere rebuilt from the concept image (Claude)
 
 The owner asked for the dark forest to match the concept image, "with the mobs as well". ChatGPT's version (below) worked, but it was cylinder trees and primitive-shape monkeys. It is now built in Blender:

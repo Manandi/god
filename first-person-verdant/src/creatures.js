@@ -23,7 +23,7 @@ const damp = THREE.MathUtils.damp;
 const KINDS = {
   shellback: { size: .64, pace: 1, health: 45, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
   thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
-  monkey: { size: .72, pace: .78, health: 38, poise: 9, walk: 1.7, chase: 3.6, turn: 5.2, notice: 15, spacing: 2.0, cooldown: [.75, 1.4], biteRadius: .44 },
+  monkey: { size: .82, pace: .78, health: 50, poise: 12, walk: 1.9, chase: 4.3, turn: 6, notice: 16, spacing: 2.1, cooldown: [.55, 1.15], biteRadius: .5 },
   gorilla: { size: 1.22, pace: 1.12, health: 225, poise: 28, walk: .9, chase: 2.6, turn: 2.8, notice: 24, spacing: 3.1, cooldown: [1.25, 2.1], biteRadius: .8 },
   // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
   // from the game on the owner's request; its isBoss / quake code paths below are unused.
@@ -37,7 +37,16 @@ const ATTACKS = {
   spin:  { windup: .65, track: 0, active: 1.0, recover: 1.1, range: [0, 2.4], damage: 1, kind: 'light', label: 'shell spin' },
   slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' },
   // Old Shell only: rears for over a second, then the ground breaks around it.
-  quake: { windup: 1.28, track: .4, active: .3, recover: 1.4, range: [0, 5.8], damage: 2, kind: 'heavy', label: 'quake', boss: true }
+  quake: { windup: 1.28, track: .4, active: .3, recover: 1.4, range: [0, 5.8], damage: 2, kind: 'heavy', label: 'quake', boss: true },
+  // Green monkeys only (owner, 2026-10-05: "a new combo, harder, more unique"). They keep the
+  // lunge, and often chain it straight into the flurry.
+  // Claw flurry: three quick swipes, stepping in and re-aiming between them. Guard each, parry one
+  // to break the chain, or back out of reach.
+  flurry: { windup: .5, track: .5, active: 1.08, recover: .95, range: [0, 2.6], damage: 1, kind: 'light', label: 'claw flurry', monkey: true, swipes: [.1, .44, .78] },
+  // Leaping pounce: crouches, then leaps to where you stood and lands claws-first. Dodge sideways.
+  pounce: { windup: .72, track: .64, active: .62, recover: 1.05, range: [3.6, 8.5], damage: 1, kind: 'heavy', label: 'leaping pounce', monkey: true },
+  // Seed pellet: hurls a hard seed from range (main.js flies it). Dash through, guard, or parry it away.
+  seed: { windup: .62, track: .62, active: .22, recover: .8, range: [5.5, 13], damage: 1, kind: 'light', label: 'seed pellet', monkey: true }
 };
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .8, belly: 2 };
@@ -225,7 +234,7 @@ export class Creature {
     this.root.updateMatrixWorld(true);
   }
   setState(state) { this.state = state; this.t = 0; }
-  timing(a) { const m = (this.enraged ? .78 : 1) * this.kind.pace; return { windup: a.windup * m, recover: a.recover * (this.enraged ? .85 : 1) * this.kind.pace, track: a.track * m }; }
+  timing(a) { const m = (this.enraged ? .78 : 1) * this.kind.pace * (this.quick && a.swipes ? .6 : 1); return { windup: a.windup * m, recover: a.recover * (this.enraged ? .85 : 1) * this.kind.pace, track: a.track * m }; }
 
   /**
    * A strike from the explorer. Returns what happened so the game can show it:
@@ -267,6 +276,10 @@ export class Creature {
       this.flinchMeter = 0; this.staggerTime = stagger >= .6 ? .8 : .45; this.setState('stagger'); this.attack = null;
       this.lastEvent = 'staggered'; out.staggered = true;
     } else this.lastEvent = committed ? 'hit (kept attacking)' : 'flinched';
+    // A struck monkey often springs back out of reach (not mid-attack, and not every time).
+    if (this.type === 'monkey' && !committed && !out.staggered && !this.remote && Math.random() < (this.enraged ? .55 : .38)) {
+      this.hopYaw = Math.atan2(dx, dz); this.setState('hop'); this.attack = null; this.lastEvent = 'hopped back';
+    }
     return out;
   }
 
@@ -311,9 +324,16 @@ export class Creature {
   chooseAttack(dist, rel) {
     const behind = Math.abs(rel) > 1.3;
     const options = [];
+    const monkey = this.type === 'monkey';
     for (const [name, a] of Object.entries(ATTACKS)) {
       if (dist < a.range[0] || dist > a.range[1]) continue;
+      if (!!a.monkey !== monkey && name !== 'lunge') continue;     // monkeys: lunge + their own three
       let w = 1;
+      if (monkey) {
+        w = name === 'flurry' ? (behind ? .4 : 1.7) : name === 'pounce' ? 1.2 : name === 'seed' ? (this.enraged ? 1.3 : .9) : behind ? 0 : .8;
+        if (w > 0) options.push([name, w]);
+        continue;
+      }
       if (name === 'lunge') w = behind ? 0 : Math.abs(rel) < .5 ? 1.4 : .6;
       if (name === 'spin') w = behind || dist < 1.4 ? 2.4 : .35;
       // Shellbacks and thornlings only lunge and spin; the rearing slam is the Old Shell's.
@@ -389,7 +409,7 @@ export class Creature {
         wantHeading = this.steer(toPlayer, ctx.grid); wantSpeed = k.chase * THREE.MathUtils.clamp((dist - k.spacing) / 1.5, .25, 1);
         if (dist < k.spacing + .3) this.setState('circle');
         if (dist > k.notice * 1.6) this.setState('wander');
-        if (this.cooldown <= 0 && dist < 3.4) this.beginAttack(dist, rel, events, ctx);
+        if (this.cooldown <= 0 && dist < (this.type === 'monkey' ? 13 : 3.4)) this.beginAttack(dist, rel, events, ctx);
         break;
       case 'circle': {
         // Hold spacing and face the explorer; turn in place when flanked.
@@ -405,15 +425,31 @@ export class Creature {
       case 'windup': {
         const a = ATTACKS[this.attack], tm = this.timing(a);
         if (this.t < tm.track) { wantHeading = toPlayer; turn = 4.5; } else turn = 0;
-        if (this.t >= tm.windup) { this.attackYaw = this.heading; this.connected = false; this.closest = 9; this.setState('attack'); events.push({ type: 'attack', attack: this.attack }); }
+        if (this.t >= tm.windup) {
+          this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
+          if (this.attack === 'pounce') { const reach = Math.min(dist - .9, 8.5); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
+          if (this.attack === 'seed') { const hand = new THREE.Vector3(); this.head.getWorldPosition(hand); events.push({ type: 'throw', x: hand.x, y: hand.y + .2, z: hand.z, tx: p.x, ty: (p.y ?? groundY(p.x, p.z)) + 1.1, tz: p.z, speed: 17 }); }
+        }
         break;
       }
       case 'attack':
         turn = 0;
         this.runAttack(dt, p, ctx, events, dx, dz);
         break;
+      case 'hop': {
+        // A monkey springs back out of reach after being struck, then comes straight back in.
+        turn = 6; wantHeading = toPlayer;
+        const step = 7.5 * dt * Math.max(0, 1 - this.t / .34);
+        this.travel(Math.sin(this.hopYaw) * step, Math.cos(this.hopYaw) * step, ctx.grid);
+        if (this.t >= .34) { this.cooldown = Math.min(this.cooldown, .3); this.setState('circle'); }
+        break;
+      }
       case 'recover': {
         turn = .6;
+        if (this.type === 'monkey' && this.attack === 'lunge' && !this.chained && this.t > .16 && dist < 2.7 && !this.remote) {
+          this.chained = true;
+          if (Math.random() < .55 && (!ctx.mayAttack || ctx.mayAttack(this))) { this.attack = 'flurry'; this.quick = true; this.setState('windup'); events.push({ type: 'windup', attack: 'flurry', chained: true }); break; }
+        }
         if (this.t >= this.timing(ATTACKS[this.attack]).recover) {
           this.cooldown = k.cooldown[0] + Math.random() * (k.cooldown[1] - k.cooldown[0]);
           if (this.enraged) this.cooldown *= .65;
@@ -459,7 +495,7 @@ export class Creature {
     if (ctx.mayAttack && !ctx.mayAttack(this)) { this.cooldown = .4 + Math.random() * .5; return; }
     const name = this.chooseAttack(dist, rel);
     if (!name) return;
-    this.attack = name; this.setState('windup');
+    this.attack = name; this.chained = false; this.quick = false; this.setState('windup');
     events.push({ type: 'windup', attack: name });
   }
 
@@ -500,6 +536,33 @@ export class Creature {
         else this.closest = Math.min(this.closest, v.ring ? Math.abs(d - v.r) - .45 : d - v.r - .34);
       }
     }
+    if (this.attack === 'flurry') {
+      // Three swipes; between them it steps in and turns to follow you.
+      const toward = Math.atan2(dx, dz);
+      this.heading += THREE.MathUtils.clamp(angleTo(this.heading, toward), -3.2 * dt, 3.2 * dt); this.attackYaw = this.heading;
+      const n = a.swipes.findIndex((h, i) => this.t >= h && (i === a.swipes.length - 1 || this.t < a.swipes[i + 1]));
+      if (n !== this.swipe && n >= 0) { this.swipe = n; this.connected = false; events.push({ type: 'swipe', n }); }
+      const since = n >= 0 ? this.t - a.swipes[n] : -1;
+      if (since >= 0 && since < .14) {
+        const ahead = Math.hypot(dx, dz) - this.radius - .5, step = Math.min(Math.max(0, ahead), 3.4 * dt);
+        this.travel(Math.sin(this.heading) * step, Math.cos(this.heading) * step, ctx.grid);
+        const v = this.damageVolumes()[0], gap = Math.hypot(v.x - p.x, v.z - p.z) - (v.r + .34);
+        if (gap <= 0 && !this.connected) { strike({ swipe: n }); this.anyHit = true; } else this.closest = Math.min(this.closest, gap);
+      }
+    } else if (this.attack === 'pounce') {
+      // An arc through the air to the spot it marked; claws land at the end.
+      const L = this.leap, f = Math.min(1, this.t / (a.active * .8)), e = f * f * (3 - 2 * f);
+      const tx = L.x0 + (L.x1 - L.x0) * e, tz = L.z0 + (L.z1 - L.z0) * e;
+      this.travel(tx - this.x, tz - this.z, ctx.grid);
+      if (f >= 1 && !L.landed) {
+        L.landed = true; events.push({ type: 'pounceLand', x: this.x, z: this.z });
+        const gap = Math.hypot(this.x - p.x, this.z - p.z) - 1.35;
+        if (gap <= 0 && ctx.playerGrounded) strike(); else this.closest = Math.min(this.closest, gap);
+      }
+    } else if (this.attack === 'seed') {
+      this.closest = 0;          // the seed itself does the hitting (main.js)
+      this.connected = true;
+    }
     if (this.attack === 'quake' && this.t >= .1 && !this.connected) {
       // The ground breaks around it: dash through (i-frames), guard, or be out of range.
       const gap = Math.hypot(this.x - p.x, this.z - p.z) - QUAKE_RADIUS;
@@ -509,7 +572,7 @@ export class Creature {
     }
     if (this.t >= a.active) {
       this.quaked = false;
-      if (!this.connected) events.push({ type: 'missed', attack: this.attack, label: a.label, gap: this.closest ?? 9 });
+      if (!this.connected && !this.anyHit) events.push({ type: 'missed', attack: this.attack, label: a.label, gap: this.closest ?? 9 });
       this.setState('recover');
     }
   }
@@ -519,6 +582,14 @@ export class Creature {
     if (this.attack === 'lunge') {
       this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .5 * s);
       return [{ x: f.x, y: f.y, z: f.z, r: this.kind.biteRadius }];
+    }
+    if (this.attack === 'flurry') {
+      this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .55 * s);
+      return [{ x: f.x, y: f.y - .25, z: f.z, r: .62 }];
+    }
+    if (this.attack === 'pounce') {
+      const g = groundY(this.x, this.z);
+      return this.state === 'attack' && this.leap && this.t >= ATTACKS.pounce.active * .78 ? [{ x: this.x, y: g + .4, z: this.z, r: 1.35 }] : [];
     }
     if (this.attack === 'spin') {
       const g = groundY(this.x, this.z);
@@ -570,6 +641,15 @@ export class Creature {
     if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
     if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
     if (st === 'emerge') { const e = Math.min(1, t / EMERGE_TIME); lift = -2.6 * (1 - e) ** 2; rear = -.35 * Math.sin(e * Math.PI); legRate = 2.5; }
+    // Monkey poses: crouch before the pounce, an arc through the air, the hop back.
+    if (this.type === 'monkey') {
+      const w = tm ? Math.min(1, t / tm.windup) : 0;
+      if (st === 'windup' && this.attack === 'pounce') { rear = .32 * w; lift = -.22 * w; headOut = 0; }
+      if (st === 'windup' && this.attack === 'flurry') { rear = -.18 * w; headOut = 0; }
+      if (st === 'attack' && this.attack === 'pounce') { const f = Math.min(1, t / (a.active * .8)); lift = Math.sin(f * Math.PI) * 1.8; rear = .45 - f * .3; headOut = 0; }
+      if (st === 'attack' && this.attack === 'flurry') { rear = .22; headOut = 0; }
+      if (st === 'hop') { lift = Math.sin(Math.min(1, t / .34) * Math.PI) * .75; rear = -.35; headOut = 0; }
+    }
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
     this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
@@ -593,7 +673,21 @@ export class Creature {
       }
       if(this.sword)this.sword.rotation.x=damp(this.sword.rotation.x,st==='windup'?.64:st==='attack'?-.48:0,st==='attack'?18:8,dt);
     }
-    if(this.tail)this.tail.rotation.x=Math.sin(time*4+this.home.x)*.25;
+    if (this.type === 'monkey' && this.arms && a) {
+      // Arms: both cocked back for the flurry, then alternate claws; out front in the pounce; a throw for the seed.
+      const w = Math.min(1, t / (tm?.windup || 1));
+      for (const { mesh, side } of this.arms) {
+        let x = null;
+        if (st === 'windup') x = this.attack === 'flurry' ? 1.25 * w : this.attack === 'pounce' ? .9 * w : this.attack === 'seed' && side > 0 ? 2.3 * w : null;
+        if (st === 'attack') {
+          if (this.attack === 'flurry') { const mine = (this.swipe ?? 0) % 2 === (side > 0 ? 0 : 1), since = t - (a.swipes[this.swipe] ?? 0); x = mine ? (since < .14 ? 1.3 - since / .14 * 2.8 : -1.5) : .5; }
+          if (this.attack === 'pounce') x = -1.35;
+          if (this.attack === 'seed' && side > 0) x = -1.4;
+        }
+        if (x !== null) mesh.rotation.x = damp(mesh.rotation.x, x, st === 'attack' ? 30 : 12, dt);
+      }
+    }
+    if(this.tail)this.tail.rotation.x=Math.sin(time*(this.type==='monkey'&&st!=='wander'?7:4)+this.home.x)*.25;
     const rage = this.enraged ? 1 : 0;
     if (this.isBoss) {
       this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
@@ -652,9 +746,9 @@ export function createCreatures(scene, chapters = []) {
   // Shadowmere patrols and its guardian belong to the second atlas destination.
   // They keep their own home radius and never change Verdant Reach progression.
   for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-3,SHADOWMERE.z-13],[3,SHADOWMERE.x+8,SHADOWMERE.z+26],[4,SHADOWMERE.x-9,SHADOWMERE.z+31]]){
-    const monkey=new Creature(scene,x,z,'monkey',{id:`shadow-monkey-${i}`});monkey.name='GREEN MONKEY';list.push(monkey);
+    const monkey=new Creature(scene,x,z,'monkey',{id:`shadow-monkey-${i}`,respawn:45});monkey.name='GREEN MONKEY';list.push(monkey);
   }
-  const guardian=new Creature(scene,SHADOWMERE.guardian.x,SHADOWMERE.guardian.z,'gorilla',{id:'shadow-gorilla'});guardian.name='ROOTBOUND GORILLA';list.push(guardian);
+  const guardian=new Creature(scene,SHADOWMERE.guardian.x,SHADOWMERE.guardian.z,'gorilla',{id:'shadow-gorilla',respawn:150});guardian.name='GARROW · THE ROOTBOUND';list.push(guardian);
   return list;
 }
 

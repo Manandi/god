@@ -66,8 +66,8 @@ M = {
     'shroom': mat('SM_ShroomCap', '#e0752b', .55, '#ff7a1f', 1.6),
     'stem': mat('SM_ShroomStem', '#e7d6b0', .8),
     # creatures
-    'mfur': mat('SM_MonkeyFur', '#4d8a2f', .85), 'mfur2': mat('SM_MonkeyLeaf', '#8fbf3a', .8),
-    'mskin': mat('SM_MonkeySkin', '#e8c9a4', .7), 'ear': mat('SM_EarInner', '#e7a08a', .7),
+    'mfur': mat('SM_MonkeyFur', '#5a8a2c', .85), 'mfur2': mat('SM_MonkeyLeaf', '#93c43c', .75),
+    'mskin': mat('SM_MonkeySkin', '#e6c69b', .7), 'ear': mat('SM_EarInner', '#e08f7c', .7), 'mbelly': mat('SM_MonkeyBelly', '#a9c45c', .85),
     'eye': mat('SM_AmberEye', '#ffb52e', .15, '#ff9a1a', 1.2), 'pupil': mat('SM_Pupil', '#120c08', .2),
     'gfur': mat('SM_GorillaFur', '#20402a', .95), 'gfur2': mat('SM_GorillaMantle', '#4f8a3a', .85),
     'gskin': mat('SM_GorillaSkin', '#4a4a40', .75), 'leather': mat('SM_Leather', '#5a3a22', .9),
@@ -289,59 +289,81 @@ def part_obj(objs, name, pivot):
     o = join(objs, name); set_origin(o, B(*pivot)); return o
 
 def monkey():
-    m, l, sk = M['mfur'], M['mfur2'], M['mskin']
+    """A leaf-crowned forest imp-monkey (concept image): big round head, huge pointed ears, amber eyes,
+    heart-shaped pale face, olive fur with a light belly, crouched on long arms, and a spiral tail."""
+    fur, leafc, face, belly = M['mfur'], M['mfur2'], M['mskin'], M['mbelly']
     parts = {}
-    # hunched torso: pelvis low and back, chest forward; light belly; leafy collar
-    torso = [gblob('mt', B(0, .82, 0), (.27, .24, .36), m, rot=Matrix.Rotation(-.55, 3, 'X')),
-             gblob('mc', B(0, 1.03, .1), (.31, .27, .25), m),
-             gblob('mb', B(0, .92, .2), (.19, .15, .2), sk, rot=Matrix.Rotation(-.5, 3, 'X'))]
+    # torso: pelvis low and back, chest up and forward (a crouch), belly patch, leafy collar
+    torso = [skin('mtorso', [B(0, .52, -.42), B(0, .52, -.25), B(0, .57, -.04), B(0, .68, .14), B(0, .79, .25)],
+                  [(0, 1), (1, 2), (2, 3), (3, 4)], [.1, .21, .2, .24, .14], fur, subsurf=2),
+             gblob('mbelly', B(0, .58, .2), (.15, .16, .09), belly, rot=Matrix.Rotation(-.9, 3, 'X'))]
     for i in range(9):
-        a = -1.25 + i * .31
-        torso.append(leaf(f'mcol{i}', B(math.sin(a) * .26, 1.2, math.cos(a) * .2 - .02), B(math.sin(a), .35, math.cos(a) * .7) - B(0, 0, 0), .26, .08, l, .25))
-    parts['Monkey_Torso'] = part_obj(torso, 'Monkey_Torso', (0, .62, 0))
-    # head: big round head, huge pointed ears, amber eyes, pale muzzle, leaf crown
-    H = Vector(B(0, 1.42, .2))
-    head = [gblob('mh', H + B(0, .02, 0), (.31, .3, .28), m),
-            gblob('mface', H + B(0, -.02, .16), (.24, .2, .14), sk),
-            gblob('mm', H + B(0, -.1, .23), (.15, .1, .1), sk),
-            gblob('mbrow', H + B(0, .1, .24), (.23, .05, .06), m)]
-    for s in (-1, 1):
-        e = H + B(s * .105, .02, .27)
-        head += [gblob('me', e, (.075, .085, .04), M['eye']), gblob('mp', e + B(0, 0, .03), (.034, .046, .018), M['pupil']),
-                 gblob('mhl', e + B(-s * .022, .03, .045), (.014, .014, .008), M['stem'])]
-        ear_base = H + B(s * .26, .06, -.02)
-        ear = leaf('mear', ear_base, B(s * 1, .45, -.15) - B(0, 0, 0), .3, .13, M['ear'], .15, up=Vector((0, -1, 0)))
-        rim = leaf('mearr', ear_base + B(0, 0, -.01), B(s * 1, .45, -.15) - B(0, 0, 0), .33, .15, m, .15, up=Vector((0, -1, 0)))
-        head += [ear, rim]
-    for i in range(11):
-        a = -1.3 + i * .26; d = B(math.sin(a) * 1.1, .75, -.9) - B(0, 0, 0)
-        head.append(leaf(f'mlc{i}', H + B(math.sin(a) * .14, .24, -.06), d, .34 + .1 * (1 - abs(a)), .085, l if i % 2 else m, .45, up=Vector((1, 0, 0))))
-    parts['Monkey_Head'] = part_obj(head, 'Monkey_Head', (0, 1.24, .16))
-    # arms: long, thin, hands with fingers that nearly reach the ground
-    for s, tag in ((-1, 'L'), (1, 'R')):
-        sh = (s * .27, 1.13, .1)
-        arm = skin('ma', [B(*sh), B(s * .36, .82, .18), B(s * .38, .42, .26)], [(0, 1), (1, 2)], [.09, .07, .055], m, subsurf=1)
-        hand = gblob('mhand', B(s * .38, .36, .29), (.08, .06, .09), sk)
-        fingers = [cone(f'mf{i}', B(s * .38 + (i - 1) * .04, .33, .33), B(s * .38 + (i - 1) * .055, .27, .4), .022, .015, sk, 5) for i in range(3)]
-        parts['Monkey_Arm' + tag] = part_obj([arm, hand] + fingers, 'Monkey_Arm' + tag, sh)
-    # legs: crouched, big feet
-    for s, tag in ((-1, 'L'), (1, 'R')):
-        hip = (s * .16, .66, -.04)
-        leg = skin('ml', [B(*hip), B(s * .22, .42, .14), B(s * .2, .14, -.04)], [(0, 1), (1, 2)], [.11, .08, .06], m, subsurf=1)
-        foot = gblob('mft', B(s * .21, .07, .07), (.08, .055, .16), sk)
-        toes = [cone(f'mtoe{i}', B(s * .21 + (i - 1) * .045, .05, .18), B(s * .21 + (i - 1) * .06, .03, .27), .02, .014, sk, 5) for i in range(3)]
-        parts['Monkey_Leg' + tag] = part_obj([leg, foot] + toes, 'Monkey_Leg' + tag, hip)
-    # tail: long, sweeping up and ending in a tight curl
+        a = -1.4 + i * .35
+        torso.append(leaf(f'mcol{i}', B(math.sin(a) * .17, .82, .22 + math.cos(a) * .1), B(math.sin(a) * .9, -.35, math.cos(a) * .55 - .15) - B(0, 0, 0), .26 + .05 * (i % 2), .12, leafc if i % 2 else fur, .3, up=Vector((0, -1, 0))))
+    parts['Monkey_Torso'] = part_obj(torso, 'Monkey_Torso', (0, .52, -.2))
+    # head
+    H = Vector(B(0, .99, .38))
+    head = [gblob('mskull', H, (.32, .29, .28), fur, sub=3),
+            gblob('mcheekL', H + B(-.09, -.07, .19), (.13, .11, .1), face, sub=3),
+            gblob('mcheekR', H + B(.09, -.07, .19), (.13, .11, .1), face, sub=3),
+            gblob('mforehead', H + B(0, .05, .2), (.17, .11, .1), face, sub=3),
+            gblob('mmuzzle', H + B(0, -.12, .26), (.11, .075, .07), face, sub=3),
+            gblob('mnose', H + B(0, -.08, .325), (.03, .02, .02), M['pupil']),
+            cone('mmouth', H + B(-.06, -.165, .3), H + B(.06, -.165, .3), .008, .008, M['pupil'], 5)]
+    for sd in (-1, 1):
+        e = H + B(sd * .1, .0, .255)
+        head += [gblob('meye', e, (.075, .085, .045), M['eye'], sub=3),
+                 gblob('mpupil', e + B(0, -.005, .034), (.034, .05, .015), M['pupil']),
+                 gblob('mshine', e + B(-sd * .025, .03, .043), (.016, .016, .008), M['stem']),
+                 # mischievous brows, slanting down to the middle
+                 cone('mbrow', e + B(-sd * .07, .095, .02), e + B(sd * .06, .065, .03), .022, .016, fur, 6)]
+        # huge pointed ears, angled out and a little up, pink inside
+        base = H + B(sd * .27, .06, -.03)
+        d = B(sd * 1, .4, -.12) - B(0, 0, 0)
+        head += [leaf('mearOut', base, d, .44, .17, fur, .18, up=Vector((0, -1, 0))),
+                 leaf('mearIn', base + B(0, 0, .015), d, .36, .12, M['ear'], .16, up=Vector((0, -1, 0)))]
+    # leaf crown: a ring of pointed leaves over the brow, longer and sweeping back into a mane
+    for i in range(9):
+        a = -1.35 + i * (2.7 / 8)
+        back = abs(math.cos(a))
+        root = H + B(math.sin(a) * .19, .2 + .03 * back, -.03 - .06 * (1 - back))
+        d = B(math.sin(a) * 1.0, .85, -.55 - .7 * (1 - back)) - B(0, 0, 0)
+        head.append(leaf(f'mcrown{i}', root, d, .3 + .16 * (1 - back), .15, leafc if i % 2 else fur, .35, up=Vector((0, -1, 0))))
+    for i in range(5):
+        a = -.9 + i * .45
+        head.append(leaf(f'mmane{i}', H + B(math.sin(a) * .2, .08, -.2), B(math.sin(a) * .6, .1, -1) - B(0, 0, 0), .36, .14, fur if i % 2 else leafc, .3))
+    parts['Monkey_Head'] = part_obj(head, 'Monkey_Head', (0, .8, .26))
+    # long arms planted on the ground, elbows back, big hands with long fingers
+    for sd, tag in ((-1, 'L'), (1, 'R')):
+        sh = (sd * .2, .7, .16)
+        arm = skin('marm', [B(*sh), B(sd * .32, .38, .04), B(sd * .28, .1, .36)], [(0, 1), (1, 2)], [.095, .08, .065], fur, subsurf=2)
+        hand = [gblob('mpalm', B(sd * .28, .06, .41), (.08, .05, .085), face, sub=2)]
+        for k in range(4):
+            a = (k - 1.5) * .32
+            hand.append(skin(f'mfing{k}', [B(sd * .28 + math.sin(a) * .05, .05, .46), B(sd * .28 + math.sin(a) * .13, .03, .46 + math.cos(a) * .1)], [(0, 1)], [.024, .016], face, subsurf=1))
+        parts['Monkey_Arm' + tag] = part_obj([arm] + hand, 'Monkey_Arm' + tag, sh)
+    # crouched legs: knee up by the elbow, long feet flat on the ground
+    for sd, tag in ((-1, 'L'), (1, 'R')):
+        hip = (sd * .16, .5, -.27)
+        leg = skin('mleg', [B(*hip), B(sd * .31, .5, .04), B(sd * .25, .14, -.3)], [(0, 1), (1, 2)], [.12, .09, .065], fur, subsurf=2)
+        foot = [gblob('mfoot', B(sd * .24, .05, -.2), (.07, .045, .15), face, sub=2)]
+        for k in range(4):
+            a = (k - 1.5) * .25
+            foot.append(skin(f'mtoe{k}', [B(sd * .24 + math.sin(a) * .04, .04, -.08), B(sd * .24 + math.sin(a) * .11, .025, .02)], [(0, 1)], [.02, .013], face, subsurf=1))
+        parts['Monkey_Leg' + tag] = part_obj([leg] + foot, 'Monkey_Leg' + tag, hip)
+    # tail: sweeps back and up in an S, then winds into a tight spiral with a pale tip
     pts = []
-    for i in range(16):
-        t = i / 15
-        if t < .5: p = (t * .2, .7 + t * .2, -.3 - t * 1.1)          # out behind, low
+    for i in range(26):
+        t = i / 25
+        if t < .45:
+            u = t / .45; p = (0, .54 + u * .5, -.42 - math.sin(u * 1.4) * .42)
         else:
-            u = (t - .5) / .5 * math.tau * 1.1; r = .32 * (1 - (t - .5) * 1.2)
-            p = (.1 + (t - .5) * .2, .8 + .26 - math.cos(u) * r, -.85 - math.sin(u) * r)   # then a tight upward curl
+            u = (t - .45) / .55; ang = u * math.tau * 1.25; r = .2 * (1 - u * .75)
+            p = (0, 1.04 + .2 + math.sin(ang - math.pi / 2) * r, -.82 + .02 - math.cos(ang - math.pi / 2) * r)
         pts.append(B(*p))
-    tail = skin('mtail', pts, [(i, i + 1) for i in range(15)], [.085 - i * .0035 for i in range(16)], m, subsurf=1)
-    parts['Monkey_Tail'] = part_obj([tail], 'Monkey_Tail', (0, .7, -.26))
+    tail = skin('mtail', pts, [(i, i + 1) for i in range(25)], [.075 - i * .0019 for i in range(26)], fur, subsurf=1)
+    tip = gblob('mtip', pts[-1], (.05, .05, .05), leafc, sub=2)
+    parts['Monkey_Tail'] = part_obj([tail, tip], 'Monkey_Tail', (0, .54, -.42))
     return parts
 
 def gorilla():
@@ -381,7 +403,7 @@ def gorilla():
                  gblob('gnos', H + B(s * .05, -.14, .46), (.03, .02, .02), M['pupil'])]
     for i in range(7):
         a = -.9 + i * .3
-        head.append(leaf(f'gcr{i}', H + B(math.sin(a) * .16, .38, -.1), B(math.sin(a) * .6, .7, -1) - B(0, 0, 0), .36, .1, f2, .4, up=Vector((1, 0, 0))))
+        head.append(leaf(f'gcr{i}', H + B(math.sin(a) * .16, .38, -.1), B(math.sin(a) * .6, .7, -1) - B(0, 0, 0), .36, .12, f2, .35, up=Vector((0, -1, 0))))
     parts['Gorilla_Head'] = part_obj(head, 'Gorilla_Head', (0, 2.3, .25))
     # arms: huge, knuckles near the ground; the right forearm wrapped in roots
     for s, tag in ((-1, 'L'), (1, 'R')):
@@ -428,6 +450,20 @@ print('FOREST TRIS', {o.name: tris([o]) for o in forest})
 for o in list(mk.values()) + list(gr.values()): print('PART', o.name, tuple(round(v, 2) for v in o.location), tuple(round(v, 2) for v in o.dimensions))
 print('MONKEY TRIS', tris(mk.values()), 'GORILLA TRIS', tris(gr.values()))
 
+if PREVIEW and '--monkey' in argv:
+    for o in bpy.data.objects:
+        if o.type == 'MESH': o.hide_render = o not in mk.values()
+    world = bpy.data.worlds.new('w'); scene.world = world; world.use_nodes = True
+    world.node_tree.nodes['Background'].inputs['Color'].default_value = (*lin('#22323c'), 1)
+    key = link(bpy.data.objects.new('key', bpy.data.lights.new('key', 'SUN'))); key.data.energy = 3; key.rotation_euler = (math.radians(55), 0, math.radians(-35))
+    warm = link(bpy.data.objects.new('warm', bpy.data.lights.new('warm', 'POINT'))); warm.data.energy = 60; warm.data.color = lin('#ffb060'); warm.location = (-1.2, -1.6, 1.4)
+    ground = blob('ground', Vector((0, 0, -1)), 1, (4, 4, 1), M['rock'], sub=2)
+    cam = link(bpy.data.objects.new('cam', bpy.data.cameras.new('cam'))); scene.camera = cam; cam.data.lens = 50
+    scene.render.engine = 'CYCLES'; scene.cycles.samples = 20; scene.render.resolution_x, scene.render.resolution_y = 700, 700
+    for name, loc in (('front', (0, -3.0, 1.0)), ('three', (2.2, -2.2, 1.2)), ('side', (3.0, .2, .9))):
+        cam.location = loc; dd = Vector((0, -.1, .6)) - cam.location; cam.rotation_euler = dd.to_track_quat('-Z', 'Y').to_euler()
+        scene.render.filepath = PREVIEW.replace('.png', f'-{name}.png'); bpy.ops.render.render(write_still=True)
+    print('MONKEY PREVIEW done'); sys.exit(0)
 if PREVIEW:
     # Preview: monkey, gorilla and props side by side, under a moonlit sky with warm lantern light.
     for o in gr.values(): o.location += Vector((2.2, 0, 0))

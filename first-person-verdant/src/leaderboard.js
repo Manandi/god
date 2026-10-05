@@ -1,4 +1,4 @@
-import { profile, claimedStats, level, setCaps } from './profile.js';
+import { profile, claimedStats, level,realLevel, setCaps } from './profile.js';
 import { supabase, rpc } from './supabase.js';
 import { hunterIdentity } from './identity.js';
 
@@ -22,7 +22,7 @@ export const leaderboard = {
     if (leaderboard.hidden || !profile.complete) return false;
     const me = hunterIdentity();
     const { error } = await rpc('submit_hunter', { p_id: me.id, p_secret: me.secret, p_name: (profile.name || 'Wayfarer').slice(0, 24),
-      p_level: level(), p_xp: Math.round(profile.xp), p_klass: profile.appearance.discipline || 'fighter', p_stats: claimedStats(), p_title: profile.title || null });
+      p_level: realLevel(), p_xp: Math.round(profile.xp), p_klass: profile.appearance.discipline || 'fighter', p_stats: claimedStats(), p_title: profile.title || null });
     if (error) throw error;
     return true;
   },

@@ -1,4 +1,4 @@
-import { SITES, GATE } from './world.js';
+import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE } from './world.js';
 
 // The Verdant Reach story: one questline that runs through every site on the
 // lantern trail. Stages are strictly ordered; each chapter follows the same
@@ -20,6 +20,18 @@ import { SITES, GATE } from './world.js';
 // was earned can mend what stolen strength broke: an explorer from outside,
 // whose power comes from real effort, who wakes the three memories and speaks
 // Orrun's true name.
+//
+// The saga (owner, 2026-10-05: "the story doesn't end with the Warden; leave it open and
+// continuing for each world we add"). The world stands on one great root, and every realm
+// grows from its own Seed, tended by a keeper. The Crown of Ashmere wanted strength without
+// labour and went realm to realm taking it; each realm's Hollowing wears a different face
+// (forgetting in the Reach, darkness in Shadowmere, stillness in the Frostbound Crown...).
+// Each Book ends by freeing that realm's keeper and pointing to the next world:
+//   Book I   The Verdant Reach   (Orrun, the Thursday hunt)          → Halden hears the roots pull west
+//   Book II  Shadowmere (lv 3)    (Garrow, the Rootbound Gorilla)     → a shard of crown-glass points north
+//   Book III The Frostbound Crown (lv 5) where what's left of Ashmere waits: next to be built.
+// To add a world: append its stages after the last one (saves keep their place), give it a
+// keeper in NPCS and a Book in progress/journal, and end on the hook into the next.
 //
 // Pacing (2026-10-04): every beat raises the stakes and ends on a hook. The clock
 // is the Forgetting: each night Mossgate loses something (a lantern, a word, a
@@ -52,6 +64,9 @@ export const NPCS = {
     look: { skin: 0x6e4a36, hair: 0x3a2a20, iris: 0x3b2a20, cloth: 0xa35e54, beard: true, browTilt: .12, armTilt: .13 } },
   ysolde: { name: 'YSOLDE', title: 'LAST SENTINEL OF MOSSWATCH', x: 52.5, z: -78, facing: -.54,
     look: { skin: 0xd9a77c, hair: 0xbdc5b9, iris: 0x355468, cloth: 0x576879, trousers: 0x37425e, braid: true } },
+  // Book II: Shadowmere's keeper of lanterns, just inside the root arch.
+  maren: { name: 'MAREN', title: 'LAMPLIGHTER OF SHADOWMERE', x: SM.x + 5.6, z: SM.z + 38.5, facing: -Math.PI / 2,
+    look: { skin: 0x9a6b4f, hair: 0x2b2a35, iris: 0x7a5a22, cloth: 0x3d4f5f, trousers: 0x2c3340, braid: true, mouthTilt: .04 } },
   pip: { name: 'PIP', title: 'APPRENTICE SCOUT', x: 3, z: -140.5, facing: .61, scale: .85,
     look: { skin: 0xc48f68, hair: 0x9a5638, iris: 0x385342, cloth: 0x476f59, mouthTilt: .06 } }
 };
@@ -91,7 +106,16 @@ export const STAGES = [
     { id: `${c.id}_report`, chapter: c.id, step: 'report', objective: c.report, target: c.npc }
   ]),
   { id: 'gate', objective: 'Free Orrun: on Thursday, step through the Hollow Rift in Mossgate', target: { x: 0, z: 61.6, title: 'THE HOLLOW RIFT' } },
-  { id: 'end', objective: 'Orrun rests. The Canopy Gate stands open', target: { ...GATE, title: 'THE CANOPY GATE' } }
+  { id: 'end', objective: 'Orrun rests. Ask Halden what the roots are saying', target: 'mycel' },
+  // ---- Book II · Shadowmere (level 3)
+  { id: 'shadow_cross', book: 2, objective: 'Cross into Shadowmere through the Rootway in Mossgate (level 3)', target: { ...ROOTWAY, title: 'THE ROOTWAY' } },
+  { id: 'shadow_meet', book: 2, objective: 'Find Maren the Lamplighter under the root arch', target: 'maren' },
+  { id: 'shadow_hunt', book: 2, objective: 'Drive off the green monkeys stealing the lantern seeds', target: { x: SM.x, z: SM.z + 14, title: 'THE LANTERN TRAIL' }, count: ['monkeys', 3] },
+  { id: 'shadow_memory', book: 2, objective: 'Find what the falls remember', target: { ...SEED_SHRINE, title: 'THE FALLS' } },
+  { id: 'shadow_guardian', book: 2, objective: 'Free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
+  { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
+  // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
+  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: the Frostbound Crown opens next', target: 'maren' }
 ];
 const index = id => STAGES.findIndex(s => s.id === id);
 
@@ -117,7 +141,8 @@ const DIALOGUE = {
       ['<shrine', 'A hatchling that carried stone. My grandmother’s lullaby had a shellback in it who “built the door and kept the key”. I can’t remember the last verse any more. I used to sing it every night.'],
       ['<gate', 'Pip went up to the Shrine? Of course they did. That child has been hunting the Warden’s name since… since… Pip. Yes. Since Pip could climb.'],
       ['<end', 'Three memories, and the lanterns burn steadier. On Thursday the rift in the square opens. Go through with your hunters, and say its name like you mean it.'],
-      ['>=end', 'The lanterns haven’t burned this bright since I was an apprentice. The road goes on past the gate now, and so will you.']
+      ['<shadow_meet', 'A Rootway in my square, glowing like a lantern. Halden says it goes west to Shadowmere. Of course it does. Nothing stays simple once you arrive, {name}.'],
+      ['>=end', 'The lanterns haven’t burned this bright since I was an apprentice. If Shadowmere’s lamplighter needs oil, tell her Mossgate sends it.']
     ]
   },
   orin: {
@@ -142,14 +167,22 @@ const DIALOGUE = {
     ]
   },
   mycel: {
-    main: {},
+    main: {
+      end: { then: 'shadow_cross', lines: [
+        'You did it, {name}. Orrun rests, and the Heartseed has taken root in the gate. Now listen. Do you hear that?',
+        'The roots are still talking. Orrun was not only holding our rot back. Something on the far side of the roots was pulling it, the way a current pulls a leaf.',
+        'The Heartseed is not the only seed. The old songs name five, one for every world the great root holds up. One of them is going dark: Shadowmere, in the green west, where the lanterns grow.',
+        'I have opened a Rootway in the square. It only carries someone strong enough to come home again: level 3. Find the Lamplighter. If Shadowmere’s lights go out, our roots feel the cold next.'
+      ] }
+    },
     idle: [
       ['<rootwell', 'I am Halden. I tend the Heartseed’s roots beneath the square, and sometimes Mycel speaks through them. Today they say your name.'],
       ['<ruins', 'The Rootwell was the forest’s first spring. If its memory is fouled, everything downstream forgets a little. Everything, and everyone.'],
       ['<shrine', 'Mosswatch’s Sentinels swore their oaths on stone so the words would outlast them. Stone forgets too, only slowly. Ask Ysolde what else those stones heard.'],
       ['<gate', 'Now you know why the Hollowing hurts the strong first: it feeds on strength that was taken. And an oath is a root; the Warden has held on so long it cannot let go. It needs its name, and a hand whose strength is its own.'],
       ['<end', 'Names are the deepest roots. Carry that one carefully. The Heartseed will follow you to the gate.'],
-      ['>=end', 'The Heartseed has taken root in the gate. You did not only win a fight, {name}. You gave the forest something it could keep.']
+      ['<frost_wait', 'The Heartseed is calm, but the roots still lean west, toward Shadowmere. Follow them, {name}. The Rootway is in the square.'],
+      ['>=end', 'North. The roots under the snow are so cold they barely speak. When you are ready, the Frostbound Crown will be waiting.']
     ]
   },
   tavi: {
@@ -221,6 +254,29 @@ const DIALOGUE = {
       ['<gate', 'The words are coming back to me, all of them, even the ones I would rather lose. Go on, the Shrine.'],
       ['<end', 'What we took by force, you have earned by sweat. That is the only thing that can pay the debt. When you face it, don’t only fight. Remind it.'],
       ['>=end', 'The oath is fulfilled, and the debt with it. The stones feel lighter for it.']
+    ]
+  },
+  maren: {
+    main: {
+      shadow_meet: { then: 'shadow_hunt', lines: [
+        'Stay in the light. Further in. There. You came through the Rootway? Then the Reach finally heard us.',
+        'I am Maren. I keep Shadowmere’s lanterns. Every lantern holds a seed of light, and every night the green monkeys steal more of them.',
+        'They were lantern-keepers once, like me. Gentle, clever things. Since Garrow in the clearing changed, they hoard light like it is the last food in the world.',
+        'Drive off three of them and they will leave the trail alone for a while. Mind their claws: they never strike just once, and they leap farther than you think.'
+      ] },
+      shadow_report: { then: 'frost_wait', lines: [
+        'You brought it back. Garrow is sleeping. Truly sleeping, for the first time since I was small.',
+        'Look at the shard. That is not forest glass. It was cut from a crown. Ashmere came here too, and it did not come to drink. It came to put the lights out, so nobody would see where it went next.',
+        'Every cut face points the same way: north, to the Frostbound Crown, where the snow never melts. Whatever is left of Ashmere is waiting up there, frozen and patient.',
+        'The cold there would break you today. Grow stronger, {name}: the Rootway will open north at level 5. Until then, Shadowmere’s lanterns are yours to keep lit.'
+      ] }
+    },
+    idle: [
+      ['<shadow_meet', 'Who is there? Step into the light where I can see you.'],
+      ['<shadow_memory', 'They chain their blows. Guard the first, expect the second, and the third comes faster. And if one crouches low, it is about to leap.'],
+      ['<shadow_guardian', 'The falls were Garrow’s favourite place. If anything remembers what happened to it, the water does.'],
+      ['<shadow_report', 'Garrow carried the light from tree to tree when I was young. Whatever is holding that sword is not Garrow. Free it, please.'],
+      ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Come back stronger, {name}. I will keep a lantern lit for you.']
     ]
   },
   pip: {
@@ -327,6 +383,7 @@ export function createStory(saved, memories) {
   let stage = 'meet_sela';
   const cleared = new Set();
   const decisions = {};
+  const tally = { ...(saved?.tally || {}) };        // counted objectives (Book II: monkeys driven off)
   for (const [k, v] of Object.entries(saved?.decisions || {})) if (DECISIONS[k]?.options.some(o => o[0] === v)) decisions[k] = v;
   // Saves from before Mossgate called the first stage 'meet_wren'.
   if (saved?.stage === 'meet_wren') saved = { ...saved, stage: 'meet_sela' };
@@ -343,7 +400,14 @@ export function createStory(saved, memories) {
     get stage() { return stage; },
     get info() { return STAGES[index(stage)]; },
     get chapter() { return chapter(STAGES[index(stage)].chapter) || null; },
-    cleared, decisions, migrated: !valid && memories.size > 0,
+    cleared, decisions, tally, migrated: !valid && memories.size > 0,
+    /** Count toward a counted objective (e.g. 'monkeys'); returns true when it completes. */
+    bump(key) {
+      const s = STAGES[index(stage)]; if (!s.count || s.count[0] !== key) return false;
+      tally[key] = (tally[key] || 0) + 1; return tally[key] >= s.count[1];
+    },
+    /** The objective as the HUD shows it, with a count where the stage has one. */
+    get objectiveText() { const s = STAGES[index(stage)]; return s.count ? `${s.objective} (${Math.min(tally[s.count[0]] || 0, s.count[1])}/${s.count[1]})` : s.objective; },
     /** The decision this person is waiting on you for, if its chapter is reported and you haven't chosen. */
     pendingDecision(npc) {
       const e = Object.entries(DECISIONS).find(([k, d]) => d.npc === npc && !decisions[k] && index(stage) > index(d.after));
@@ -388,8 +452,10 @@ export function createStory(saved, memories) {
         const n = CHAPTERS.findIndex(c => c.id === s.chapter), c = CHAPTERS[n];
         return { act: `CHAPTER ${['I', 'II', 'III'][n]} · ${c.site.title}`, step: ['find', 'fight', 'memory', 'report'].indexOf(s.step), steps: 4, overall: i / (STAGES.length - 1) };
       }
-      if (i < index(CHAPTERS[0].id)) return { act: 'PROLOGUE · THE WAYFINDER', step: i, steps: 3, overall: i / (STAGES.length - 1) };
-      return stage === 'end' ? { act: 'EPILOGUE · THE FOREST REMEMBERS', step: 1, steps: 1, overall: 1 } : { act: 'FINALE · ORRUN', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
+      if (i < index(CHAPTERS[0].id)) return { act: 'BOOK I · PROLOGUE · THE WAYFINDER', step: i, steps: 3, overall: i / (STAGES.length - 1) };
+      if (s.book === 2) { const first = index('shadow_cross'); return { act: 'BOOK II · SHADOWMERE', step: i - first, steps: index('shadow_report') - first + 1, overall: i / (STAGES.length - 1) }; }
+      if (s.book === 3) return { act: 'BOOK III · THE FROSTBOUND CROWN', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
+      return stage === 'end' ? { act: 'BOOK I · EPILOGUE · THE FOREST REMEMBERS', step: 1, steps: 2, overall: i / (STAGES.length - 1) } : { act: 'BOOK I · FINALE · ORRUN', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
     },
     /** Where the compass points. */
     target() {
@@ -415,10 +481,13 @@ export function createStory(saved, memories) {
       pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Beat it down until it can hear you, then speak its name and let it rest. The Hollow Rift in Mossgate opens on Thursdays.', open: story.reached('gate') });
       const said = Object.entries(DECISIONS).filter(([k]) => decisions[k]).map(([k, d]) => d.options.find(o => o[0] === decisions[k])[1]);
       pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
-      pages.push({ title: 'THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. What was taken by force has been paid back by effort.', open: story.reached('end') });
+      pages.push({ title: 'BOOK I · THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. But the roots still pull: the Heartseed is one of five seeds, one for every world the great root holds up, and one of them is going dark.', open: story.reached('end') });
+      pages.push({ title: 'BOOK II · SHADOWMERE', text: 'West of the Reach lies Shadowmere, where every lantern holds a seed of light. Maren the Lamplighter keeps them, but the green monkeys, once lantern-keepers themselves, now steal and hoard the light, and Garrow, the realm’s keeper, guards the dark with a sword it never chose.', open: story.reached('shadow_meet') });
+      pages.push({ title: 'THE FOURTH MEMORY · THE LAMPLIGHTERS', text: 'Garrow carried the Lantern Seed’s light from tree to tree, and the monkeys followed it like moths. Then riders in Ashmere grey came through the falls with a blade of black crown-glass. They did not drink. They fused the blade to Garrow’s hand, so the keeper’s own strength would keep the lights out for them.', open: story.reached('shadow_guardian') });
+      pages.push({ title: 'THE SHARD POINTS NORTH', text: 'Garrow sleeps, and the crown-glass broke. Every cut face points north, to the Frostbound Crown, where whatever is left of Ashmere waits, frozen and patient. The Rootway north opens at level 5.', open: story.reached('frost_wait') });
       return pages;
     },
-    serialize() { return { v: 2, stage, cleared: [...cleared], decisions: { ...decisions } }; }
+    serialize() { return { v: 2, stage, cleared: [...cleared], decisions: { ...decisions }, tally: { ...tally } }; }
   };
   story.advance(stage);
   return story;

@@ -29,6 +29,9 @@ const INTRO=[
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
+// Worlds you can travel to today; the rest show their level and COMING NEXT.
+const OPEN_REALMS=['grove','shadow'];
+const devRealms=()=>!!window.__devRealms;
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
   loadProfile();let workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',mind=null,quizQ=null,quizTimer=null,quizResult=null,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;if(quizTimer){clearInterval(quizTimer);quizTimer=null;}};
@@ -367,9 +370,9 @@ export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance
     };
   }
   function renderMap(){
-    entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd></dl>${['grove','frost'].includes(selected.id)?button('enter',`ENTER ${selected.name} →`,true):`<button type="button" class="primary" data-action="enter" disabled>${level()<selected.level?`LOCKED · LEVEL ${selected.level}`:'REALM IN DEVELOPMENT'}</button>`}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${level()<b.level?`LV ${b.level}`:['grove','frost'].includes(b.id)?'OPEN':'SOON'}</small></button>`).join('')}</div></div></section>`;
+    entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd></dl>${OPEN_REALMS.includes(selected.id)&&(level()>=selected.level||devRealms())?button('enter',`ENTER ${selected.name} →`,true):`<button type="button" class="primary" data-action="enter" disabled>${level()<selected.level&&!devRealms()?`LOCKED · LEVEL ${selected.level}`:'COMING NEXT'}</button>`}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${level()<b.level&&!devRealms()?`LV ${b.level}`:OPEN_REALMS.includes(b.id)?'OPEN':'SOON'}</small></button>`).join('')}</div></div></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');
-    entry.querySelector('[data-action="enter"]').onclick=()=>{if(['grove','frost'].includes(selected.id))enterGame(selected.id);};
+    entry.querySelector('[data-action="enter"]').onclick=()=>{if(OPEN_REALMS.includes(selected.id)&&(level()>=selected.level||devRealms()))enterGame(selected.id);};
     entry.querySelectorAll('[data-realm]').forEach(b=>b.onclick=()=>{selected=BIOMES.find(v=>v.id===b.dataset.realm);globe.face(selected);renderMap();});
   }
   canvas.addEventListener('pointerdown',e=>{if(view!=='map')return;pointer={x:e.clientX,last:e.clientX,moved:false};canvas.setPointerCapture(e.pointerId);});

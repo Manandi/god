@@ -2,7 +2,8 @@ import {PLAN,PLAN_BONUS,planStep,e1rm,TITLES} from './training.js';
 
 export const BIOMES=[
   {id:'grove',name:'VERDANT REACH',short:'VERDANT',longitude:.115,latitude:.20,level:1,color:'#a8db91',description:'Ancient roots, drowned temples, and the Shellbacks. The first realm is open.',creatures:'Shellbacks · Thornlings',guardian:'Verdant Guardian'},
-  {id:'frost',name:'SHADOWMERE',short:'SHADOW',longitude:.37,latitude:.43,level:1,color:'#9bc58b',description:'A darker forest beyond the grasslands. Green monkeys stalk the old trail; a sword-bearing gorilla guards its heart.',creatures:'Green Monkeys',guardian:'The Rootbound Gorilla'},
+  {id:'shadow',name:'SHADOWMERE',short:'SHADOW',longitude:.225,latitude:.62,level:3,color:'#7fd08f',description:'A moonlit forest in the green west where the lanterns are going out. Green monkeys hunt from the roots; a sword-bearing gorilla keeps its heart.',creatures:'Green Monkeys',guardian:'The Rootbound Gorilla'},
+  {id:'frost',name:'FROSTBOUND CROWN',short:'FROST',longitude:.37,latitude:.43,level:5,color:'#a3dafa',description:'Glacial lakes beneath crystal peaks, where the Crown of Ashmere fled. The next realm: it opens at level 5.',creatures:'Rime Hares · Icebound Sentinels',guardian:'The White Maw'},
   {id:'ember',name:'EMBER WASTES',short:'EMBER',longitude:.62,latitude:.23,level:10,color:'#ffa278',description:'Black citadels divided by living fire.',creatures:'Cinder Hounds · Ash Knights',guardian:'Pyreback Colossus'},
   {id:'wraith',name:'WRAITHMOOR',short:'WRAITH',longitude:.865,latitude:.20,level:15,color:'#d5a9fa',description:'Violet ruins where the dead still wander.',creatures:'Lantern Wraiths · Hollow Knights',guardian:'The Veiled Queen'}
 ];
@@ -156,7 +157,10 @@ export const units={
 // level 3 and two weeks (about 1,200) reach level 5; later levels come slower.
 // The XP needed for level n is 227·(n−1)^1.14 (500 for level 3, 1,100 for level 5).
 export const xpForLevel=n=>n<=1?0:Math.round(227*Math.pow(n-1,1.14));
-export function level(xp=profile.xp){let n=1;while(n<999&&xp>=xpForLevel(n+1))n++;return n;}
+/** Dev panel only: play at another level without touching real XP (never sent to the board). */
+export const devLevel={value:null};
+export function realLevel(xp=profile.xp){let n=1;while(n<999&&xp>=xpForLevel(n+1))n++;return n;}
+export function level(xp=profile.xp){return devLevel.value!==null&&xp===profile.xp?devLevel.value:realLevel(xp);}
 /** Stats straight from a set of measurements (and the mind check and training log). */
 function rawStats(inputs=profile.inputs){
   const s=Object.fromEntries(METRICS.filter(m=>m.norms).map(m=>[m.key,score(m,inputs)]));

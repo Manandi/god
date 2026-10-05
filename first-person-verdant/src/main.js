@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE } from './world.js';
 import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
@@ -13,7 +13,7 @@ import { skillSlots } from './combat/skills.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
-import { createShadowmere } from './shadowmere.js';
+import { createShadowmere, rootwayMesh, ROOTWAY_BACK } from './shadowmere.js';
 import { createCollisionGrid,moveWithCollision,escapePocket } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
@@ -21,7 +21,7 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units,level,pathInfo,myClasses } from './profile.js';
+import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses } from './profile.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
@@ -142,10 +142,21 @@ function updateJournal(){
     `<article class="${page.open?'':'unknown'}"><strong>${String(i+1).padStart(2,'0')} · ${page.open?page.title:'NOT YET WRITTEN'}</strong>${page.open?page.text:'The trail has more to tell.'}</article>`).join('')+chronicleEntries;
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
-function resume(realm){if(realm==='frost'){
-  player.x=SHADOWMERE.entry.x;player.z=SHADOWMERE.entry.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.yaw=player.cameraYaw=combat.facing=0;player.pitch=0;camera.rotation.set(0,0,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;
-  toast('SHADOWMERE','Follow the seed lanterns. Watch the canopy.');
-}if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela'&&realm!=='frost')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+// Worlds (owner, 2026-10-05): the Verdant Reach, and Shadowmere (level 3) reached through the
+// Rootway in Mossgate or the atlas. Arriving places you at that world's door.
+const REALM_LEVEL={grove:1,shadow:3};
+const rootway=rootwayMesh(scene,ROOTWAY.x,groundY(ROOTWAY.x,ROOTWAY.z),ROOTWAY.z,Math.PI*.5);
+const realmDoor=id=>id==='shadow'?{x:SHADOWMERE.entry.x,z:SHADOWMERE.entry.z-1.5,yaw:0}:{x:ROOTWAY.x+2.4,z:ROOTWAY.z+.4,yaw:Math.PI*.5};
+const realmLocked=id=>!dev.realms&&level()<(REALM_LEVEL[id]||1);
+function placeAt(p){player.x=p.x;player.z=p.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.jumpCount=0;player.yaw=player.cameraYaw=combat.facing=p.yaw||0;player.pitch=0;camera.rotation.set(0,player.yaw,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;}
+function crossRealm(id,fade=true){
+  if(realmLocked(id)){toast('THE ROOTWAY WILL NOT OPEN',`${REALMS.find(r=>r.id===id)?.name||'That world'} needs level ${REALM_LEVEL[id]} · you are level ${level()}.`);return false;}
+  const door=realmDoor(id),title=id==='shadow'?'SHADOWMERE':'THE VERDANT REACH',detail=id==='shadow'?'Follow the seed lanterns. Watch the canopy.':'Back through the Rootway, in Mossgate.';
+  if(!fade){placeAt(door);toast(title,detail);return true;}
+  travel(door.x,door.z,title,detail);setTimeout(()=>{player.yaw=player.cameraYaw=combat.facing=door.yaw;},700);return true;
+}
+function resume(realm){if(realm&&realm!==realmAt(player.x,player.z))crossRealm(realm,false);
+if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela'&&realmAt(player.x,player.z)==='grove')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
@@ -275,6 +286,9 @@ function nearestInteractable(){
   const echo=world.echoes.find(e=>!memories.has(e.id)&&d(e)<ECHO_REACH[e.id]+mech.echoReach);
   if(echo)return{type:'echo',value:echo};
   if(d(RIFT)<2.6)return{type:'rift'};
+  if(d(ROOTWAY)<2.4)return{type:'rootway'};
+  if(story.stage==='shadow_memory'&&d(SEED_SHRINE)<3.2)return{type:'shadowSeed'};
+  if(d(ROOTWAY_BACK)<2.4)return{type:'rootwayBack'};
   if(d(HOLLOW_RIFT)<2.6)return{type:'riftHome'};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
@@ -292,6 +306,12 @@ function interact(){
     memories.add(e.id);story.remember(e.id);e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;persist();playTone(690,.7,.11,'sine');playTone(1040,.6,.05,'triangle');
     toast(`MEMORY FOUND · ${c.memoryTitle}`,`${c.memoryText}<br><br>${story.info.objective}`);toastTimer=7;
   }else if(nearby.type==='rift')enterRift();
+  else if(nearby.type==='rootway'){if(!travelling)crossRealm('shadow');}
+  else if(nearby.type==='shadowSeed'){
+    story.advance('shadow_guardian');persist();playTone(660,.8,.06,'sine');
+    const g=creatures.find(c=>c.type==='gorilla');if(g&&!g.alive)g.respawn();
+    toast('MEMORY FOUND · THE LAMPLIGHTERS','Garrow carried the light from tree to tree. Then riders in Ashmere grey came through the falls and fused a blade of black crown-glass to its hand, so its own strength would keep the lights out for them.<br><br>'+story.info.objective);toastTimer=9;}
+  else if(nearby.type==='rootwayBack'){if(!travelling)crossRealm('grove');}
   else if(nearby.type==='riftHome')travel(RIFT.x,RIFT.z-2.2,'MOSSGATE','Back through the rift.');
   else if(nearby.type==='gate'){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
@@ -396,7 +416,7 @@ $('dialogue').addEventListener('click',e=>{const b=e.target.closest('[data-choic
 function finishStory(){
   story.advance('end');persist();witherT=0;
   markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;
-  toast('THE FOREST REMEMBERS','Orrun is released. The Canopy Gate stands open.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
+  toast('BOOK I COMPLETE · THE FOREST REMEMBERS','Orrun is released. But the roots are still pulling: ask Halden what they say.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
   const dec=story.decisions,parts=[dec.rootwell==='open'?'The Rootwell stays open to every creature that remembers.':dec.rootwell==='wall'?'The Rootwell runs clean behind Mossgate’s new wall.':'',dec.ruins==='truth'?'Mosswatch’s confession is spoken in the square.':dec.ruins==='quiet'?'Mosswatch’s debt is known to the few who needed to know.':'',dec.shrine==='bring'?'Pip stood at the gate and said the name.':dec.shrine==='home'?'Pip carried the name home to Mossgate.':''].filter(Boolean);
   $('endingChoices').textContent=parts.join(' ');
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
@@ -491,7 +511,7 @@ const BOSS_CUES={tailspin:'TAIL SPIN · DASH THROUGH OR BACK OFF',tailslam:'TAIL
 // F2 and the password: test any part of the map, any weapon, any class and
 // any point in the story without playing up to it. Adapted from the ChatGPT
 // Sites developer panel.
-const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false,bossUnlocked:false};
+const dev={open:false,invulnerable:false,noclip:false,showColliders:false,breath:false,bossUnlocked:false,realms:false,freeze:false};
 const devPanel=$('devPanel');
 const perfPanel=document.createElement('pre');perfPanel.id='perfPanel';perfPanel.style.display='none';document.body.appendChild(perfPanel);
 let showPerf=false,fpsFrames=0,fpsTime=0;
@@ -506,11 +526,19 @@ function updateCollisionViz(){
     .sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z));
   collisionVizMeshes.forEach((r,i)=>{const c=near[i];r.visible=!!c;if(c){r.position.set(c.x,groundY(c.x,c.z)+.06,c.z);r.scale.setScalar(c.r+.43);}});
 }
-$('devStage').innerHTML=STAGES.map(s=>`<option value="${s.id}">${s.id.toUpperCase().replace(/_/g,' ')} · ${s.objective}</option>`).join('');
+// Stages grouped by Book in the picker; people to teleport to come from the story's cast.
+$('devStage').innerHTML=[['BOOK I · THE VERDANT REACH',s=>!s.book],['BOOK II · SHADOWMERE',s=>s.book===2],['BOOK III · THE FROSTBOUND CROWN',s=>s.book===3]]
+  .map(([label,f])=>`<optgroup label="${label}">${STAGES.filter(f).map(s=>`<option value="${s.id}">${s.id.toUpperCase().replace(/_/g,' ')} · ${s.objective}</option>`).join('')}</optgroup>`).join('');
+$('devPeople').innerHTML=Object.entries(NPCS).map(([id,n])=>`<button data-npc="${id}">${n.name}</button>`).join('');
+let devTab='player';try{devTab=sessionStorage.getItem('verdant-dev-tab')||'player';}catch{}
+function showDevTab(tab){devTab=tab;try{sessionStorage.setItem('verdant-dev-tab',tab);}catch{}
+  devPanel.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));devPanel.querySelectorAll('[data-page]').forEach(p=>p.classList.toggle('hidden',p.dataset.page!==tab));}
+showDevTab(devTab);
 function updateDevTelemetry(){
   const s=stats(),w=equippedWeapon();
-  $('devTelemetry').textContent=`X ${player.x.toFixed(1)}  Z ${player.z.toFixed(1)}  GROUND ${groundY(player.x,player.z).toFixed(2)}\nSTAGE ${story.stage}  ·  ${story.info.objective}\nSTR ${s.strength}  SPD ${s.speed}  STA ${s.stamina}  DEF ${s.defense}  INT ${s.intelligence}  DIS ${s.discipline}\nCLASS ${mech.klass.toUpperCase()}  ·  WEAPON ${w.toUpperCase()}${devOverrides.anyWeapon?' (DEV)':''}\nHP ${player.health}/${maxHealth()}  BREATH ${Math.round(player.stamina)}  JUMP ${mech.doubleJump?'DOUBLE':'SINGLE'}`;
-  devPanel.querySelectorAll('[data-dev]').forEach(b=>b.classList.toggle('active',!!({invulnerable:dev.invulnerable,noclip:dev.noclip,colliders:dev.showColliders,breath:dev.breath,fps:showPerf,debug:debug.enabled})[b.dataset.dev]));
+  $('devTelemetry').textContent=`${realmAt(player.x,player.z)==='shadow'?'SHADOWMERE':'VERDANT REACH'}  ·  X ${player.x.toFixed(1)}  Z ${player.z.toFixed(1)}  ·  LV ${level()}${devLevel.value!==null?` (REAL ${realLevel()})`:''}\nSTAGE ${story.stage}  ·  ${story.info.objective}\nSTR ${s.strength}  SPD ${s.speed}  STA ${s.stamina}  DEF ${s.defense}  INT ${s.intelligence}  DIS ${s.discipline}\nCLASS ${mech.klass.toUpperCase()}  ·  WEAPON ${w.toUpperCase()}${devOverrides.anyWeapon?' (DEV)':''}\nHP ${player.health}/${maxHealth()}  BREATH ${Math.round(player.stamina)}  JUMP ${mech.doubleJump?'DOUBLE':'SINGLE'}`;
+  devPanel.querySelectorAll('[data-dev]').forEach(b=>b.classList.toggle('active',!!({invulnerable:dev.invulnerable,noclip:dev.noclip,colliders:dev.showColliders,breath:dev.breath,fps:showPerf,debug:debug.enabled,realms:dev.realms,hunt:dev.bossUnlocked,freeze:dev.freeze})[b.dataset.dev]));
+  devPanel.querySelectorAll('[data-level]').forEach(b=>b.classList.toggle('active',b.dataset.level==='real'?devLevel.value===null:devLevel.value===+b.dataset.level));
   devPanel.querySelectorAll('[data-weapon]').forEach(b=>b.classList.toggle('active',b.dataset.weapon==='locks'?!devOverrides.anyWeapon:devOverrides.anyWeapon&&profile.appearance.weapon===b.dataset.weapon));
   devPanel.querySelectorAll('[data-class]').forEach(b=>b.classList.toggle('active',profile.appearance.discipline===b.dataset.class));
   $('devStage').value=story.stage;
@@ -537,7 +565,8 @@ function teleport(x,z,label){
   lockTarget=null;combat.state='move';combat.t=0;cameraKick=0;viewBlend=0;toast(`DEV · ${label}`,'Moved to solid ground.');
 }
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
-  ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],shadowmere:[SHADOWMERE.entry.x,SHADOWMERE.entry.z,'SHADOWMERE'],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
+  ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],shadowmere:[SHADOWMERE.entry.x,SHADOWMERE.entry.z-1.5,'SHADOWMERE · ROOT ARCH'],
+  shadowTrail:[SHADOWMERE.x,SHADOWMERE.z+14,'SHADOWMERE · LANTERN TRAIL'],falls:[SEED_SHRINE.x+1.2,SEED_SHRINE.z+1.5,'SHADOWMERE · THE FALLS'],clearing:[SHADOWMERE.guardian.x,SHADOWMERE.guardian.z+9,"SHADOWMERE · GARROW'S CLEARING"],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
 // Real-life stat presets on the adult norms (profile.js): median adult, top ~5%, top 0.1%, and bottom ~5%.
 const DEV_REAL_INPUTS='hollow-roots-dev-real-inputs';
 const STAT_PRESETS={
@@ -560,7 +589,14 @@ function devJumpTo(stage){
 devPanel.addEventListener('change',e=>{if(e.target.id==='devStage')devJumpTo(e.target.value);updateDevTelemetry();});
 devPanel.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;e.stopPropagation();
+  const ahead=d=>({x:player.x-Math.sin(player.cameraYaw)*d,z:player.z-Math.cos(player.cameraYaw)*d});
+  const bring=c=>{const p=ahead(4);if(!c.alive)c.respawn();c.x=c.home.x=p.x;c.z=c.home.z=p.z;c.heading=Math.atan2(player.x-c.x,player.z-c.z);c.setState('alert');};
+  if(b.dataset.tab){showDevTab(b.dataset.tab);return;}
   if(b.dataset.teleport){const [x,z,label]=DEV_PLACES[b.dataset.teleport];teleport(x,z,label);}
+  else if(b.dataset.npc){const n=NPCS[b.dataset.npc];teleport(n.x+Math.sin(n.facing||0)*2,n.z+Math.cos(n.facing||0)*2,n.name);}
+  else if(b.dataset.realmGo){placeAt(realmDoor(b.dataset.realmGo));toast('DEV · WORLD',b.dataset.realmGo==='shadow'?'SHADOWMERE':'THE VERDANT REACH');}
+  else if(b.dataset.jump)devJumpTo(b.dataset.jump);
+  else if(b.dataset.level){devLevel.value=b.dataset.level==='real'?null:+b.dataset.level;mech=mechanics();equipWeapon();player.health=Math.min(maxHealth(),Math.max(player.health,1));toast('DEV · LEVEL',devLevel.value===null?`YOUR REAL LEVEL · ${realLevel()}`:`PLAYING AT LEVEL ${devLevel.value}`);}
   else if(b.dataset.weapon){
     if(b.dataset.weapon==='locks'){devOverrides.anyWeapon=false;toast('DEV · STAT LOCKS ON',`In hand: ${equippedWeapon().toUpperCase()}`);}
     else{devOverrides.anyWeapon=true;profile.appearance.weapon=b.dataset.weapon;saveProfile();toast('DEV · WEAPON',b.dataset.weapon.toUpperCase());}
@@ -584,6 +620,16 @@ devPanel.addEventListener('click',e=>{
     case 'fps':togglePerf();break;
     case 'debug':debug.toggle();break;
     case 'stage':devJumpTo($('devStage').value);break;
+    case 'prev':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i>0)devJumpTo(STAGES[i-1].id);break;}
+    case 'lv-up':case 'lv-down':devLevel.value=Math.max(1,level()+(b.dataset.dev==='lv-up'?1:-1));mech=mechanics();equipWeapon();toast('DEV · LEVEL',`PLAYING AT LEVEL ${devLevel.value}`);break;
+    case 'realms':dev.realms=!dev.realms;window.__devRealms=dev.realms;toast('DEV · LEVEL LOCKS',dev.realms?'Every world opens for you.':'Worlds respect levels again.');break;
+    case 'hunt':dev.bossUnlocked=!dev.bossUnlocked;toast('DEV · THE HUNT',dev.bossUnlocked?'Orrun can wake any day, with any number of hunters.':'Back to Thursdays.');break;
+    case 'freeze':dev.freeze=!dev.freeze;toast('DEV · ENEMIES',dev.freeze?'FROZEN':'MOVING');break;
+    case 'revive':{let n=0;for(const c of creatures)if(c!==warden&&!c.alive&&!c.chapter){c.respawn();n++;}toast('DEV · REVIVED',`${n} creatures back on their feet.`);break;}
+    case 'summon-monkey':{const m=creatures.filter(c=>c.type==='monkey').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · GREEN MONKEY','In front of you.');}break;}
+    case 'summon-gorilla':{const g=creatures.find(c=>c.type==='gorilla');if(g){bring(g);toast('DEV · GARROW','In front of you.');}break;}
+    case 'inventory':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.inventory();return;
+    case 'atlas':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.show('map');return;
     case 'next':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i<STAGES.length-1)devJumpTo(STAGES[i+1].id);break;}
     case 'defeat-nearby':{let n=0;for(const c of creatures)if(c.alive&&c!==warden&&Math.hypot(c.x-player.x,c.z-player.z)<30){c.hit({damage:1e6,poise:0,fromX:player.x,fromZ:player.z,push:0,stagger:0,part:'head'});n++;}
       if(warden?.alive&&warden.awake&&Math.hypot(warden.x-player.x,warden.z-player.z)<30){warden.hit({damage:1e6,poise:0,fromX:player.x,fromZ:player.z,stagger:0,part:'head'});n++;}
@@ -643,6 +689,8 @@ function raiseExtras(id){
 }
 let askedAt=-9;
 function updateEncounters(){
+  // Book II: arriving in Shadowmere moves the story on.
+  if(story.stage==='shadow_cross'&&realmAt(player.x,player.z)==='shadow'){story.advance('shadow_meet');persist();toast('BOOK II · SHADOWMERE',story.info.objective);playTone(620,.35,.05,'sine');}
   if(story.stage==='trial'&&creatures.some(c=>c.id==='trial'&&c.state==='defeated')){story.advance('trial_report');persist();toast('THE TRIAL IS PASSED',story.info.objective);playTone(620,.35,.05,'sine');}
   const ch=story.chapter,step=story.info.step;
   if(ch&&!story.cleared.has(ch.id)&&!spawned.has(ch.id)&&(step==='find'||step==='fight')){
@@ -699,8 +747,10 @@ function respawn(){
   // Orrun only goes back to sleep if nobody is left fighting it (a guest's copy follows the host).
   const othersHunting=coop.others().some(o=>inHollow(o));
   if(warden?.awake&&warden.alive&&!othersHunting&&!coop.guest)warden.reset();
-  player.defeated=0;player.health=maxHealth();player.x=checkpoint?RIFT.x:world.home.spawn.x;player.z=checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  const inShadow=realmAt(player.x,player.z)==='shadow';
+  player.defeated=0;player.health=maxHealth();player.x=inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
+  if(inShadow){toast('THE LANTERNS CATCH YOU','You wake under the root arch. The forest is still watching.');return;}
   toast('THE ROOTS RETURN YOU TO MOSSGATE',hunting&&othersHunting?'Your hunters fight on. Step back through the rift to rejoin them.':checkpoint?'You wake by the Hollow Rift.':'The memories you found remain with you.');
 }
 
@@ -767,7 +817,24 @@ function landShot(h){
   sound.hit(load.move,res.effect,++combo);comboTimer=2;effects.burst(h.point,p.dir.clone().negate(),load.heavy);damageNumber(h.point,res.damage,res.effect);player.engaged=4;
   if(res.toppled){sound.topple();cue('TOPPLED',.6);}if(res.defeated)creatureDefeated(c);
 }
+// Seeds the green monkeys throw: they fly straight, stop on trees and the ground, and strike you
+// as an ordinary light blow (dash through, guard, or parry to bat them away).
+const enemyShots=[],seedGeo=new THREE.IcosahedronGeometry(.13,0),seedMat=new THREE.MeshStandardMaterial({color:0x6d4a22,emissive:0x2a1a06,roughness:.6,flatShading:true});
+function throwSeed(c,ev){
+  const from=new THREE.Vector3(ev.x,ev.y,ev.z),to=new THREE.Vector3(ev.tx,ev.ty,ev.tz),vel=to.sub(from).normalize().multiplyScalar(ev.speed||17);vel.y+=1.2;
+  const mesh=new THREE.Mesh(seedGeo,seedMat);mesh.position.copy(from);mesh.castShadow=true;scene.add(mesh);enemyShots.push({mesh,vel,t:0,c});
+}
+function updateEnemyShots(dt){
+  for(let i=enemyShots.length-1;i>=0;i--){
+    const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=6*dt;p.addScaledVector(s.vel,dt);s.mesh.rotation.x+=dt*14;
+    const feet=groundY(player.x,player.z)+player.height,hitMe=Math.hypot(p.x-player.x,p.z-player.z)<.62&&p.y>feet&&p.y<feet+1.9&&!player.defeated;
+    const stop=s.t>1.6||p.y<groundY(p.x,p.z)||collisionGrid.near(p.x,p.z).some(o=>p.y<o.top&&Math.hypot(p.x-o.x,p.z-o.z)<o.r);
+    if(hitMe){const from={type:'monkey',name:'GREEN MONKEY',x:p.x-s.vel.x*.2,z:p.z-s.vel.z*.2,deflect:()=>true};incomingStrike(from,{attack:'seed',label:'seed pellet',kind:'light',damage:1});}
+    if(hitMe||stop){scene.remove(s.mesh);enemyShots.splice(i,1);}
+  }
+}
 function updateProjectiles(dt){
+  updateEnemyShots(dt);
   if(!projectiles.count)return;
   const blocked=v=>collisionGrid.near(v.x,v.z).some(o=>v.y<o.top&&Math.hypot(v.x-o.x,v.z-o.z)<o.r);
   for(const h of projectiles.update(dt,{targets:creatures.filter(c=>c.alive&&!(c===warden&&warden.sealed)),blocked,ground:groundY}))landShot(h);
@@ -978,6 +1045,9 @@ function scaleBosses(){
 function creatureDefeated(c){
   if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL',story.stage==='gate'?'The hunt brought it down. Go to it and speak its name.':'The hunt is won for this week.');}
   else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast(`${c.name||c.type.toUpperCase()} DRIVEN BACK`,'Creatures never grant XP. Real effort does.');}
+  // Book II: monkeys driven off count toward the hunt; freeing Garrow breaks the crown-glass.
+  if(c.type==='monkey'&&story.stage==='shadow_hunt'){const done=story.bump('monkeys');persist();if(done){story.advance('shadow_memory');persist();setTimeout(()=>toast('THE TRAIL LANTERNS HOLD',story.info.objective),1200);playTone(620,.35,.05,'sine');}else toast('GREEN MONKEY DRIVEN BACK',story.objectiveText);}
+  if(c.type==='gorilla'&&story.stage==='shadow_guardian'){story.advance('shadow_report');persist();setTimeout(()=>toast('THE CROWN-GLASS BREAKS','Garrow sinks to one knee and its eyes clear. Take the shard to Maren.'),1400);playTone(540,1.2,.08);}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
 function strikeCreature(c,params){
@@ -1030,7 +1100,8 @@ function updateHUD(){
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(mech.flasks-player.flasks)}</em>`;
   $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
-  const next=story.stage==='gate'&&inHollow(player)?{x:BED.x,z:BED.z,title:'ORRUN'}:story.target();
+  let next=story.stage==='gate'&&inHollow(player)?{x:BED.x,z:BED.z,title:'ORRUN'}:story.target();
+  if(realmAt(next.x,next.z)!==realmAt(player.x,player.z)){const out=realmAt(player.x,player.z)==='shadow'?ROOTWAY_BACK:ROOTWAY;next={x:out.x,z:out.z,title:`ROOTWAY · ${realmAt(next.x,next.z)==='shadow'?'SHADOWMERE':'THE REACH'}`};}
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
   updateWaypoint(next,distance);updateMinimap(next,1/30);
@@ -1051,13 +1122,16 @@ function updateHUD(){
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
   else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:'SEALED UNTIL THURSDAY'}</small>`;
   else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
+  else if(nearby?.type==='rootway')$('interaction').innerHTML=`<b>E</b> · CROSS INTO SHADOWMERE <small>${realmLocked('shadow')?`NEEDS LEVEL ${REALM_LEVEL.shadow} · YOU ARE ${level()}`:'THE ROOTWAY IS OPEN'}</small>`;
+  else if(nearby?.type==='shadowSeed')$('interaction').innerHTML='<b>E</b> · TOUCH THE LANTERN SEED <small>WHAT THE FALLS REMEMBER</small>';
+  else if(nearby?.type==='rootwayBack')$('interaction').innerHTML='<b>E</b> · RETURN TO THE VERDANT REACH <small>MOSSGATE</small>';
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
 // The quest tracker (top left): the act, its steps as pips, the objective, which way
 // and how far, and a thin bar for the whole story. A new objective flashes in gold.
 let questShown='',questFlash=0;
 function updateQuestCard(next,distance){
-  const pr=story.progress,obj=story.info.objective;
+  const pr=story.progress,obj=story.objectiveText;
   if(obj!==questShown){if(questShown)questFlash=4;questShown=obj;$('objective').textContent=obj;$('questAct').textContent=pr.act;
     $('questSteps').innerHTML=Array.from({length:pr.steps},(_,i)=>`<i class="${i<pr.step?'done':i===pr.step?'now':''}"></i>`).join('');$('questBar').style.width=`${Math.round(pr.overall*100)}%`;}
   questFlash=Math.max(0,questFlash-1/30);$('questCard').classList.toggle('fresh',questFlash>0);
@@ -1129,7 +1203,7 @@ function updateModeLabel(){$('cameraMode').textContent=player.thirdPerson?(lockT
 
 function update(rawDt){
   // Hit-stop: the fighters freeze for a few frames on impact; camera and effects keep running.
-  const frozen=hitstop>0;hitstop=Math.max(0,hitstop-rawDt);
+  const frozen=hitstop>0||dev.freeze;hitstop=Math.max(0,hitstop-rawDt);
   if(slowmo.left>0)slowmo.left-=rawDt;
   const dt=frozen?0:rawDt*(slowmo.left>0?slowmo.scale:1);
   elapsed+=dt;
@@ -1216,7 +1290,7 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);updateProjectiles(dt);coop.update(rawDt,elapsed);
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);rootway.update(elapsed);updateProjectiles(dt);coop.update(rawDt,elapsed);
   if(coop.teamSize>1&&coop.authority)sendWorld(rawDt);
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
@@ -1242,8 +1316,11 @@ function update(rawDt){
       if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
-      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(c.type==='gorilla'&&ev.attack==='quake'?'SEED GRENADE · MOVE OR DASH THROUGH':({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:c.type==='monkey'?'CLAW LUNGE COMING':'LUNGE COMING',spin:'SHELL SPIN · GET CLEAR',slam:c.type==='gorilla'?'SWORD SLAM · JUMP OR DASH':'SLAM · JUMP OR DASH THROUGH'}[ev.attack]),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(c.type==='gorilla'&&ev.attack==='quake'?'SEED GRENADE · MOVE OR DASH THROUGH':({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:c.type==='monkey'?'CLAW LUNGE COMING':'LUNGE COMING',flurry:ev.chained?'INTO THE FLURRY · GUARD ×3':'CLAW FLURRY · GUARD ×3 OR BACK OFF',pounce:'POUNCE · DODGE ASIDE',seed:'SEED PELLET · DASH OR GUARD',spin:'SHELL SPIN · GET CLEAR',slam:c.type==='gorilla'?'SWORD SLAM · JUMP OR DASH':'SLAM · JUMP OR DASH THROUGH'}[ev.attack]),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
+      else if(ev.type==='swipe')sound.swipe();
+      else if(ev.type==='pounceLand'){sound.thud();effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,1.6,.25);}
+      else if(ev.type==='throw')throwSeed(c,ev);
       else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);
@@ -1401,8 +1478,8 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,crossRealm,realmAt,get travelling(){return travelling;},profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
 // A non-destructive encounter route for checking the new realm and its combat.
 // Unlike ?arena, this never completes the profile or writes player progression.
-if(params.has('shadowmere'))resume('frost');
+if(params.has('shadowmere'))resume('shadow');
