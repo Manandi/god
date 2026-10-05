@@ -17,7 +17,7 @@ export const HOME = { name:'ROOTWARD HOMESTEAD', x:0, z:88, radius:15 };
 export const ARENA = { x: 23, z: -168, r: 21 };
 // The Scorched Hollow: where the Old Shell (the ChatGPT Sites hunt) has nested.
 export const HUNT = { name: 'THE SCORCHED HOLLOW', x: 60, z: -18, r: 14 };
-export const SHADOWMERE = { name:'SHADOWMERE', x:130, z:-58, r:38, entry:{x:130,z:-20}, guardian:{x:130,z:-58} };
+export const SHADOWMERE = { name:'SHADOWMERE', x:130, z:-58, r:48, entry:{x:130,z:-12}, guardian:{x:130,z:-65} };
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -212,9 +212,9 @@ function buildHome(scene,colliders,animated,stone,moss,cameraObstacles){
 export function buildWorld(scene){
   const random=rng(),colliders=[],animated=[],particles=[];
   scene.background=color('#779d92');scene.fog=new THREE.FogExp2(0x83a79a,.0057);
-  scene.add(new THREE.HemisphereLight(0xc6e9e4,0x33462b,1.8));
+  const ambient=new THREE.HemisphereLight(0xc6e9e4,0x33462b,1.8);scene.add(ambient);
   const sun=new THREE.DirectionalLight(0xf6dda0,2.45);sun.position.set(-45,95,-50);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-48;sun.shadow.camera.right=48;sun.shadow.camera.top=48;sun.shadow.camera.bottom=-48;sun.shadow.camera.near=.5;sun.shadow.camera.far=230;sun.shadow.normalBias=.035;sun.shadow.bias=-.00012;scene.add(sun,sun.target);
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);gl_FragColor=vec4(mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h)),1.);}' }));scene.add(sky);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{shade:{value:0}},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'uniform float shade; varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);vec3 day=mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h));gl_FragColor=vec4(mix(day,vec3(.045,.105,.09),shade),1.);}' }));scene.add(sky);
   const s=TERRAIN.size,steps=TERRAIN.steps,positions=[],colors=[],indices=[],uvs=[];
   const cLow=color('#365333'),cMid=color('#567b46'),cHigh=color('#87966a');
   for(let z=0;z<=steps;z++)for(let x=0;x<=steps;x++){
@@ -243,7 +243,7 @@ export function buildWorld(scene){
   const trunkGeometry=new THREE.CylinderGeometry(.32,.58,1,14),crownGeometry=organicCrown();
   const trees=[];for(let i=0;i<540;i++){
     const x=(random()-.5)*355,z=(random()-.5)*355;
-    if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+5||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+6||Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
+    if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+5||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+6||Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+5||Math.hypot(x,z-38)<10||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<17)||Math.hypot(x-GATE.x,z-GATE.z)<15||Math.hypot(x-ARENA.x,z-ARENA.z)<31)continue;
     const ridge=Math.hypot(x*.85,z+58)>158;if(ridge&&random()<.45)continue;
     trees.push({x,z,height:5.7+random()*7.2,size:.85+random()*.75,kind:Math.floor(random()*leafMaterials.length)});
   }
@@ -271,10 +271,10 @@ export function buildWorld(scene){
   const city=buildCity(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
   const home=buildHome(scene,colliders,animated,rockMat,mossMat,cameraObstacles);
   const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,1),rockMat,700),lichens=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,0),mossMat,420);let nR=0,nL=0;
-  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+2||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+3||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
+  for(let i=0;i<700;i++){const x=(random()-.5)*345,z=(random()-.5)*345;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius+2||Math.hypot(x-HUNT.x,z-HUNT.z)<HUNT.r+3||Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+3||nearTrail(x,z)||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<9)||Math.hypot(x-ARENA.x,z-ARENA.z)<26)continue;const scale=.3+random()*1.7,y=groundY(x,z);dummy.position.set(x,y+scale*.25,z);dummy.rotation.set(random(),random()*6.28,random());dummy.scale.set(scale*1.4,scale*.65,scale);dummy.updateMatrix();rocks.setMatrixAt(nR++,dummy.matrix);rocks.setColorAt(nR-1,new THREE.Color().setHSL(.25+random()*.08,.09+random()*.11,.54+random()*.15));if(scale>.43)colliders.push({x,z,r:scale*1.12,top:y+scale*.9});if(nL<420&&scale>.7&&random()<.76){dummy.position.set(x+(random()-.5)*scale*.7,y+scale*.78,z+(random()-.5)*scale*.6);dummy.rotation.set(0,random()*6.28,0);dummy.scale.set(scale*.43,.045+random()*.08,scale*.34);dummy.updateMatrix();lichens.setMatrixAt(nL++,dummy.matrix);}}
   rocks.count=nR;rocks.castShadow=true;lichens.count=nL;scene.add(rocks,lichens);
   const grass=new THREE.InstancedMesh(leafCluster(),new THREE.MeshStandardMaterial({color:0x78a46a,side:THREE.DoubleSide,roughness:1}),3900);let nG=0;
-  for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius||(nearTrail(x,z)&&random()<.85))continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
+  for(let i=0;i<5500&&nG<3900;i++){const x=(random()-.5)*320,z=(random()-.5)*320;if((Math.abs(x-CITY.x)<CITY.radius&&Math.abs(z-CITY.z)<18)||Math.hypot(x-HOME.x,z-HOME.z)<HOME.radius||Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r||(nearTrail(x,z)&&random()<.85))continue;const scale=.4+random()*1.9;dummy.position.set(x,groundY(x,z),z);dummy.rotation.set((random()-.5)*.22,random()*6.28,(random()-.5)*.18);dummy.scale.set(scale,scale,scale);dummy.updateMatrix();grass.setMatrixAt(nG,dummy.matrix);grass.setColorAt(nG++,new THREE.Color().setHSL(.25+random()*.09,.27+random()*.13,.35+random()*.16));}grass.count=nG;scene.add(grass);
   // Curved fern fronds and grass blades soften the path without blocking movement.
   const fernMat=new THREE.MeshStandardMaterial({color:0x3a7853,roughness:1,side:THREE.DoubleSide});
   const fernShape=fernFronds(),ferns=new THREE.InstancedMesh(fernShape,fernMat,1700);let fernCount=0;
@@ -282,7 +282,7 @@ export function buildWorld(scene){
   const petals=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.17,0),new THREE.MeshStandardMaterial({color:0xe5c688,roughness:.95}),520);let flowerCount=0;
   for(let i=0;i<2200;i++){
     const x=(random()-.5)*300,z=(random()-.5)*300;
-    if(Math.hypot(x,z-39)<4||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<3)||Math.hypot(x-ARENA.x,z-ARENA.z)<22)continue;
+    if(Math.hypot(x,z-39)<4||SITES.some(p=>Math.hypot(x-p.x,z-p.z)<3)||Math.hypot(x-ARENA.x,z-ARENA.z)<22||Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r)continue;
     const y=groundY(x,z),near=nearTrail(x,z);
     if(near&&random()<.42&&flowerCount<520){
       const a=flowerCount++;dummy.position.set(x,y+.33,z);dummy.rotation.set(0,random()*6.28,(random()-.5)*.3);dummy.scale.setScalar(.75+random()*.8);dummy.updateMatrix();flowerStem.setMatrixAt(a,dummy.matrix);
@@ -302,7 +302,7 @@ export function buildWorld(scene){
   const caps=new THREE.InstancedMesh(new THREE.SphereGeometry(.25,10,6,0,Math.PI*2,0,Math.PI/2),capMat,280);let fungusCount=0;
   for(let i=0;i<950&&fungusCount<280;i++){
     const x=(random()-.5)*270,z=(random()-.5)*270;
-    if(!nearTrail(x,z)||Math.hypot(x,z-39)<4||random()<.35)continue;
+    if(!nearTrail(x,z)||Math.hypot(x,z-39)<4||Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r||random()<.35)continue;
     const y=groundY(x,z),scale=.55+random()*1.25,idx=fungusCount++;
     dummy.position.set(x,y+.14*scale,z);dummy.rotation.set(0,random()*6.28,0);dummy.scale.setScalar(scale);dummy.updateMatrix();stalks.setMatrixAt(idx,dummy.matrix);
     dummy.position.y=y+.28*scale;dummy.scale.setScalar(scale);dummy.updateMatrix();caps.setMatrixAt(idx,dummy.matrix);
@@ -344,44 +344,65 @@ export function buildWorld(scene){
     animated.push({mesh:crystal,type:'echo',baseY:y,index:i},{mesh:ring,type:'ring',baseY:y,index:i});
     return {...site,crystal,ring,light};
   });
-  // Shadowmere is a second destination inside the Reach: the ground remains
-  // connected to the existing world, while its dark soil, close canopy and
-  // amber seed-lights make the change in atmosphere clear at the gate.
+  // Shadowmere is a walkable, connected forest. Keep a clear trail to the
+  // guardian, then fill the flanks with roots, layered crowns and undergrowth.
   const shadowGeo=new THREE.CircleGeometry(SHADOWMERE.r,64),shadowPos=shadowGeo.getAttribute('position'),shadowBase=groundY(SHADOWMERE.x,SHADOWMERE.z);
   for(let i=0;i<shadowPos.count;i++){const x=shadowPos.getX(i),z=shadowPos.getY(i);shadowPos.setZ(i,groundY(SHADOWMERE.x+x,SHADOWMERE.z-z)-shadowBase+.07);}
   shadowPos.needsUpdate=true;shadowGeo.computeVertexNormals();
   const shadowGround=new THREE.Mesh(shadowGeo,new THREE.MeshStandardMaterial({color:0x252d1d,roughness:1}));
   shadowGround.rotation.x=-Math.PI/2;shadowGround.position.set(SHADOWMERE.x,shadowBase,SHADOWMERE.z);shadowGround.receiveShadow=true;scene.add(shadowGround);
   cameraObstacles.push(shadowGround);
+  const trailMat=new THREE.MeshStandardMaterial({color:0x514530,vertexColors:true,roughness:1,side:THREE.DoubleSide});
+  path(scene,[[130,-11],[129,-23],[133,-37],[127,-49],[130,-65]],5.2,trailMat);
   const shadowBark=new THREE.MeshStandardMaterial({color:0x292b20,roughness:1}),shadowLeaf=[0x102d24,0x173c2a,0x1d472b,0x244a31].map(v=>new THREE.MeshStandardMaterial({color:v,roughness:1,flatShading:true}));
-  const shadowRand=rng(772013),trunkGeo=new THREE.CylinderGeometry(.36,.62,1,7),crownGeo=new THREE.IcosahedronGeometry(1,1),shadowTrunks=new THREE.InstancedMesh(trunkGeo,shadowBark,48),shadowCrowns=shadowLeaf.map(m=>new THREE.InstancedMesh(crownGeo,m,144)),shadowCounts=[0,0,0,0],shadowDummy=new THREE.Object3D();
+  const shadowRand=rng(772013),trunkGeo=new THREE.CylinderGeometry(.36,.62,1,7),crownGeo=new THREE.IcosahedronGeometry(1,1),shadowTrunks=new THREE.InstancedMesh(trunkGeo,shadowBark,150),shadowCrowns=shadowLeaf.map(m=>new THREE.InstancedMesh(crownGeo,m,450)),shadowRoots=new THREE.InstancedMesh(new THREE.CylinderGeometry(.06,.22,1,5),shadowBark,450),shadowCounts=[0,0,0,0],shadowDummy=new THREE.Object3D();let shadowTreeCount=0,shadowRootCount=0;
   shadowTrunks.castShadow=true;shadowTrunks.receiveShadow=true;shadowCrowns.forEach(m=>{m.castShadow=true;m.receiveShadow=true;});
-  for(let i=0;i<48;i++){
-    const a=i*2.39996,r=7+Math.sqrt(i/48)*28,x=SHADOWMERE.x+Math.cos(a)*r,z=SHADOWMERE.z+Math.sin(a)*r;
-    if(Math.hypot(x-SHADOWMERE.entry.x,z-SHADOWMERE.entry.z)<7)continue;
-    const h=groundY(x,z),height=8+shadowRand()*6.2,th=.82+shadowRand()*.38;
-    shadowDummy.position.set(x,h+height*.39,z);shadowDummy.scale.set(th*.7,height*.78,th*.7);shadowDummy.rotation.set(0,0,(shadowRand()-.5)*.1);shadowDummy.updateMatrix();shadowTrunks.setMatrixAt(i,shadowDummy.matrix);
-    colliders.push({x,z,r:th*.58,top:h+height*.78});
+  for(let i=0;i<150;i++){
+    const a=i*2.39996,r=9+Math.sqrt(i/150)*37,x=SHADOWMERE.x+Math.cos(a)*r,z=SHADOWMERE.z+Math.sin(a)*r;
+    if(Math.hypot(x-SHADOWMERE.guardian.x,z-SHADOWMERE.guardian.z)<10||Math.hypot(x-SHADOWMERE.entry.x,z-SHADOWMERE.entry.z)<7||Math.abs(x-130)<5.5&&z>-69&&z<-12)continue;
+    const h=groundY(x,z),height=7+shadowRand()*4.5,th=.9+shadowRand()*.5;
+    shadowDummy.position.set(x,h+height*.48,z);shadowDummy.scale.set(th,height,th);shadowDummy.rotation.set(0,0,(shadowRand()-.5)*.12);shadowDummy.updateMatrix();shadowTrunks.setMatrixAt(shadowTreeCount++,shadowDummy.matrix);
+    colliders.push({x,z,r:th*.66,top:h+height});
     for(let j=0;j<3;j++){
-      const angle=a+j*2.094+shadowRand()*.8,reach=1.0+j*.3;
+      const angle=a+j*2.094+shadowRand()*.7,reach=1.2+j*.4;
       const kind=(i+j)%shadowLeaf.length,index=shadowCounts[kind]++;
-      shadowDummy.position.set(x+Math.cos(angle)*reach,h+height*.72+j*.46,z+Math.sin(angle)*reach);
-      shadowDummy.scale.set(2.2+j*.22,1.65+j*.18,2.0+j*.25);shadowDummy.rotation.set(shadowRand()*.2,shadowRand()*6.28,shadowRand()*.2);shadowDummy.updateMatrix();shadowCrowns[kind].setMatrixAt(index,shadowDummy.matrix);
+      shadowDummy.position.set(x+Math.cos(angle)*reach,h+height*.81+j*.42,z+Math.sin(angle)*reach);
+      shadowDummy.scale.set(3.2+j*.35,1.6+j*.22,3.1+j*.35);shadowDummy.rotation.set(shadowRand()*.2,shadowRand()*6.28,shadowRand()*.2);shadowDummy.updateMatrix();shadowCrowns[kind].setMatrixAt(index,shadowDummy.matrix);
+      const rx=x+Math.cos(angle)*1.2,rz=z+Math.sin(angle)*1.2,ry=groundY(rx,rz);
+      shadowDummy.position.set(x+Math.cos(angle)*.57,Math.max(h,ry)+.22,z+Math.sin(angle)*.57);
+      shadowDummy.rotation.set(Math.sin(angle)*.28,angle,-Math.cos(angle)*.28);shadowDummy.scale.set(th,.9,th);shadowDummy.updateMatrix();shadowRoots.setMatrixAt(shadowRootCount++,shadowDummy.matrix);
     }
   }
-  shadowCrowns.forEach((m,i)=>{m.count=shadowCounts[i];});scene.add(shadowTrunks,...shadowCrowns);
-  const seedGlow=new THREE.MeshStandardMaterial({color:0xf1bb65,emissive:0x9e5523,emissiveIntensity:1.8,roughness:.4});
-  for(const side of [-1,1]){
-    const x=SHADOWMERE.entry.x+side*3.4,z=SHADOWMERE.entry.z-1,y=groundY(x,z);
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(.32,.48,5,7),shadowBark);post.position.set(x,y+2.5,z);post.castShadow=true;scene.add(post);colliders.push({x,z,r:.55,top:y+5});
-    const seed=new THREE.Mesh(new THREE.OctahedronGeometry(.34),seedGlow);seed.position.set(x,y+5.2,z);scene.add(seed);
+  shadowTrunks.count=shadowTreeCount;shadowRoots.count=shadowRootCount;shadowRoots.castShadow=true;
+  shadowCrowns.forEach((m,i)=>{m.count=shadowCounts[i];});scene.add(shadowTrunks,shadowRoots,...shadowCrowns);
+  const shadowFernMat=new THREE.MeshStandardMaterial({color:0x286243,side:THREE.DoubleSide,roughness:1});
+  const shadowFerns=new THREE.InstancedMesh(fernShape,shadowFernMat,420);let sf=0;
+  for(let i=0;i<650&&sf<420;i++){
+    const x=SHADOWMERE.x+(shadowRand()-.5)*88,z=SHADOWMERE.z+(shadowRand()-.5)*88;
+    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-130)<3&&z>-70&&z<-12)continue;
+    shadowDummy.position.set(x,groundY(x,z)+.1,z);shadowDummy.rotation.set(0,shadowRand()*6.28,0);shadowDummy.scale.setScalar(.65+shadowRand()*1.1);shadowDummy.updateMatrix();shadowFerns.setMatrixAt(sf++,shadowDummy.matrix);
   }
+  shadowFerns.count=sf;scene.add(shadowFerns);
+  const seedGlow=new THREE.MeshStandardMaterial({color:0xf1bb65,emissive:0x9e5523,emissiveIntensity:1.8,roughness:.4});
+  for(const z of [-13,-30,-47,-64])for(const side of [-1,1]){
+    const x=SHADOWMERE.entry.x+side*(z===-13?3.4:4.2),y=groundY(x,z);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(.23,.43,3.1,7),shadowBark);post.position.set(x,y+1.55,z);post.castShadow=true;scene.add(post);colliders.push({x,z,r:.44,top:y+3.1});
+    const seed=new THREE.Mesh(new THREE.OctahedronGeometry(.4),seedGlow);seed.position.set(x,y+3.25,z);scene.add(seed);
+  }
+  const altarMat=new THREE.MeshStandardMaterial({color:0x39463c,roughness:1,flatShading:true});
+  for(const side of [-1,1]){const x=SHADOWMERE.guardian.x+side*8,z=SHADOWMERE.guardian.z-2,y=groundY(x,z);const monolith=new THREE.Mesh(new THREE.DodecahedronGeometry(1,0),altarMat);monolith.position.set(x,y+2,z);monolith.scale.set(1.2,2.5,1.1);monolith.castShadow=true;scene.add(monolith);colliders.push({x,z,r:1.1,top:y+4.5});}
   const forestLights=[-1,1].map(()=>{const l=new THREE.PointLight(0xd49a4d,1.8,13,2);scene.add(l);return l;});
   forestLights[0].position.set(SHADOWMERE.x-5,groundY(SHADOWMERE.x-5,SHADOWMERE.z-3)+3,SHADOWMERE.z-3);
   forestLights[1].position.set(SHADOWMERE.x+6,groundY(SHADOWMERE.x+6,SHADOWMERE.z+5)+3,SHADOWMERE.z+5);
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,crownGeometry,leafMaterials,
+  let shade=0;const dayFog=color('#83a79a'),darkFog=color('#17362d'),daySky=color('#779d92'),darkSky=color('#102d28');
+  function updateAtmosphere(x,z,dt){
+    const distance=Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z),target=1-THREE.MathUtils.smoothstep(distance,SHADOWMERE.r-17,SHADOWMERE.r+8);
+    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.018;
+    scene.background.copy(daySky).lerp(darkSky,shade);sky.material.uniforms.shade.value=shade*.88;sun.intensity=2.45-shade*1.5;ambient.intensity=1.8-shade*.75;
+  }
+  return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,updateAtmosphere,crownGeometry,leafMaterials,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }

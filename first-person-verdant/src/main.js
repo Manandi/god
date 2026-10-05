@@ -1331,6 +1331,7 @@ function update(rawDt){
   world.sun.position.set(player.x-45,groundY(player.x,player.z)+95,player.z-50);
   world.sun.target.position.set(player.x,groundY(player.x,player.z),player.z);
   world.sun.target.updateMatrixWorld();
+  world.updateAtmosphere(player.x,player.z,rawDt);
   world.animated.forEach(({mesh,type,baseY,index})=>{
     if(type==='echo'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.y+=dt*.6;}
     if(type==='ring'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.z+=dt*.7;}
