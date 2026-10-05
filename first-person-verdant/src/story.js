@@ -511,10 +511,9 @@ export function createStory(saved, memories) {
       for (const c of CHAPTERS) pages.push({ title: c.memoryTitle, text: c.memoryText, open: memories.has(c.id) });
       pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'The Crown of Ashmere wanted the Reach’s strength without the labour. Mosswatch’s wardens cut the Heartseed’s roots in the Scorched Hollow and drank. Borrowed strength never holds: it hollowed them out, and its rot is the Hollowing. The Warden isn’t the rot: it is the last thing holding it back, rooting into the gate to stay remembered. Kill it and the rot runs free.', open: story.reached('shrine') });
       pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Beat it down until it can hear you, then speak its name and let it rest. The Hollow Rift in Mossgate opens on Thursdays.', open: story.reached('gate') });
-      // The road ahead: every Book to the end of the challenge, with what it is known to hold.
-      const lights = lightsFrom(story);
-      pages.push({ title: `THE FIVE LIGHTS · ${lights} OF 5`, text: 'Each world rests on a Seed, tended by a keeper. Free a keeper and its light goes with you; carry all five and the way to Ashmere opens, where the Hollow Crown waits for the last night of the year.', open: story.reached('end') });
-      for (const b of SAGA.filter(b => !b.built)) pages.push({ title: `${b.book === 'FINALE' ? 'FINALE' : 'BOOK ' + b.book} · ${b.title} · LEVEL ${b.level} · ${b.weeks.toUpperCase()}`, text: b.book === 'FINALE' ? b.reveals : `Keeper: ${b.keeper}. Its light: ${b.light}. What waits there is still unwritten.`, open: story.reached('frost_wait') });
+      // The saga plan beyond Shadowmere (SAGA above) stays behind the scenes: worlds appear in the
+      // journal as they are built, one weekly update at a time.
+      pages.push({ title: `THE FIVE LIGHTS · ${lightsFrom(story)} OF 5`, text: 'Each world rests on a Seed, tended by a keeper. Free a keeper and its light goes with you. The songs say whoever carries all five can walk into Ashmere itself.', open: story.reached('frost_wait') });
       const said = Object.entries(DECISIONS).filter(([k]) => decisions[k]).map(([k, d]) => d.options.find(o => o[0] === decisions[k])[1]);
       pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
       pages.push({ title: 'BOOK I · THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. But the roots still pull: the Heartseed is one of five seeds, one for every world the great root holds up, and one of them is going dark.', open: story.reached('end') });

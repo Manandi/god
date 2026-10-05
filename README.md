@@ -31,10 +31,18 @@ This is the shared status file for work on the game from different devices or AI
 - Whether the Thursday hunt should switch from Orrun to the current Book's guardian as the weeks go on. Today it is always Orrun, at the week's level.
 - The Hollow Crown's model and moveset for Dec 31.
 
+**Owner's follow-up, same day: "just update the story till Shadowmere in game, have the story in the back. We will be doing weekly updates for the world building."**
+- In game, the story stops at the end of Book II (Shadowmere).
+- The plan above lives only in `SAGA` in `story.js` and in this README:
+  - The journal shows no future Books.
+  - The atlas has no saga or dates line.
+  - Ashmere is not on the globe until it is built.
+- Each weekly update builds the next world and then reveals it in game.
+
 **Changes in this update:**
 - `SAGA` and `lightsFrom` added to `story.js`; Halden's and Maren's lines carry the Five Lights and the Hollow Crown.
-- The journal gains THE FIVE LIGHTS and a locked page for each Book to come, with its level and weeks.
-- Atlas (`profile.js` BIOMES): Ember is now level 11, Wraithmoor 17, and the new ASHMERE (level 23, the finale) sits in the south. Each world shows its Book and weeks.
+- The journal gains THE FIVE LIGHTS page once Book II is done.
+- Atlas (`profile.js` BIOMES): Ember is now level 11 and Wraithmoor 17, to match the weekly pace.
 - Book III's waiting objective says "from Oct 15".
 
 ## Latest handoff — 2026-10-05 (later) · Shadowmere as its own world, new monkeys, open-ended saga, dev panel (Claude)
