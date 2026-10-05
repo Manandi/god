@@ -2,6 +2,36 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-05 · Shadowmere rebuilt from the concept image (Claude)
+
+The owner asked for the dark forest to match the concept image, "with the mobs as well". ChatGPT's version (below) worked, but it was cylinder trees and primitive-shape monkeys. It is now built in Blender:
+- **Blender builder:** `tools/blender/build_shadowmere.py`, rewritten, run with Blender 4.5 here. Its output `public/worlds/shadowmere.glb` (1.2 MB) holds:
+  - **Forest:** 3 giant gnarled mossy trees with buttress roots and hanging moss (about 4k triangles each), an amber cage lantern on a vine, glowing mushroom clusters, a mossy boulder, the root arch, and the waterfall cliff.
+  - **Green monkey:** big pointed ears, amber eyes, leaf crown, leafy collar, curled tail.
+  - **Rootbound Gorilla:** leaf mantle, three seed grenades on its belt, roots wrapped round its right forearm, green crystal sword.
+  - **How the parts are set up:** each creature part's origin is at its joint (shoulders, hips, neck, tail base, sword grip).
+  - **To preview:** run `blender --background --python tools/blender/build_shadowmere.py -- --preview out.png [--trees]`.
+- **`src/shadowmere.js` (new):**
+  - Places about 76 instanced trees, plus rocks, mushrooms, lantern posts every 7.5 m along the trail, the root arch at the entrance, and the cliff with the waterfall and pool behind the gorilla's clearing, with a stream running east.
+  - Colliders are spaced so nothing can box a walker in.
+  - The moon hangs over the trail (north), with fireflies, blue ground mist, and 4 warm lights that hop to the nearest lanterns.
+  - `dress()` puts the Blender bodies on the monkeys and the gorilla. The arms, legs, head, tail and sword stay on the joints that `creatures.js` already animates, so the attack tells still line up.
+- **`src/world.js`:**
+  - ChatGPT's cylinder trees, seed posts and its two point lights were replaced by the above. Its ground disc, trail, ferns and monoliths stay.
+  - The floor has moss and stone colour patches, and the ferns stay 7.5 m off the trail.
+  - `updateAtmosphere` now fades into blue moonlit mist (cool moon colour, bluer fill) and returns the shade value.
+- **`src/creatures.js`:**
+  - A dressed primate keeps its head on its own neck (`neckBase`). Before, the shellback head code pushed the monkey's head out in front of its body.
+  - The gorilla has belly and chest hit volumes. Before, its body sphere sat about 2 m up and blade swings passed under it.
+  - There are 5 green monkeys instead of 3.
+- **`src/main.js`:** creates and updates Shadowmere, and the HUD region says SHADOWMERE inside it.
+- **Checks:**
+  - Screenshots of the entrance, trail, clearing and mobs.
+  - A flood fill over Shadowmere: no closed pockets, and the trail reaches the gorilla, the pool, the stream and every monkey's spawn point.
+  - Hits land on the monkeys and the gorilla, and they hit back.
+  - The production build passes, and smoke3, story and weap pass.
+- **Saves:** checked on 2026-10-05. All 8 cloud saves are present (the friends' unnamed ones, Speckz, Vincent, Wayfarer, manandi and two more). None changed after ChatGPT's commits. `load_weekly_hunter` falls back to a player's latest save when a new week starts, so the 2026-10-05 week loads last week's progress.
+
 ## Latest handoff — 2026-10-05 · Shadowmere scene design
 
 - **Branch:** `claude/practical-babbage-tbonr1`. Initial Shadowmere game commit: `12cc7f36f4757183073851735f6ee1ab91fe03bc`. This handoff accompanies a follow-up scene-design commit. Fetch the branch and check for newer PC commits before continuing.
@@ -10,7 +40,7 @@ This is the shared status file for work on the game from different devices or AI
 - **Playable scene design:** the concept image is only a reference. The actual 3D scene now has a longer dark-soil trail, 140 dense crown trees with physical trunks, exposed roots, ferns, amber trail lights, stone guardian markers, a clear combat arena and smoothly changing forest fog/lighting. Bright grassland trees, rocks and flowers are excluded from this biome. The entry and central trail are clear of colliders.
 - **Data safety:** no save, account-linking, leaderboard, Supabase or world-record code/data was changed. Keep existing storage keys and shared player records intact. The new direct-entry route does not mark the profile complete.
 - **Checks:** `npm ci` and the Vite production build pass; the build reports the existing large JavaScript chunk warning. Changed JavaScript passes `node --check`; a Three.js smoke check created both enemy types, confirmed 150 forest colliders with a clear entry and five clear trail samples, and observed gorilla wind-up, slam and seed-burst events. The local browser preview was blocked by the admin policy check, so visual playtesting is still pending.
-- **Blender status:** the scene builder has not yet produced `.blend`/GLB exports. The bundled Blender command-line binary crashes before executing Python on this Mac. Finish the Blender export in a working Blender environment before describing those exports as complete.
+- **Blender status (superseded):** ChatGPT's builder never exported on the Mac. Claude rewrote and exported it on 2026-10-05; see the newer section above.
 - **Deployment:** game commit `12cc7f36f4757183073851735f6ee1ab91fe03bc` was fast-forwarded to the existing branch without a force push. Its GitHub Pages Actions run completed successfully. The public page serves the new JavaScript bundle with the Rootbound Gorilla and Shadowmere route, and the concept image returns HTTP 200. Play at `https://manandi.github.io/god/?shadowmere`. The separate Sites config is independent and was not updated.
 
 ## Rules for AI assistants: read first

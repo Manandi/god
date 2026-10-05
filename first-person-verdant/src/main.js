@@ -13,6 +13,7 @@ import { skillSlots } from './combat/skills.js';
 import { createCoop } from './coop.js';
 import { loadWardenAndArena,BED } from './boss.js';
 import { loadSites } from './sites.js';
+import { createShadowmere } from './shadowmere.js';
 import { createCollisionGrid,moveWithCollision,escapePocket } from './collision.js';
 import { angleTo,yawOf } from './angles.js';
 import { ShoulderCamera,MIN_ELEVATION,MAX_ELEVATION } from './camera.js';
@@ -1041,7 +1042,7 @@ function updateHUD(){
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
   if(Math.hypot(player.x-world.home.x,player.z-world.home.z)<world.home.radius)region=world.home.name;
-  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';$('region').textContent=region;
+  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';if(Math.hypot(SHADOWMERE.x-player.x,SHADOWMERE.z-player.z)<SHADOWMERE.r)region='SHADOWMERE';$('region').textContent=region;
   const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
   $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
   if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
@@ -1331,7 +1332,7 @@ function update(rawDt){
   world.sun.position.set(player.x-45,groundY(player.x,player.z)+95,player.z-50);
   world.sun.target.position.set(player.x,groundY(player.x,player.z),player.z);
   world.sun.target.updateMatrixWorld();
-  world.updateAtmosphere(player.x,player.z,rawDt);
+  shadowmere.update(rawDt,elapsed,player,camera,world.updateAtmosphere(player.x,player.z,rawDt));
   world.animated.forEach(({mesh,type,baseY,index})=>{
     if(type==='echo'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.y+=dt*.6;}
     if(type==='ring'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.z+=dt*.7;}
@@ -1353,6 +1354,7 @@ if(params.has('dresstest'))window.__dressAngle=a=>dressingRoom.setAngle(a);
 shell=createShell(entry,canvas,globe,{narrator,dressingRoom,saveNow:cloudSaveNow,weapon:()=>equippedWeapon(),enterGame:resume,pauseGame:()=>{paused=true;},onAppearance:()=>{avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();}});
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
+const shadowmere=createShadowmere(scene,{groundY,addCollider:c=>collisionGrid.add(c),creatures});
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;warden.netId='warden';warden.scaleHealth=()=>levelDamage();   // keeps pace with level, like the creatures
@@ -1399,7 +1401,7 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
 // A non-destructive encounter route for checking the new realm and its combat.
 // Unlike ?arena, this never completes the profile or writes player progression.

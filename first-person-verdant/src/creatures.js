@@ -206,7 +206,9 @@ export class Creature {
       f.set(0, 1.0, -.2).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: 1.15 * s, part: 'belly' });
       return out;
     } else if(this.type==='monkey'||this.type==='gorilla'){
-      f.set(0,this.type==='gorilla'?1.35:1.02,0).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:(this.type==='gorilla'?.72:.5)*s,part:'body'});
+      // The gorilla is tall: a belly-and-hips volume where blades land, and its chest above.
+      if(this.type==='gorilla')for(const [y,z,r] of [[1.0,.1,.98],[1.85,.15,.9]]){f.set(0,y,z).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:r*s,part:'body'});}
+      else{f.set(0,1.0,0).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:.5*s,part:'body'});}
     } else {
       for (const [z, r] of [[.45, .98], [-.75, .98]]) {
         f.set(0, 1.05, z).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: r * s, part: 'shell' });
@@ -572,8 +574,10 @@ export class Creature {
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
     this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
     this.body.position.y = damp(this.body.position.y, lift + flip * 2.3 + Math.sin(time * 7) * .01, 12, dt);
-    this.neck.position.z = damp(this.neck.position.z, 1.2 + headOut, st === 'attack' ? 26 : 12, dt);
-    this.neck.position.y = damp(this.neck.position.y, 1.2 + headLow, 10, dt);
+    // A dressed monkey or gorilla (shadowmere.js) keeps its head on its own neck, moving less.
+    const nb = this.neckBase || { y: 1.2, z: 1.2, k: 1 };
+    this.neck.position.z = damp(this.neck.position.z, nb.z + headOut * nb.k, st === 'attack' ? 26 : 12, dt);
+    this.neck.position.y = damp(this.neck.position.y, nb.y + headLow * nb.k, 10, dt);
     const moving = st === 'attack' && this.attack === 'lunge' ? 2.2 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
     this.legPhase += dt * (4 + this.speed * 4.5) * legRate;
     this.legs.forEach(({ mesh, phase }) => {
@@ -647,7 +651,7 @@ export function createCreatures(scene, chapters = []) {
   }
   // Shadowmere patrols and its guardian belong to the second atlas destination.
   // They keep their own home radius and never change Verdant Reach progression.
-  for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-3,SHADOWMERE.z-13]]){
+  for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-3,SHADOWMERE.z-13],[3,SHADOWMERE.x+8,SHADOWMERE.z+26],[4,SHADOWMERE.x-9,SHADOWMERE.z+31]]){
     const monkey=new Creature(scene,x,z,'monkey',{id:`shadow-monkey-${i}`});monkey.name='GREEN MONKEY';list.push(monkey);
   }
   const guardian=new Creature(scene,SHADOWMERE.guardian.x,SHADOWMERE.guardian.z,'gorilla',{id:'shadow-gorilla'});guardian.name='ROOTBOUND GORILLA';list.push(guardian);

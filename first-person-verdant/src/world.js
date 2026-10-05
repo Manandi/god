@@ -346,62 +346,45 @@ export function buildWorld(scene){
   });
   // Shadowmere is a walkable, connected forest. Keep a clear trail to the
   // guardian, then fill the flanks with roots, layered crowns and undergrowth.
-  const shadowGeo=new THREE.CircleGeometry(SHADOWMERE.r,64),shadowPos=shadowGeo.getAttribute('position'),shadowBase=groundY(SHADOWMERE.x,SHADOWMERE.z);
+  const shadowGeo=new THREE.RingGeometry(.05,SHADOWMERE.r,72,26),shadowPos=shadowGeo.getAttribute('position'),shadowBase=groundY(SHADOWMERE.x,SHADOWMERE.z);
   for(let i=0;i<shadowPos.count;i++){const x=shadowPos.getX(i),z=shadowPos.getY(i);shadowPos.setZ(i,groundY(SHADOWMERE.x+x,SHADOWMERE.z-z)-shadowBase+.07);}
   shadowPos.needsUpdate=true;shadowGeo.computeVertexNormals();
-  const shadowGround=new THREE.Mesh(shadowGeo,new THREE.MeshStandardMaterial({color:0x252d1d,roughness:1}));
+  {const cols=[],a=new THREE.Color('#3a4a2a'),b=new THREE.Color('#1f2618'),m=new THREE.Color('#3f6a35'),t=new THREE.Color();
+   for(let i=0;i<shadowPos.count;i++){const x=shadowPos.getX(i),z=shadowPos.getY(i),n=noise(x*.13+7,z*.13),k=noise(x*.4,z*.4+3);
+     t.copy(b).lerp(a,n);if(k>.62)t.lerp(m,(k-.62)*2.2);cols.push(t.r,t.g,t.b);}
+   shadowGeo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));}
+  const shadowGround=new THREE.Mesh(shadowGeo,new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.92}));
   shadowGround.rotation.x=-Math.PI/2;shadowGround.position.set(SHADOWMERE.x,shadowBase,SHADOWMERE.z);shadowGround.receiveShadow=true;scene.add(shadowGround);
   cameraObstacles.push(shadowGround);
   const trailMat=new THREE.MeshStandardMaterial({color:0x514530,vertexColors:true,roughness:1,side:THREE.DoubleSide});
   path(scene,[[130,-11],[129,-23],[133,-37],[127,-49],[130,-65]],5.2,trailMat);
-  const shadowBark=new THREE.MeshStandardMaterial({color:0x292b20,roughness:1}),shadowLeaf=[0x102d24,0x173c2a,0x1d472b,0x244a31].map(v=>new THREE.MeshStandardMaterial({color:v,roughness:1,flatShading:true}));
-  const shadowRand=rng(772013),trunkGeo=new THREE.CylinderGeometry(.36,.62,1,7),crownGeo=new THREE.IcosahedronGeometry(1,1),shadowTrunks=new THREE.InstancedMesh(trunkGeo,shadowBark,150),shadowCrowns=shadowLeaf.map(m=>new THREE.InstancedMesh(crownGeo,m,450)),shadowRoots=new THREE.InstancedMesh(new THREE.CylinderGeometry(.06,.22,1,5),shadowBark,450),shadowCounts=[0,0,0,0],shadowDummy=new THREE.Object3D();let shadowTreeCount=0,shadowRootCount=0;
-  shadowTrunks.castShadow=true;shadowTrunks.receiveShadow=true;shadowCrowns.forEach(m=>{m.castShadow=true;m.receiveShadow=true;});
-  for(let i=0;i<150;i++){
-    const a=i*2.39996,r=9+Math.sqrt(i/150)*37,x=SHADOWMERE.x+Math.cos(a)*r,z=SHADOWMERE.z+Math.sin(a)*r;
-    if(Math.hypot(x-SHADOWMERE.guardian.x,z-SHADOWMERE.guardian.z)<10||Math.hypot(x-SHADOWMERE.entry.x,z-SHADOWMERE.entry.z)<7||Math.abs(x-130)<5.5&&z>-69&&z<-12)continue;
-    const h=groundY(x,z),height=7+shadowRand()*4.5,th=.9+shadowRand()*.5;
-    shadowDummy.position.set(x,h+height*.48,z);shadowDummy.scale.set(th,height,th);shadowDummy.rotation.set(0,0,(shadowRand()-.5)*.12);shadowDummy.updateMatrix();shadowTrunks.setMatrixAt(shadowTreeCount++,shadowDummy.matrix);
-    colliders.push({x,z,r:th*.66,top:h+height});
-    for(let j=0;j<3;j++){
-      const angle=a+j*2.094+shadowRand()*.7,reach=1.2+j*.4;
-      const kind=(i+j)%shadowLeaf.length,index=shadowCounts[kind]++;
-      shadowDummy.position.set(x+Math.cos(angle)*reach,h+height*.81+j*.42,z+Math.sin(angle)*reach);
-      shadowDummy.scale.set(3.2+j*.35,1.6+j*.22,3.1+j*.35);shadowDummy.rotation.set(shadowRand()*.2,shadowRand()*6.28,shadowRand()*.2);shadowDummy.updateMatrix();shadowCrowns[kind].setMatrixAt(index,shadowDummy.matrix);
-      const rx=x+Math.cos(angle)*1.2,rz=z+Math.sin(angle)*1.2,ry=groundY(rx,rz);
-      shadowDummy.position.set(x+Math.cos(angle)*.57,Math.max(h,ry)+.22,z+Math.sin(angle)*.57);
-      shadowDummy.rotation.set(Math.sin(angle)*.28,angle,-Math.cos(angle)*.28);shadowDummy.scale.set(th,.9,th);shadowDummy.updateMatrix();shadowRoots.setMatrixAt(shadowRootCount++,shadowDummy.matrix);
-    }
-  }
-  shadowTrunks.count=shadowTreeCount;shadowRoots.count=shadowRootCount;shadowRoots.castShadow=true;
-  shadowCrowns.forEach((m,i)=>{m.count=shadowCounts[i];});scene.add(shadowTrunks,shadowRoots,...shadowCrowns);
+  // The trees, lanterns, rocks, cliff, waterfall and creature models are Blender
+  // assets placed by src/shadowmere.js once public/worlds/shadowmere.glb loads.
+  const shadowRand=rng(772013),shadowDummy=new THREE.Object3D();
   const shadowFernMat=new THREE.MeshStandardMaterial({color:0x286243,side:THREE.DoubleSide,roughness:1});
   const shadowFerns=new THREE.InstancedMesh(fernShape,shadowFernMat,420);let sf=0;
   for(let i=0;i<650&&sf<420;i++){
     const x=SHADOWMERE.x+(shadowRand()-.5)*88,z=SHADOWMERE.z+(shadowRand()-.5)*88;
-    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-130)<3&&z>-70&&z<-12)continue;
-    shadowDummy.position.set(x,groundY(x,z)+.1,z);shadowDummy.rotation.set(0,shadowRand()*6.28,0);shadowDummy.scale.setScalar(.65+shadowRand()*1.1);shadowDummy.updateMatrix();shadowFerns.setMatrixAt(sf++,shadowDummy.matrix);
+    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-130)<7.5&&z>-72&&z<-8)continue;
+    shadowDummy.position.set(x,groundY(x,z)+.1,z);shadowDummy.rotation.set(0,shadowRand()*6.28,0);shadowDummy.scale.setScalar(.55+shadowRand()*.75);shadowDummy.updateMatrix();shadowFerns.setMatrixAt(sf++,shadowDummy.matrix);
   }
   shadowFerns.count=sf;scene.add(shadowFerns);
-  const seedGlow=new THREE.MeshStandardMaterial({color:0xf1bb65,emissive:0x9e5523,emissiveIntensity:1.8,roughness:.4});
-  for(const z of [-13,-30,-47,-64])for(const side of [-1,1]){
-    const x=SHADOWMERE.entry.x+side*(z===-13?3.4:4.2),y=groundY(x,z);
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(.23,.43,3.1,7),shadowBark);post.position.set(x,y+1.55,z);post.castShadow=true;scene.add(post);colliders.push({x,z,r:.44,top:y+3.1});
-    const seed=new THREE.Mesh(new THREE.OctahedronGeometry(.4),seedGlow);seed.position.set(x,y+3.25,z);scene.add(seed);
-  }
   const altarMat=new THREE.MeshStandardMaterial({color:0x39463c,roughness:1,flatShading:true});
   for(const side of [-1,1]){const x=SHADOWMERE.guardian.x+side*8,z=SHADOWMERE.guardian.z-2,y=groundY(x,z);const monolith=new THREE.Mesh(new THREE.DodecahedronGeometry(1,0),altarMat);monolith.position.set(x,y+2,z);monolith.scale.set(1.2,2.5,1.1);monolith.castShadow=true;scene.add(monolith);colliders.push({x,z,r:1.1,top:y+4.5});}
-  const forestLights=[-1,1].map(()=>{const l=new THREE.PointLight(0xd49a4d,1.8,13,2);scene.add(l);return l;});
-  forestLights[0].position.set(SHADOWMERE.x-5,groundY(SHADOWMERE.x-5,SHADOWMERE.z-3)+3,SHADOWMERE.z-3);
-  forestLights[1].position.set(SHADOWMERE.x+6,groundY(SHADOWMERE.x+6,SHADOWMERE.z+5)+3,SHADOWMERE.z+5);
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
-  let shade=0;const dayFog=color('#83a79a'),darkFog=color('#17362d'),daySky=color('#779d92'),darkSky=color('#102d28');
+  // Entering Shadowmere fades the Reach's daylight into blue moonlit mist (the concept image);
+  // the warm light comes from the lanterns and mushrooms (src/shadowmere.js).
+  let shade=0;const dayFog=color('#83a79a'),darkFog=color('#1e3a4e'),daySky=color('#779d92'),darkSky=color('#0c1a28'),
+    daySun=color('#f6dda0'),moonCol=color('#9fb6ff'),dayAmb=color('#c6e9e4'),nightAmb=color('#86a6d8'),dayGround=color('#33462b'),nightGround=color('#1a2216');
   function updateAtmosphere(x,z,dt){
     const distance=Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z),target=1-THREE.MathUtils.smoothstep(distance,SHADOWMERE.r-17,SHADOWMERE.r+8);
-    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.018;
-    scene.background.copy(daySky).lerp(darkSky,shade);sky.material.uniforms.shade.value=shade*.88;sun.intensity=2.45-shade*1.5;ambient.intensity=1.8-shade*.75;
+    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.015;
+    scene.background.copy(daySky).lerp(darkSky,shade);sky.material.uniforms.shade.value=shade*.92;
+    sun.intensity=2.45-shade*1.2;sun.color.copy(daySun).lerp(moonCol,shade);
+    ambient.intensity=1.8-shade*.45;ambient.color.copy(dayAmb).lerp(nightAmb,shade);ambient.groundColor.copy(dayGround).lerp(nightGround,shade);
+    return shade;
   }
   return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,updateAtmosphere,crownGeometry,leafMaterials,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
