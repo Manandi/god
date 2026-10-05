@@ -41,6 +41,37 @@ import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE } from './world.js'
 // rot back. Pip makes it personal (Sela forgot Pip's name), and the name tells
 // you how it ends: beat it down until it can hear you, then let it rest.
 
+/**
+ * The saga's road to the end of the 90-day challenge (owner, 2026-10-05: "the chapters must
+ * build on each other till the final boss at the end of the 3-month challenge, and keep going
+ * after"). Levels rise about 2 a week (week n ends near level 1 + 2n, the Thursday hunt levels),
+ * so each world opens on the week the challenge reaches it, and the finale lands on Thursday,
+ * 31 December, the last day of the challenge.
+ * Threads that carry from Book to Book:
+ *  - The Five Lights: each Book ends by freeing a world's keeper, who gives you its Seed's light.
+ *    The five together open the way to Ashmere.
+ *  - The Hollow Crown: Ashmere's last ruler wears a crown cut from a stolen Seed and cannot be
+ *    killed while its name is hidden. Each Book uncovers one piece of it, and Book V gives the
+ *    name (the same rule that freed Orrun in Book I).
+ * `built` marks the worlds that are playable today; the rest are the plan for the builders.
+ */
+export const SAGA = [
+  { book: 'I', realm: 'grove', title: 'THE VERDANT REACH', level: 1, weeks: 'Oct 1 – 8', keeper: 'Orrun', light: 'the Heartseed', built: true,
+    reveals: 'Ashmere bought strength without labour, through Mosswatch. The rot is its leftovers.' },
+  { book: 'II', realm: 'shadow', title: 'SHADOWMERE', level: 3, weeks: 'Oct 8 – 14', keeper: 'Garrow', light: 'the Lantern Seed', built: true,
+    reveals: 'Ashmere did not only drink: it put the lights out to hide where it went. Its blade was cut from a crown.' },
+  { book: 'III', realm: 'frost', title: 'THE FROSTBOUND CROWN', level: 5, weeks: 'Oct 15 – Nov 4', keeper: 'the White Maw', light: 'the Rime Seed',
+    reveals: 'Ashmere’s court froze itself here to wait for its ruler, the Hollow Crown, who left long ago to steal fire.' },
+  { book: 'IV', realm: 'ember', title: 'THE EMBER WASTES', level: 11, weeks: 'Nov 5 – 25', keeper: 'the Pyreback Colossus', light: 'the Ember Seed',
+    reveals: 'The Crown burned the Colossus to forge itself a body that cannot die, as long as no one knows its name.' },
+  { book: 'V', realm: 'wraith', title: 'WRAITHMOOR', level: 17, weeks: 'Nov 26 – Dec 16', keeper: 'the Veiled Queen', light: 'the Grave Seed',
+    reveals: 'The dead of Ashmere remember what the Crown was called before it was hollow: its true name.' },
+  { book: 'FINALE', realm: 'crown', title: 'ASHMERE · THE HOLLOW CROWN', level: 23, weeks: 'Dec 17 – 31', keeper: 'all five keepers', light: 'the five lights together',
+    reveals: 'Final boss, Thursday 31 December: every hunter together, five lights, one true name.' }
+];
+/** How many of the Five Lights you carry (a keeper freed in each finished Book). */
+export const lightsFrom = story => (story.reached('end') ? 1 : 0) + (story.reached('frost_wait') ? 1 : 0);
+
 const site = id => SITES.find(s => s.id === id);
 const titleCase = text => text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
@@ -115,7 +146,7 @@ export const STAGES = [
   { id: 'shadow_guardian', book: 2, objective: 'Free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
   { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
   // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
-  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: the Frostbound Crown opens next', target: 'maren' }
+  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: Book III, the Frostbound Crown, opens next (from Oct 15)', target: 'maren' }
 ];
 const index = id => STAGES.findIndex(s => s.id === id);
 
@@ -171,7 +202,7 @@ const DIALOGUE = {
       end: { then: 'shadow_cross', lines: [
         'You did it, {name}. Orrun rests, and the Heartseed has taken root in the gate. Now listen. Do you hear that?',
         'The roots are still talking. Orrun was not only holding our rot back. Something on the far side of the roots was pulling it, the way a current pulls a leaf.',
-        'The Heartseed is not the only seed. The old songs name five, one for every world the great root holds up. One of them is going dark: Shadowmere, in the green west, where the lanterns grow.',
+        'The Heartseed is not the only seed. The old songs name five, one for every world the great root holds up, and Orrun has just given you the first of their lights. One of the others is going dark: Shadowmere, in the green west, where the lanterns grow.',
         'I have opened a Rootway in the square. It only carries someone strong enough to come home again: level 3. Find the Lamplighter. If Shadowmere’s lights go out, our roots feel the cold next.'
       ] }
     },
@@ -268,6 +299,7 @@ const DIALOGUE = {
         'You brought it back. Garrow is sleeping. Truly sleeping, for the first time since I was small.',
         'Look at the shard. That is not forest glass. It was cut from a crown. Ashmere came here too, and it did not come to drink. It came to put the lights out, so nobody would see where it went next.',
         'Every cut face points the same way: north, to the Frostbound Crown, where the snow never melts. Whatever is left of Ashmere is waiting up there, frozen and patient.',
+        'And take this: the Lantern Seed’s light. Garrow would want you to carry it. Orrun’s and Garrow’s: two of five. The songs say whoever carries all five can walk into Ashmere itself and face the one who wears the crown. The Hollow Crown. It hides its name the way Orrun lost its own.',
         'The cold there would break you today. Grow stronger, {name}: the Rootway will open north at level 5. Until then, Shadowmere’s lanterns are yours to keep lit.'
       ] }
     },
@@ -276,7 +308,7 @@ const DIALOGUE = {
       ['<shadow_memory', 'They chain their blows. Guard the first, expect the second, and the third comes faster. And if one crouches low, it is about to leap.'],
       ['<shadow_guardian', 'The falls were Garrow’s favourite place. If anything remembers what happened to it, the water does.'],
       ['<shadow_report', 'Garrow carried the light from tree to tree when I was young. Whatever is holding that sword is not Garrow. Free it, please.'],
-      ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Come back stronger, {name}. I will keep a lantern lit for you.']
+      ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Two lights of five, {name}. Come back stronger. I will keep a lantern lit for you.']
     ]
   },
   pip: {
@@ -479,6 +511,10 @@ export function createStory(saved, memories) {
       for (const c of CHAPTERS) pages.push({ title: c.memoryTitle, text: c.memoryText, open: memories.has(c.id) });
       pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'The Crown of Ashmere wanted the Reach’s strength without the labour. Mosswatch’s wardens cut the Heartseed’s roots in the Scorched Hollow and drank. Borrowed strength never holds: it hollowed them out, and its rot is the Hollowing. The Warden isn’t the rot: it is the last thing holding it back, rooting into the gate to stay remembered. Kill it and the rot runs free.', open: story.reached('shrine') });
       pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Beat it down until it can hear you, then speak its name and let it rest. The Hollow Rift in Mossgate opens on Thursdays.', open: story.reached('gate') });
+      // The road ahead: every Book to the end of the challenge, with what it is known to hold.
+      const lights = lightsFrom(story);
+      pages.push({ title: `THE FIVE LIGHTS · ${lights} OF 5`, text: 'Each world rests on a Seed, tended by a keeper. Free a keeper and its light goes with you; carry all five and the way to Ashmere opens, where the Hollow Crown waits for the last night of the year.', open: story.reached('end') });
+      for (const b of SAGA.filter(b => !b.built)) pages.push({ title: `${b.book === 'FINALE' ? 'FINALE' : 'BOOK ' + b.book} · ${b.title} · LEVEL ${b.level} · ${b.weeks.toUpperCase()}`, text: b.book === 'FINALE' ? b.reveals : `Keeper: ${b.keeper}. Its light: ${b.light}. What waits there is still unwritten.`, open: story.reached('frost_wait') });
       const said = Object.entries(DECISIONS).filter(([k]) => decisions[k]).map(([k, d]) => d.options.find(o => o[0] === decisions[k])[1]);
       pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
       pages.push({ title: 'BOOK I · THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. But the roots still pull: the Heartseed is one of five seeds, one for every world the great root holds up, and one of them is going dark.', open: story.reached('end') });

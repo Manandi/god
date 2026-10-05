@@ -2,6 +2,41 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## The saga plan to the end of the challenge (owner, 2026-10-05) · build every new world to this
+
+"The story or chapters must build on each other till the final boss for the end of the year 3-month challenge; of course we will keep going after that." Levels rise about 2 a week (week n ends near level 1 + 2n, matching the Thursday hunt levels 3, 5, 7…). So each world opens in the week the challenge reaches it, and the finale is **Thursday 31 December**, the challenge's last day (boss level 27). `SAGA` in `src/story.js` is the source of truth; the journal and the atlas read it.
+
+| Book | World (atlas id) | Opens at | Weeks | Keeper to free → light | What it reveals about the final boss |
+|---|---|---|---|---|---|
+| I | Verdant Reach (`grove`) | start | Oct 1 – 8 | Orrun → the Heartseed | Ashmere bought strength without labour, through Mosswatch |
+| II | Shadowmere (`shadow`) | lv 3 | Oct 8 – 14 | Garrow → the Lantern Seed | Ashmere put the lights out to hide; its blade was cut from a crown |
+| III | Frostbound Crown (`frost`) | lv 5 | Oct 15 – Nov 4 | the White Maw → the Rime Seed | Ashmere's court froze itself here waiting for its ruler, the Hollow Crown, who left to steal fire |
+| IV | Ember Wastes (`ember`) | lv 11 | Nov 5 – 25 | the Pyreback Colossus → the Ember Seed | The Crown forged itself an undying body; it can't die while its name is hidden |
+| V | Wraithmoor (`wraith`) | lv 17 | Nov 26 – Dec 16 | the Veiled Queen → the Grave Seed | The dead of Ashmere give its true name |
+| Finale | Ashmere (`crown`) | lv 23 + five lights | Dec 17 – 31 | — | **Final boss: the Hollow Crown, Thursday 31 Dec**, every hunter together, five lights, one true name (the same rule that freed Orrun) |
+
+**Threads that must carry through every Book:**
+- **The Five Lights:** each Book ends by freeing that world's keeper, who gives its Seed's light. `lightsFrom(story)` counts them, and the HUD shows LIGHTS n / 5 after Book I.
+- **The Hollow Crown:** Ashmere's last ruler. Each Book reveals one piece of it, as in the table.
+- **Every Book's shape** (Book II is the template):
+  - a Rootway or atlas entry gated by level
+  - a keeper NPC who explains what the Hollowing looks like in that world
+  - a counted hunt
+  - a memory
+  - the guardian fight that frees the keeper
+  - a report that hands over the light and points to the next world
+- **To add a Book:** append its stages after `frost_wait` (renaming that stage's objective as the Book's start), add its keeper to `NPCS`, mark it `built: true` in `SAGA`, add it to `OPEN_REALMS` in `shell.js` and `REALMS`/`REALM_LEVEL` in the code, and write its journal pages.
+
+**Still to decide with the owner:**
+- Whether the Thursday hunt should switch from Orrun to the current Book's guardian as the weeks go on. Today it is always Orrun, at the week's level.
+- The Hollow Crown's model and moveset for Dec 31.
+
+**Changes in this update:**
+- `SAGA` and `lightsFrom` added to `story.js`; Halden's and Maren's lines carry the Five Lights and the Hollow Crown.
+- The journal gains THE FIVE LIGHTS and a locked page for each Book to come, with its level and weeks.
+- Atlas (`profile.js` BIOMES): Ember is now level 11, Wraithmoor 17, and the new ASHMERE (level 23, the finale) sits in the south. Each world shows its Book and weeks.
+- Book III's waiting objective says "from Oct 15".
+
 ## Latest handoff — 2026-10-05 (later) · Shadowmere as its own world, new monkeys, open-ended saga, dev panel (Claude)
 
 The owner asked for:

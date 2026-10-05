@@ -5,7 +5,7 @@ import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
 import { loadExplorer } from './avatarGLB.js';
 import { createNpcs,updateNpcs } from './npcs.js';
-import { createStory,NPCS,CHAPTERS,STAGES,keeperName,GOSSIP,endingLines } from './story.js';
+import { createStory,NPCS,CHAPTERS,STAGES,keeperName,GOSSIP,endingLines,lightsFrom } from './story.js';
 import { createChronicles,CHRONICLES,TOPICS,replyLines } from './chronicles.js';
 import { typeBlip } from './music.js';
 import { createProjectiles } from './combat/projectiles.js';
@@ -1098,7 +1098,7 @@ let skillBarT=0;
 function updateHUD(){
   if((skillBarT-=1/30)<=0){skillBarT=.2;updateSkillBar();}
   $('hearts').innerHTML=Array.from({length:maxHealth()},(_,i)=>`<span class="${i<player.health?'':'lost'}">◆</span>`).join('')+`<em class="flasks" title="Sap Flasks (X)">${'●'.repeat(player.flasks)}${'○'.repeat(mech.flasks-player.flasks)}</em>`;
-  $('echoCount').textContent=`MEMORIES ${memories.size} / 3`;
+  $('echoCount').textContent=story.reached('end')?`LIGHTS ${lightsFrom(story)} / 5`:`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
   let next=story.stage==='gate'&&inHollow(player)?{x:BED.x,z:BED.z,title:'ORRUN'}:story.target();
   if(realmAt(next.x,next.z)!==realmAt(player.x,player.z)){const out=realmAt(player.x,player.z)==='shadow'?ROOTWAY_BACK:ROOTWAY;next={x:out.x,z:out.z,title:`ROOTWAY · ${realmAt(next.x,next.z)==='shadow'?'SHADOWMERE':'THE REACH'}`};}
