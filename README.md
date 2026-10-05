@@ -24,7 +24,7 @@ The owner asked for the dark forest to match the concept image, "with the mobs a
   - A dressed primate keeps its head on its own neck (`neckBase`). Before, the shellback head code pushed the monkey's head out in front of its body.
   - The gorilla has belly and chest hit volumes. Before, its body sphere sat about 2 m up and blade swings passed under it.
   - There are 5 green monkeys instead of 3.
-- **`src/main.js`:** creates and updates Shadowmere, and the HUD region says SHADOWMERE inside it.
+- **`src/main.js`:** creates and updates Shadowmere, and the HUD region says SHADOWMERE inside it. Entering from the atlas (or `?shadowmere`) now faces you north, through the root arch into the forest; before, it faced back out at the grassland. It also skips the "Welcome to Mossgate" tip.
 - **Checks:**
   - Screenshots of the entrance, trail, clearing and mobs.
   - A flood fill over Shadowmere: no closed pockets, and the trail reaches the gorilla, the pool, the stream and every monkey's spawn point.

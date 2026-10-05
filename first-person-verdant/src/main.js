@@ -143,9 +143,9 @@ function updateJournal(){
 }
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
 function resume(realm){if(realm==='frost'){
-  player.x=SHADOWMERE.entry.x;player.z=SHADOWMERE.entry.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.yaw=player.cameraYaw=combat.facing=Math.PI;player.pitch=0;camera.rotation.set(0,Math.PI,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;
+  player.x=SHADOWMERE.entry.x;player.z=SHADOWMERE.entry.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.yaw=player.cameraYaw=combat.facing=0;player.pitch=0;camera.rotation.set(0,0,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;
   toast('SHADOWMERE','Follow the seed lanterns. Watch the canopy.');
-}if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+}if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela'&&realm!=='frost')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
