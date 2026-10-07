@@ -2,7 +2,28 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
-## Latest handoff — 2026-10-07 (later) · Challenge weeks run Thursday to Wednesday (Claude)
+## Latest handoff — 2026-10-07 (evening) · Workout logs count, week 1 is one workout (Claude)
+
+**Bug:** a workout logged under **OTHER ACTIVITY → Workout day** gave XP but never ticked the plan's workout. Only the button on the workout page did, so the owner's 10-06 workout didn't show on the plan.
+- Now any log counts toward the plan item of its kind, whichever form it came from. `counts()` in `profile.js` accepts a plan check, or a free log at least as big as one check.
+- One check per day per item still applies.
+- Undo also works on a free log made today.
+
+**Week 1 is one home workout** (owner). The other items are unchanged: 2 step days and 1 learning session.
+- Plan step 1 now has `bonus: 350` (`training.js`; `stepBonus()` in `profile.js`). With one workout, a full week is 2×50 + 75 + 10 + 350 = 535 XP, which still reaches level 3 (500) for the first boss. The old full week was 560.
+- Every other week keeps `PLAN_BONUS` 300.
+
+**Weekly bonus timing:** a week completed by any route now pays its bonus as soon as `weeklyPlan()` sees it complete, or at the Thursday rollover if it was never opened. Previously the bonus was only paid from `logActivity`.
+
+The owner's live save (steps 10-02 and 10-04, learning 10-04, workout 10-06) becomes 4/4, +350, 535 XP, level 3. Tested with the clock faked and Supabase aborted.
+
+**Removal still to do.** The owner asked to remove "Wayfarer and the unsaved files".
+- Wayfarer is 2 `hunters` rows (`ec0f7578…`, `383c8a62…`) plus 1 save; the 4 unnamed `weekly_hunters` saves (`dd7faadf…`, `b2ee7063…`, `a58a8f17…`, `2f102c06…`) are the likely "unsaved files".
+- A copy of all 7 rows is in `public.removed_saves_backup`: RLS on, no access for anon or authenticated.
+- The delete itself didn't run: the tool timed out waiting for approval, and the auto-mode check blocked it until the owner confirms the exact rows.
+- Note: **"Wayfarer" is the default name for anyone who leaves the name box empty** (`shell.js`), so it may be a friend.
+
+## Earlier handoff — 2026-10-07 (later) · Challenge weeks run Thursday to Wednesday (Claude)
 
 The owner asked why the weekly quest said week 2 and why their logs had gone on Wednesday 2026-10-07. The cause was that plan weeks started on Monday. On Monday 2026-10-05 everyone moved to plan week 2, and the weekly page stopped showing the checks from 10-02 and 10-04.
 

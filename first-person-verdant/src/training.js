@@ -75,7 +75,9 @@ const home = (w, count) => ({ id: 'home', kind: 'workout', workout: w, label: `$
 const move = (km, mi, count = 1) => ({ id: 'run', kind: 'run', label: `Walk or run ${km} km in one go`, labelUS: `Walk or run ${mi} mile${mi === 1 ? '' : 's'} in one go`, amount: km, amountUS: mi * 1.609, count, unit: 'outing' });
 const learn = (min, count) => ({ id: 'study', kind: 'study', label: `Learn something for ${min} minutes`, note: 'Anything counts: a hobby, cooking a new dish, an instrument, a language, a book, a skill for work.', amount: min, count, unit: 'session' });
 export const PLAN = [
-  { tier: 'BEGINNER', items: [steps(5000, 2), home('A', 2), learn(20, 1)] },   // week 1: one 20-minute session of learning
+  // Week 1 (owner, 2026-10-07): one home workout, one 20-minute learning session. Its bonus is
+  // 350 so a full first week still reaches level 3 (2×50 + 75 + 10 + 350 = 535 ≥ 500).
+  { tier: 'BEGINNER', bonus: 350, items: [steps(5000, 2), home('A', 1), learn(20, 1)] },
   { tier: 'BEGINNER', items: [steps(5000, 3), home('A', 2), learn(20, 2)] },
   { tier: 'FOUNDATION', items: [steps(6000, 3), home('B', 3), move(2, 1.25), learn(20, 2)] },
   { tier: 'FOUNDATION', items: [steps(7000, 3), home('B', 3), move(3, 2), learn(30, 2)] },

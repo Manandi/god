@@ -291,11 +291,19 @@ export {rawStats};
 // the activity. Finishing half or more of a week moves the plan up a step the
 // next week; otherwise the step repeats.
 const addDays=(key,n)=>{const d=new Date(`${key}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
-function doneIn(key,item){return profile.activities.filter(a=>a.item===item&&a.date>=key&&a.date<addDays(key,7));}
+// Anything you log counts toward the plan item of its kind (owner, 2026-10-07: a workout logged
+// under OTHER ACTIVITY left the plan's workout unchecked): a plan check, or a free log at least as
+// big as one check. One a day per item.
+const counts=(a,i)=>a.item===i.id||(!a.item&&a.kind===i.kind&&a.amount>=Math.min(i.amount,i.amountUS||i.amount)-.01);
+function doneIn(key,item){const days=new Set();return profile.activities.filter(a=>counts(a,item)&&a.date>=key&&a.date<addDays(key,7)&&!days.has(a.date)&&days.add(a.date));}
+/** The week's bonus: week 1 pays a little more so a full first week still reaches level 3 with one workout. */
+export const stepBonus=week=>planStep(week).bonus||PLAN_BONUS;
+function claimWeek(key,week){if(profile.claimed.includes(`${key}:plan`))return false;profile.claimed.push(`${key}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=stepBonus(week);return true;}
 export function programWeek(){
   const now=planWeekKey(),p=profile.program;
   if(p.key!==now){
-    if(p.key){const step=planStep(p.week),want=step.items.reduce((n,i)=>n+i.count,0),got=step.items.reduce((n,i)=>n+Math.min(i.count,doneIn(p.key,i.id).length),0);
+    if(p.key){const step=planStep(p.week),want=step.items.reduce((n,i)=>n+i.count,0),got=step.items.reduce((n,i)=>n+Math.min(i.count,doneIn(p.key,i).length),0);
+      if(got>=want)claimWeek(p.key,p.week);   // finished, but the bonus was never paid (logged elsewhere)
       if(got/want>=.5)p.week=Math.min(PLAN.length,p.week+1);}
     p.key=now;saveProfile();
   }
@@ -303,9 +311,11 @@ export function programWeek(){
 }
 export function weeklyPlan(){
   const week=programWeek(),key=planWeekKey(),step=planStep(week),today=localDay();
-  const items=step.items.map(i=>{const done=doneIn(key,i.id);return {...i,done:done.map(a=>a.date),today:done.some(a=>a.date===today)};});
+  const items=step.items.map(i=>{const done=doneIn(key,i);return {...i,done:done.map(a=>a.date),today:done.some(a=>a.date===today)};});
   const total=items.reduce((n,i)=>n+i.count,0),checked=items.reduce((n,i)=>n+Math.min(i.count,i.done.length),0);
-  return {week,challengeWeek:challengeWeek(),tier:step.tier,items,total,checked,bonus:PLAN_BONUS,claimed:profile.claimed.includes(`${key}:plan`)};
+  // A week completed by any route pays its bonus as soon as it is seen complete.
+  const justClaimed=checked>=total&&claimWeek(key,week);if(justClaimed)saveProfile();
+  return {week,challengeWeek:challengeWeek(),tier:step.tier,items,total,checked,bonus:stepBonus(week),claimed:profile.claimed.includes(`${key}:plan`),justClaimed};
 }
 /** Check off one day of a plan item: logs its activity. */
 export function checkPlanItem(id){
@@ -317,11 +327,11 @@ export function checkPlanItem(id){
 }
 /** Undo today's check (a mis-click). */
 export function uncheckPlanItem(id){
-  const today=localDay(),i=profile.activities.findLastIndex(a=>a.item===id&&a.date===today);
+  const today=localDay(),it=weeklyPlan().items.find(x=>x.id===id),i=it?profile.activities.findLastIndex(a=>counts(a,it)&&a.date===today):-1;
   if(i<0)return 'Only today’s check can be undone.';
   profile.xp=Math.max(0,profile.xp-(profile.activities[i].xp||0));profile.activities.splice(i,1);
   const claim=profile.claimed.indexOf(`${planWeekKey()}:plan`);
-  if(claim>=0){profile.claimed.splice(claim,1);profile.xp=Math.max(0,profile.xp-PLAN_BONUS);}
+  if(claim>=0){profile.claimed.splice(claim,1);profile.xp=Math.max(0,profile.xp-stepBonus(profile.program.week));}
   saveProfile();return 'Check removed.';
 }
 /** Tell the Social feed what was logged (social.js posts it; only these short lines, never measurements). */
@@ -335,14 +345,13 @@ export function logActivity(kind,amount,item=''){
   const capped=Math.min(amount,kind==='steps'?100000:kind==='run'?100:kind==='study'?600:1);
   const xp=kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5);
   profile.activities.push({kind,date,amount:capped,xp,...(item?{item}:{})});profile.activities=profile.activities.slice(-240);profile.xp+=xp;
-  const plan=weeklyPlan();let done=false;
-  if(!plan.claimed&&plan.checked>=plan.total){profile.claimed.push(`${planWeekKey()}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=PLAN_BONUS;done=true;}
+  const plan=weeklyPlan(),done=plan.justClaimed;
   saveProfile();
   announce(kind,kind==='workout'?`finished ${planItem?.workout?`home workout ${planItem.workout}`:'a workout'}`:kind==='steps'?`walked ${capped.toLocaleString('en-US')} steps`
     :kind==='run'?`walked or ran ${profile.units==='imperial'?`${(capped/1.609).toFixed(1)} mi`:`${capped.toFixed(1)} km`}`:`spent ${Math.round(capped)} minutes learning something new`);
   if(done)announce('plan','completed this week’s quest');
   if(realLevel()>levelBefore)announce('level',`reached level ${realLevel()}`);
-  return `+${xp} XP${done?` · WEEK COMPLETE +${PLAN_BONUS} XP`:''}`;
+  return `+${xp} XP${done?` · WEEK COMPLETE +${plan.bonus} XP`:''}`;
 }
 export function classScores(){
   const s=stats(),{role,instinct}=profile.personality,scores={
