@@ -292,3 +292,78 @@ revoke all on function public.check_boss_week(text) from public;
 grant execute on function public.boss_gather(text, timestamptz) to anon, authenticated;
 grant execute on function public.boss_day_open() to anon, authenticated;
 grant execute on function public.check_boss_week(text) to anon, authenticated;
+
+-- ------------------------------------------------------------------ social: activity + kudos
+-- Applied 2026-10-07 (migration social_activity_kudos). The Social tab's Activity feed: short,
+-- game-written lines about what friends log (never body measurements), kudos, and a notification
+-- for whoever receives one. Tables closed to direct access; RPCs check the hunter secret.
+create table if not exists public.activity_feed (
+  id bigint generated always as identity primary key,
+  hunter_id uuid not null, name text not null, kind text not null, text text not null,
+  created_at timestamptz not null default now());
+create index if not exists activity_feed_recent on public.activity_feed (created_at desc);
+create index if not exists activity_feed_hunter on public.activity_feed (hunter_id, created_at desc);
+create table if not exists public.activity_kudos (
+  activity_id bigint not null references public.activity_feed(id) on delete cascade,
+  giver_id uuid not null, giver_name text not null,
+  created_at timestamptz not null default now(), seen boolean not null default false,
+  primary key (activity_id, giver_id));
+alter table public.activity_feed enable row level security;
+alter table public.activity_kudos enable row level security;
+create or replace function public.hunter_secret_ok(p_id uuid, p_secret text)
+returns boolean language sql stable security definer set search_path = public, extensions as $$
+  select p_secret is not null and char_length(p_secret) >= 20 and (
+    exists (select 1 from public.weekly_hunters where hunter_id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex'))
+    or exists (select 1 from public.hunters where id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex')));
+$$;
+create or replace function public.post_activity(p_id uuid, p_secret text, p_name text, p_kind text, p_text text)
+returns bigint language plpgsql security definer set search_path = public, extensions as $$
+declare new_id bigint;
+begin
+  if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
+  if p_kind not in ('workout','steps','run','study','plan','lift','test','level','hunt','story') then raise exception 'bad kind'; end if;
+  if (select count(*) from public.activity_feed where hunter_id = p_id and created_at > now() - interval '1 day') >= 40 then return null; end if;
+  insert into public.activity_feed (hunter_id, name, kind, text)
+  values (p_id, left(coalesce(nullif(btrim(p_name), ''), 'Wayfarer'), 24), p_kind, left(btrim(p_text), 120))
+  returning id into new_id;
+  return new_id;
+end;$$;
+create or replace function public.list_activity(p_limit int default 60)
+returns table (id bigint, hunter_id uuid, name text, kind text, text text, created_at timestamptz, kudos int, givers text[])
+language sql stable security definer set search_path = public as $$
+  select f.id, f.hunter_id, f.name, f.kind, f.text, f.created_at,
+         count(k.giver_id)::int, coalesce(array_agg(k.giver_id::text) filter (where k.giver_id is not null), '{}')
+  from public.activity_feed f left join public.activity_kudos k on k.activity_id = f.id
+  where f.created_at > now() - interval '30 days'
+  group by f.id order by f.created_at desc limit greatest(1, least(p_limit, 150));
+$$;
+create or replace function public.give_kudos(p_activity bigint, p_id uuid, p_secret text, p_name text)
+returns int language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
+  if exists (select 1 from public.activity_feed where id = p_activity and hunter_id = p_id) then raise exception 'not on your own activity'; end if;
+  insert into public.activity_kudos (activity_id, giver_id, giver_name)
+  values (p_activity, p_id, left(coalesce(nullif(btrim(p_name), ''), 'A friend'), 24)) on conflict do nothing;
+  return (select count(*)::int from public.activity_kudos where activity_id = p_activity);
+end;$$;
+create or replace function public.my_new_kudos(p_id uuid, p_secret text)
+returns table (giver_name text, text text, created_at timestamptz)
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
+  return query
+    with fresh as (
+      update public.activity_kudos k set seen = true from public.activity_feed f
+      where k.activity_id = f.id and f.hunter_id = p_id and not k.seen
+      returning k.giver_name, f.text, k.created_at)
+    select fresh.giver_name, fresh.text, fresh.created_at from fresh order by fresh.created_at;
+end;$$;
+revoke all on function public.hunter_secret_ok(uuid, text) from public, anon, authenticated;
+revoke all on function public.post_activity(uuid, text, text, text, text) from public;
+revoke all on function public.list_activity(int) from public;
+revoke all on function public.give_kudos(bigint, uuid, text, text) from public;
+revoke all on function public.my_new_kudos(uuid, text) from public;
+grant execute on function public.post_activity(uuid, text, text, text, text) to anon, authenticated;
+grant execute on function public.list_activity(int) to anon, authenticated;
+grant execute on function public.give_kudos(bigint, uuid, text, text) to anon, authenticated;
+grant execute on function public.my_new_kudos(uuid, text) to anon, authenticated;

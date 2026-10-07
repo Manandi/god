@@ -90,12 +90,12 @@ export const CLASS_INFO={
   mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
-export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],lifts:[],title:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:''};
+export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],lifts:[],title:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:'',wardenFelled:false};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));window.dispatchEvent(new Event('hollow-roots-profile-saved'));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
     const raw=JSON.parse(localStorage.getItem(STORAGE)||'{}');
-    profile.complete=raw.complete===true;profile.introSeen=raw.introSeen===true;profile.customized=raw.customized===true;
+    profile.complete=raw.complete===true;profile.introSeen=raw.introSeen===true;profile.customized=raw.customized===true;profile.wardenFelled=raw.wardenFelled===true;
     // US units by default; a choice made with the METRIC/IMPERIAL toggle is remembered.
     profile.unitsChosen=raw.unitsChosen===true;profile.units=profile.unitsChosen&&raw.units==='metric'?'metric':'imperial';
     profile.personality={role:CLASSES.includes(raw.personality?.role)?raw.personality.role:'',instinct:CLASSES.includes(raw.personality?.instinct)?raw.personality.instinct:''};
@@ -194,7 +194,7 @@ export function testStatus(){
 export function recordTest(){
   const st=testStatus(),entry={date:localDay(),inputs:{...profile.inputs}};
   if(st.correctable&&profile.tests.length)profile.tests[profile.tests.length-1]={...entry,date:profile.tests.at(-1).date};else profile.tests.push(entry);
-  profile.tests=profile.tests.slice(-24);saveProfile();
+  profile.tests=profile.tests.slice(-24);saveProfile();announce('test','finished their monthly tests');
 }
 /** How much each body stat rose between the last two tests, and the Growth bonus it earns. */
 export function growth(){
@@ -303,8 +303,10 @@ export function uncheckPlanItem(id){
   if(claim>=0){profile.claimed.splice(claim,1);profile.xp=Math.max(0,profile.xp-PLAN_BONUS);}
   saveProfile();return 'Check removed.';
 }
+/** Tell the Social feed what was logged (social.js posts it; only these short lines, never measurements). */
+export function announce(kind,text){try{window.dispatchEvent(new CustomEvent('hollow-roots-activity',{detail:{kind,text}}));}catch{/* no window in tests */}}
 export function logActivity(kind,amount,item=''){
-  const date=localDay();
+  const date=localDay(),levelBefore=realLevel(),planItem=item?weeklyPlan().items.find(i=>i.id===item):null;
   if(!['workout','steps','run','study'].includes(kind)||!Number.isFinite(amount)||amount<=0)return 'Enter a valid activity amount.';
   if(kind==='steps'&&amount<5000)return 'Reach at least 5,000 steps to log a step day.';
   const daily=['workout','steps'].includes(kind);
@@ -314,7 +316,12 @@ export function logActivity(kind,amount,item=''){
   profile.activities.push({kind,date,amount:capped,xp,...(item?{item}:{})});profile.activities=profile.activities.slice(-240);profile.xp+=xp;
   const plan=weeklyPlan();let done=false;
   if(!plan.claimed&&plan.checked>=plan.total){profile.claimed.push(`${weekKey()}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=PLAN_BONUS;done=true;}
-  saveProfile();return `+${xp} XP${done?` · WEEK COMPLETE +${PLAN_BONUS} XP`:''}`;
+  saveProfile();
+  announce(kind,kind==='workout'?`finished ${planItem?.workout?`home workout ${planItem.workout}`:'a workout'}`:kind==='steps'?`walked ${capped.toLocaleString('en-US')} steps`
+    :kind==='run'?`walked or ran ${profile.units==='imperial'?`${(capped/1.609).toFixed(1)} mi`:`${capped.toFixed(1)} km`}`:`spent ${Math.round(capped)} minutes learning something new`);
+  if(done)announce('plan','completed this week’s quest');
+  if(realLevel()>levelBefore)announce('level',`reached level ${realLevel()}`);
+  return `+${xp} XP${done?` · WEEK COMPLETE +${PLAN_BONUS} XP`:''}`;
 }
 export function classScores(){
   const s=stats(),{role,instinct}=profile.personality,scores={
@@ -404,6 +411,8 @@ export function weaponEligibility(weapon){
   const cls=CLASS_INFO[owner].label;
   if(!myClasses().includes(owner))return {ok:false,requirement:`${cls} CLASS`,classLocked:true};
   if(level()<WEAPON_LEVEL)return {ok:false,requirement:`LEVEL ${WEAPON_LEVEL}`};
+  // Owner, 2026-10-07: fists only until you help bring Orrun down; that hunt grants your class weapon.
+  if(!profile.wardenFelled)return {ok:false,requirement:'DEFEAT ORRUN',warden:true};
   return {ok:true,requirement:''};
 }
 
@@ -433,6 +442,9 @@ export function logLift(ex,kg,reps,sets=1){
   profile.lifts=profile.lifts.slice(-600);
   const titles=unlockedTitles().filter(t=>!before.has(t.id));
   if(titles.length&&!profile.title)profile.title=titles[0].id;
-  saveProfile();return {pr:pr&&!!prev,first:!prev,titles};
+  saveProfile();
+  const lb=profile.units==='imperial',w=lb?Math.round(kg*2.20462):Math.round(kg*10)/10;
+  announce('lift',`logged ${ex} · ${kg>0?`${w} ${lb?'lb':'kg'}`:'bodyweight'} × ${Math.round(reps)}${pr&&prev?' · new record!':''}`);
+  return {pr:pr&&!!prev,first:!prev,titles};
 }
 export function removeLift(index){if(index>=0&&index<profile.lifts.length){profile.lifts.splice(index,1);saveProfile();}}

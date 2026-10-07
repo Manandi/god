@@ -96,3 +96,21 @@
 .dev-panel .dev-select{width:100%;margin-bottom:6px}
 .dev-panel .dev-resume{position:sticky;bottom:0;width:100%;margin-top:10px;background:#c6de9e;color:#142018;border-color:#c6de9e;padding:11px}
 .dev-panel>small{display:block;margin-top:8px;font-size:9.5px;line-height:1.5;color:#9db39b}
+
+/* Social tab (2026-10-07): leaderboard and activity feed with kudos. */
+.social-tabs{display:flex;gap:6px;margin:6px 0 12px}
+#entry .social-tabs button{flex:1;padding:10px 8px;border:1px solid #5d7f67;background:#10261f;color:#cfe0c8;font:700 11px 'DM Mono',monospace;letter-spacing:.12em;cursor:pointer}
+#entry .social-tabs button.on,#entry .social-tabs button.on:hover{background:#c6de9e;color:#142018;border-color:#c6de9e}
+.social-tabs b{display:inline-block;min-width:18px;margin-left:6px;padding:1px 5px;background:#e9b44c;color:#142018;border-radius:9px}
+.kudos-new{display:grid;gap:4px;margin:0 0 12px;padding:10px 12px;border-left:3px solid #e9b44c;background:#e9b44c18;font-size:12px}
+.kudos-new b{letter-spacing:.14em;font-size:11px;color:#f0d98f}
+.feed{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:52vh;overflow:auto}
+.feed li{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:9px 10px;background:#0c1f19;border:1px solid #2e4a3c}
+.feed li.mine{border-color:#6f8f6b}
+.feed .feed-icon{font-size:18px;text-align:center}
+.feed strong{color:#e8f1df;font-weight:700}.feed em{font-style:normal;font-size:10px;color:#c6de9e;letter-spacing:.12em}
+.feed small{display:block;margin-top:2px;font-size:10px;color:#93a993}
+#entry .feed .kudos{padding:6px 10px;border:1px solid #5d7f67;background:#10261f;color:#e8f1df;font:12px 'DM Mono',monospace;cursor:pointer;white-space:nowrap}
+#entry .feed .kudos:hover:not(:disabled){background:#c6de9e;color:#142018}
+#entry .feed .kudos.on{background:#2f5a35;border-color:#9ec98a}
+#entry .feed .kudos:disabled{cursor:default;opacity:.85}

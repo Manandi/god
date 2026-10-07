@@ -21,13 +21,14 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses } from './profile.js';
+import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses,CLASS_WEAPON,weaponEligibility,announce } from './profile.js';
+import { social } from './social.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
 import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import {createBossEvent,RIFT,HOLLOW_ARRIVE,HOLLOW_RIFT,inHollow} from './bossEvent.js';
 import { PlayerCombat } from './combat/player.js';
-import { MOVES, STAMINA, GUARD, SPRINT, FLASK, COUNTER, chargeCap } from './combat/moves.js';
+import { MOVES, WEAPONS, STAMINA, GUARD, SPRINT, FLASK, COUNTER, chargeCap } from './combat/moves.js';
 import { CombatSound,ImpactEffects } from './combat/feedback.js';
 import { CombatDebug } from './combat/debug.js';
 import './style.css';
@@ -86,6 +87,8 @@ let save;try{save=cloudHunter?.world||JSON.parse(localStorage.getItem('verdant-r
 const memories=new Set(Array.isArray(save.memories)?save.memories.filter(v=>SITES.some(s=>s.id===v)):[]);
 world.echoes.forEach(e=>{if(memories.has(e.id)){e.crystal.visible=false;e.ring.visible=false;e.light.visible=false;}});
 const story=createStory(save.story,memories);
+// Saves from before the weapon rule (2026-10-07) that already finished Book I keep their weapon.
+if(story.reached('end')&&!profile.wardenFelled){profile.wardenFelled=true;saveProfile();}
 // Mossgate Chronicles: the town's side quests (ChatGPT Sites), done when a memory is found or the Old Shell falls.
 const chronicles=createChronicles(save.chronicles,site=>memories.has(site));
 const npcs=createNpcs(scene,NPCS);let dialogue=null;const spawned=new Set();
@@ -414,7 +417,7 @@ $('dialogue').addEventListener('click',e=>{const b=e.target.closest('[data-choic
 
 /** Orrun is released: the gate roots wither, the story ends, the gate opens. */
 function finishStory(){
-  story.advance('end');persist();witherT=0;
+  grantClassWeapon();story.advance('end');announce('story','completed Book I · The Verdant Reach');persist();witherT=0;
   markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;
   toast('BOOK I COMPLETE · THE FOREST REMEMBERS','Orrun is released. But the roots are still pulling: ask Halden what they say.');playTone(540,1.4,.1);playTone(810,1.2,.05,'triangle');
   const dec=story.decisions,parts=[dec.rootwell==='open'?'The Rootwell stays open to every creature that remembers.':dec.rootwell==='wall'?'The Rootwell runs clean behind Mossgate’s new wall.':'',dec.ruins==='truth'?'Mosswatch’s confession is spoken in the square.':dec.ruins==='quiet'?'Mosswatch’s debt is known to the few who needed to know.':'',dec.shrine==='bring'?'Pip stood at the gate and said the name.':dec.shrine==='home'?'Pip carried the name home to Mossgate.':''].filter(Boolean);
@@ -1041,13 +1044,24 @@ function scaleBosses(){
   for(const c of [warden]){if(!c)continue;c.baseMax??=c.maxHealth;const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
 }
 
+/** Orrun falls with you in the hollow (or you finish Book I): your class weapon is yours from now on. */
+// Kudos from friends (social.js) show up as a toast while you play; the menu badge and the
+// Activity tab keep them until you look.
+social.onKudos(list=>{if(!list.length)return;const k=list[list.length-1];setTimeout(()=>toast(`🌿 KUDOS FROM ${String(k.giver_name).toUpperCase()}`,`“${k.text}”${list.length>1?` · and ${list.length-1} more`:''}`),300);playTone(880,.25,.04,'sine');});
+function grantClassWeapon(){
+  if(profile.wardenFelled||(!inHollow(player)&&!story.reached('end')))return;
+  profile.wardenFelled=true;const w=CLASS_WEAPON[profile.appearance.discipline||'fighter'];
+  if(w&&weaponEligibility(w).ok)profile.appearance.weapon=w;
+  saveProfile();equipWeapon();updateSkillBar?.();announce('hunt',`helped bring Orrun down and earned the ${(WEAPONS[w]?.label||'class weapon').toLowerCase()}`);
+  setTimeout(()=>toast('YOUR WEAPON IS EARNED',`The hunt is won. The ${w?w.toUpperCase():'class weapon'} is yours: change it any time in the inventory (I).`),2600);
+}
 /** A creature went down (by your hand, or in a team fight by anyone's). */
 function creatureDefeated(c){
-  if(c===warden){sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL',story.stage==='gate'?'The hunt brought it down. Go to it and speak its name.':'The hunt is won for this week.');}
+  if(c===warden){grantClassWeapon();sound.defeated();sound.roar();slowMo(.2,1.2);lockTarget=null;markWeeklyBossDefeated().catch(()=>{});cloudWorld.boss_defeated=true;toast('ORRUN FALLS STILL',story.stage==='gate'?'The hunt brought it down. Go to it and speak its name.':'The hunt is won for this week.');}
   else{sound.defeated();slowMo(.25,.6);if(lockTarget===c)lockTarget=null;toast(`${c.name||c.type.toUpperCase()} DRIVEN BACK`,'Creatures never grant XP. Real effort does.');}
   // Book II: monkeys driven off count toward the hunt; freeing Garrow breaks the crown-glass.
   if(c.type==='monkey'&&story.stage==='shadow_hunt'){const done=story.bump('monkeys');persist();if(done){story.advance('shadow_memory');persist();setTimeout(()=>toast('THE TRAIL LANTERNS HOLD',story.info.objective),1200);playTone(620,.35,.05,'sine');}else toast('GREEN MONKEY DRIVEN BACK',story.objectiveText);}
-  if(c.type==='gorilla'&&story.stage==='shadow_guardian'){story.advance('shadow_report');persist();setTimeout(()=>toast('THE CROWN-GLASS BREAKS','Garrow sinks to one knee and its eyes clear. Take the shard to Maren.'),1400);playTone(540,1.2,.08);}
+  if(c.type==='gorilla'&&story.stage==='shadow_guardian'){announce('story','freed Garrow, the Rootbound, in Shadowmere');story.advance('shadow_report');persist();setTimeout(()=>toast('THE CROWN-GLASS BREAKS','Garrow sinks to one knee and its eyes clear. Take the shard to Maren.'),1400);playTone(540,1.2,.08);}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
 function strikeCreature(c,params){

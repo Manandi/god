@@ -2,6 +2,36 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-07 · Weapons from Orrun, the Social tab (Leaderboard + Activity with kudos) (Claude)
+
+**Class weapons are earned by beating Orrun** (owner: "beating the Warden boss at level 3 grants everyone the weapon from their class, till then it's hands only").
+- `profile.wardenFelled` is a new saved flag, also restored from the cloud through `loadProfile`.
+- `weaponEligibility` in `profile.js` now needs it, as well as level 3 and the class. Before it's set, the inventory and CUSTOMIZE show "LOCKED · DEFEAT ORRUN", and fists are the only weapon.
+- **How it's granted:** `grantClassWeapon()` in `main.js` runs when Orrun goes down, for every hunter standing in the hollow at that moment (each player's own game sees the kill). It sets the flag, equips the class weapon, shows a toast, and posts to the Activity feed. Speaking Orrun's name (`finishStory`) grants it too.
+- Saves that already finished Book I get the flag on load.
+- The dev panel's weapon buttons still ignore the lock.
+
+**The Social tab replaces LEADERBOARD in the menu.** It has two tabs (`renderLeaderboard` and `renderActivity` in `shell.js`).
+- **LEADERBOARD:** unchanged.
+- **ACTIVITY:** a feed of what everyone logs, with a 🌿 kudos button.
+  - The menu shows "SOCIAL · n NEW" and the tab carries a badge.
+  - A "NEW KUDOS FOR YOU" strip shows what came in.
+  - Buttons: SHARE MY ACTIVITY on/off (off automatically when hidden from the board), TURN ON NOTIFICATIONS, and REFRESH.
+- **`src/social.js` (new):**
+  - Posts lines announced by `profile.js` `announce()`: steps, home workouts, walks and runs, learning minutes, completing the week's quest, level-ups, lifts (with a "new record" flag) and monthly tests.
+  - Posts from `main.js` too: earning the weapon from Orrun, finishing Book I, and freeing Garrow.
+  - Body weight, weigh-ins and test numbers are never posted.
+  - Checks for new kudos every minute and when the tab regains focus. Each new one shows as an in-game toast, a menu badge, and a browser notification if the player allowed them and the game is in the background.
+- **Supabase** (migration `social_activity_kudos`, applied live, copied into `supabase/schema.sql`):
+  - Tables `activity_feed` and `activity_kudos`, with row security on and no direct access.
+  - RPCs `post_activity`, `list_activity`, `give_kudos` and `my_new_kudos` all check the hunter secret (`hunter_secret_ok`).
+  - Limits: 40 posts per day, a 120-character line, 30 days of history, one kudos per person per post, and no kudos on your own post.
+- **Tested:**
+  - The RPCs were tested in a transaction that rolled back: spoofing, self-kudos, double kudos and a one-time notification all behave correctly. No test rows were left, and the 8 saves are untouched.
+  - The UI was tested with every Supabase call mocked, covering posts from real logs, the toast, the badge, kudos and both tabs.
+  - The weapon rule was tested on a real Orrun kill from inside the hollow.
+  - Regressions pass: weap and inv (both now start with `wardenFelled: true`), smoke3, story, book2, saves, devkey2 and talkmem2.
+
 ## The saga plan to the end of the challenge (owner, 2026-10-05) · build every new world to this
 
 "The story or chapters must build on each other till the final boss for the end of the year 3-month challenge; of course we will keep going after that." Levels rise about 2 a week (week n ends near level 1 + 2n, matching the Thursday hunt levels 3, 5, 7…). So each world opens in the week the challenge reaches it, and the finale is **Thursday 31 December**, the challenge's last day (boss level 27). `SAGA` in `src/story.js` is the source of truth; the journal and the atlas read it.
