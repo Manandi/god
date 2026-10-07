@@ -2,7 +2,34 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
-## Latest handoff — 2026-10-07 · Weapons from Orrun, the Social tab (Leaderboard + Activity with kudos) (Claude)
+## Latest handoff — 2026-10-07 (later) · Challenge weeks run Thursday to Wednesday (Claude)
+
+The owner asked why the weekly quest said week 2 and why their logs had gone on Wednesday 2026-10-07. The cause was that plan weeks started on Monday. On Monday 2026-10-05 everyone moved to plan week 2, and the weekly page stopped showing the checks from 10-02 and 10-04.
+
+**Nothing was lost.** A read-only check of the cloud saves showed:
+- manandi still has steps on 10-02, steps on 10-04 and a 20-minute learning session on 10-04 (110 XP).
+- Speckz, Vincent, Wayfarer and the unnamed saves had not logged anything yet.
+
+What changed in `profile.js`:
+- Weeks now start on Thursday:
+  - `planWeekKey()` gives the Thursday that starts the current week.
+  - `challengeWeek()` counts weeks from launch: week 1 is 10-01 to 10-07, week 2 starts on Thursday 10-08 (the first boss day), and 12-31 is week 14.
+- The weekly quest uses these weeks for its checks, its step up (half or more done) and its bonus.
+- **Migration in `loadProfile`:**
+  - An old Monday key moves to the Thursday week it falls in, never earlier than launch.
+  - A plan step taken on a Monday after launch is undone. If half or more of week 1 was done, it comes back on Thursday.
+  - Old `YYYY-MM-DD:plan` claims are mapped the same way.
+- The weekly page header now reads `CHALLENGE WEEK n · PLAN STEP n · tier · NEW WEEK EVERY THURSDAY`.
+- `weekKey()` (Monday) still keys the weekly world and the cloud saves (`weekly_hunters.week_id`, `weekly_worlds`), so those rows and the server RPCs are unchanged. The lobby is still HROOTS.
+
+Checks, with supabase.co aborted and the clock faked:
+- manandi's save on 10-07 shows challenge week 1, step 1, 3/5 checked, XP unchanged.
+- On 10-08 it is week 2 and steps up to step 2.
+- With only 1/5 done, it stays on step 1.
+- A pre-launch Monday key is treated as week 1.
+- Production build passes.
+
+## Earlier handoff — 2026-10-07 · Weapons from Orrun, the Social tab (Leaderboard + Activity with kudos) (Claude)
 
 **Class weapons are earned by beating Orrun** (owner: "beating the Warden boss at level 3 grants everyone the weapon from their class, till then it's hands only").
 - `profile.wardenFelled` is a new saved flag, also restored from the cloud through `loadProfile`.

@@ -82,6 +82,19 @@ export function weekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+6)%7);
   return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 }
+// Challenge weeks run Thursday to Wednesday (owner, 2026-10-07): week 1 is launch day, Thursday
+// 2026-10-01, to Wednesday 2026-10-07, and each new week starts on boss day. The weekly quest, its
+// step up and its bonus follow these weeks; the weekly world and cloud saves keep weekKey above.
+export const CHALLENGE_START='2026-10-01';
+export function planWeekKey(date=new Date()){
+  const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+3)%7);
+  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+}
+/** Which week of the 90-day challenge it is (1 from launch day). */
+export const challengeWeek=(date=new Date())=>Math.max(1,Math.floor(daysBetween(CHALLENGE_START,planWeekKey(date))/7)+1);
+/** A Monday-week key from before 2026-10-07 as the Thursday week it falls in (never before launch). */
+const thursdayOf=key=>{const k=planWeekKey(new Date(`${key}T12:00:00`));return k<CHALLENGE_START?CHALLENGE_START:k;};
+const isThursday=key=>new Date(`${key}T12:00:00Z`).getUTCDay()===4;
 // Combat classes and stat-gated weapons are the ChatGPT Sites design.
 export const CLASS_INFO={
   fighter:{label:'FIGHTER',description:'Strength becomes direct damage and combo pressure.',bonus:'Damage + stronger stagger'},
@@ -116,6 +129,14 @@ export function loadProfile(){
     const g=raw.goal||{};profile.goal={type:['lose','gain','recomp'].includes(g.type)?g.type:'',targetKg:Number.isFinite(g.targetKg)?g.targetKg:0,since:typeof g.since==='string'?g.since:''};
     profile.weighIns=Array.isArray(raw.weighIns)?raw.weighIns.filter(w=>w&&DATE.test(w.date)&&Number.isFinite(w.kg)).map(w=>({date:w.date,kg:w.kg,marks:Number.isFinite(w.marks)?w.marks:0})).slice(-104):[];
     profile.claimed=Array.isArray(raw.claimed)?raw.claimed.filter(v=>typeof v==='string').slice(-100):[];
+    // Plan weeks used to start on Monday, which moved everyone to week 2 on Monday 2026-10-05 and
+    // hid week 1's checks. Old keys move to their Thursday week, and a step up taken on a Monday
+    // after launch is undone (it comes back on Thursday if half or more of week 1 was done).
+    if(DATE.test(profile.program.key)&&!isThursday(profile.program.key)){
+      if(profile.program.key>CHALLENGE_START&&profile.program.week>1)profile.program.week--;
+      profile.program.key=thursdayOf(profile.program.key);
+    }
+    profile.claimed=profile.claimed.map(v=>{const m=/^(\d{4}-\d{2}-\d{2}):plan$/.exec(v);return m&&!isThursday(m[1])?`${thursdayOf(m[1])}:plan`:v;}).filter((v,i,a)=>a.indexOf(v)===i);
     const appearance=raw.appearance||{};
     profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
@@ -272,7 +293,7 @@ export {rawStats};
 const addDays=(key,n)=>{const d=new Date(`${key}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 function doneIn(key,item){return profile.activities.filter(a=>a.item===item&&a.date>=key&&a.date<addDays(key,7));}
 export function programWeek(){
-  const now=weekKey(),p=profile.program;
+  const now=planWeekKey(),p=profile.program;
   if(p.key!==now){
     if(p.key){const step=planStep(p.week),want=step.items.reduce((n,i)=>n+i.count,0),got=step.items.reduce((n,i)=>n+Math.min(i.count,doneIn(p.key,i.id).length),0);
       if(got/want>=.5)p.week=Math.min(PLAN.length,p.week+1);}
@@ -281,10 +302,10 @@ export function programWeek(){
   return p.week;
 }
 export function weeklyPlan(){
-  const week=programWeek(),key=weekKey(),step=planStep(week),today=localDay();
+  const week=programWeek(),key=planWeekKey(),step=planStep(week),today=localDay();
   const items=step.items.map(i=>{const done=doneIn(key,i.id);return {...i,done:done.map(a=>a.date),today:done.some(a=>a.date===today)};});
   const total=items.reduce((n,i)=>n+i.count,0),checked=items.reduce((n,i)=>n+Math.min(i.count,i.done.length),0);
-  return {week,tier:step.tier,items,total,checked,bonus:PLAN_BONUS,claimed:profile.claimed.includes(`${key}:plan`)};
+  return {week,challengeWeek:challengeWeek(),tier:step.tier,items,total,checked,bonus:PLAN_BONUS,claimed:profile.claimed.includes(`${key}:plan`)};
 }
 /** Check off one day of a plan item: logs its activity. */
 export function checkPlanItem(id){
@@ -299,7 +320,7 @@ export function uncheckPlanItem(id){
   const today=localDay(),i=profile.activities.findLastIndex(a=>a.item===id&&a.date===today);
   if(i<0)return 'Only today’s check can be undone.';
   profile.xp=Math.max(0,profile.xp-(profile.activities[i].xp||0));profile.activities.splice(i,1);
-  const claim=profile.claimed.indexOf(`${weekKey()}:plan`);
+  const claim=profile.claimed.indexOf(`${planWeekKey()}:plan`);
   if(claim>=0){profile.claimed.splice(claim,1);profile.xp=Math.max(0,profile.xp-PLAN_BONUS);}
   saveProfile();return 'Check removed.';
 }
@@ -315,7 +336,7 @@ export function logActivity(kind,amount,item=''){
   const xp=kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5);
   profile.activities.push({kind,date,amount:capped,xp,...(item?{item}:{})});profile.activities=profile.activities.slice(-240);profile.xp+=xp;
   const plan=weeklyPlan();let done=false;
-  if(!plan.claimed&&plan.checked>=plan.total){profile.claimed.push(`${weekKey()}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=PLAN_BONUS;done=true;}
+  if(!plan.claimed&&plan.checked>=plan.total){profile.claimed.push(`${planWeekKey()}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=PLAN_BONUS;done=true;}
   saveProfile();
   announce(kind,kind==='workout'?`finished ${planItem?.workout?`home workout ${planItem.workout}`:'a workout'}`:kind==='steps'?`walked ${capped.toLocaleString('en-US')} steps`
     :kind==='run'?`walked or ran ${profile.units==='imperial'?`${(capped/1.609).toFixed(1)} mi`:`${capped.toFixed(1)} km`}`:`spent ${Math.round(capped)} minutes learning something new`);
