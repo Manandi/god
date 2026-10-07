@@ -56,6 +56,9 @@ export class CombatSound {
     if (name === 'charge') this.tone(42, 1.2, .14, 'triangle', .6);
     if (name === 'boulder') this.hiss(.4, .12, 700, 200, .8);
     if (name === 'erupt') { this.tone(46, .5, .2, 'triangle', .5); this.hiss(.35, .12, 1600, 300, .8); }
+    if (name === 'barrage') { for (let i = 0; i < 3; i++) this.hiss(.18, .08, 2400, 900, 1.2, i * .05); }
+    if (name === 'whirl') for (let i = 0; i < 4; i++) this.hiss(.2, .09, 1200, 400, 1.5, i * .35);
+    if (name === 'grab') this.hiss(.3, .12, 600, 150, .9);
   }
   // The Warden: everything an octave lower and longer.
   wardenWindup(attack) {
@@ -104,6 +107,9 @@ export class CombatSound {
     if (attack === 'combo') { this.tone(70, .7, .09, 'sawtooth', 2.2); this.tone(520, .4, .03, 'triangle', 1.6, .2); }
     if (attack === 'leap') { this.tone(52, .8, .1, 'sawtooth', 2.6); this.hiss(.7, .05, 150, 900, 2); }
     if (attack === 'erupt') { this.tone(38, .9, .12, 'sine', 1.8); this.tone(660, .6, .025, 'triangle', 1.5, .1); }
+    if (attack === 'barrage') { for (let i = 0; i < 3; i++) this.tone(880 + i * 220, .12, .03, 'triangle', 1.2, i * .12); this.tone(60, .7, .07, 'sawtooth', 1.8); }
+    if (attack === 'whirl') { this.hiss(.7, .06, 300, 1600, 1.6); this.tone(66, .7, .08, 'sawtooth', 1.4); }
+    if (attack === 'grab') { this.tone(48, .8, .14, 'sawtooth', 1.5); this.tone(96, .5, .06, 'square', .7, .2); }
   }
   swipe() { this.hiss(.12, .07, 2600, 900, 1.4); }
   thud() { this.tone(70, .35, .14, 'sine', .5); this.hiss(.3, .08, 500, 120, 1); }

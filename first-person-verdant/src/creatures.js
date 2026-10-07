@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { groundY, SHADOWMERE } from './world.js';
+import { groundY, SHADOWMERE, GARROW_SEAL } from './world.js';
 import { canOccupy } from './collision.js';
 import { angleTo } from './angles.js';
 import { level } from './profile.js';
@@ -55,22 +55,29 @@ const ATTACKS = {
   // Cleaver chop: the blade comes down in a line in front of it. Step aside.
   chop: { windup: .95, track: .62, active: .42, recover: 1.1, range: [0, 4.2], damage: 2, kind: 'heavy', label: 'cleaver chop', gorilla: true, line: [.5, 4.1, .6] },
   // Backhand: a fast sweep of the free fist across its front. Back off or guard.
-  backhand: { windup: .55, track: .45, active: .32, recover: .8, range: [0, 3.3], damage: 1, kind: 'light', label: 'backhand sweep', gorilla: true },
+  backhand: { windup: .55, track: .45, active: .32, recover: .8, range: [0, 3.3], damage: 1, kind: 'light', label: 'backhand sweep', gorilla: true, phase1: true },
   // Knuckle charge: down on all fours across the clearing. Sidestep late; into a tree it dazes itself.
   charge: { windup: .85, track: .8, active: 1.45, recover: 1.0, range: [5, 16], damage: 2, kind: 'heavy', label: 'knuckle charge', gorilla: true, line: [0, 13, 1.1] },
   // Double ground pound: two shockwaves, one after the other. Jump or dash through each.
   pound: { windup: 1.0, track: .5, active: 1.05, recover: 1.15, range: [0, 4.6], damage: 1, kind: 'heavy', label: 'double ground pound', gorilla: true, rings: [.02, .57], ring: [.8, 4.6, .45] },
   // Boulder hurl: rips up a mossy stone and lobs it where you stand (main.js flies it).
-  boulder: { windup: 1.05, track: 1.0, active: .3, recover: .95, range: [6, 20], damage: 2, kind: 'heavy', label: 'boulder hurl', gorilla: true },
+  boulder: { windup: 1.05, track: 1.0, active: .3, recover: .95, range: [6, 20], damage: 2, kind: 'heavy', label: 'boulder hurl', gorilla: true, phase1: true },
   // Chest-drum roar: everyone close is knocked off balance. Dash through it, then punish or get punished.
-  roar: { windup: .9, track: .9, active: .5, recover: .45, range: [0, 7], damage: 0, kind: 'light', label: 'chest-drum roar', gorilla: true, reach: 7 },
+  roar: { windup: .9, track: .9, active: .5, recover: .45, range: [0, 7], damage: 0, kind: 'light', label: 'chest-drum roar', gorilla: true, reach: 7, phase1: true },
   // Crown-glass combo: chop, backhand, rising cut, stepping in between. Guard all three or get out.
   combo: { windup: .7, track: .55, active: 1.5, recover: 1.15, range: [0, 3.6], damage: 1, kind: 'light', label: 'crown-glass combo', gorilla: true, phase: 2, swipes: [.12, .6, 1.08] },
   // Leaping cleave: lands on you, and crystal spikes burst out in a line ahead. Dodge sideways.
   leap: { windup: .9, track: .85, active: 1.0, recover: 1.25, range: [4, 15], damage: 2, kind: 'heavy', label: 'leaping cleave', gorilla: true, phase: 2 },
   // Rootglass eruption: the cleaver goes into the ground and crystal bursts up where you stand,
   // three times. Keep moving.
-  erupt: { windup: .8, track: .8, active: 1.75, recover: .95, range: [0, 16], damage: 1, kind: 'heavy', label: 'crown-glass eruption', gorilla: true, phase: 2, marks: [0, .5, 1.0], fuse: .7 }
+  erupt: { windup: .8, track: .8, active: 1.75, recover: .95, range: [0, 16], damage: 1, kind: 'heavy', label: 'crown-glass eruption', gorilla: true, phase: 2, marks: [0, .5, 1.0], fuse: .7 },
+  // Shard barrage: tears three crystals off its own back and throws them in a fan. Dash or guard.
+  barrage: { windup: .85, track: .85, active: .4, recover: .9, range: [5, 18], damage: 1, kind: 'light', label: 'shard barrage', gorilla: true, phase: 2 },
+  // Crown-glass whirl: blade held out, two full turns while it walks you down. Back away.
+  whirl: { windup: .7, track: .7, active: 1.4, recover: 1.2, range: [0, 4.6], damage: 1, kind: 'light', label: 'crown-glass whirl', gorilla: true, phase: 2, reach: 3.2 },
+  // Crushing grab: unblockable. It lunges with its open hand; caught, you are slammed into the ground.
+  // Dodge it, and a miss leaves it wide open.
+  grab: { windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 3.8], damage: 2, kind: 'heavy', label: 'crushing grab', gorilla: true, phase: 2 }
 };
 const GORILLA_PHASE_AT = .5, PHASE_TIME = 2.8, DAZE_TIME = 1.8;
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
@@ -368,6 +375,7 @@ export class Creature {
       // Monkeys and Garrow use only their own moves; the hollowed never use theirs.
       if (monkey ? !a.monkey : gorilla ? !a.gorilla : (a.monkey || a.gorilla)) continue;
       if (a.phase && this.phase < a.phase) continue;
+      if (a.phase1 && this.phase > 1) continue;           // phase 2 swaps these for its own
       let w = 1;
       if (monkey) {
         w = name === 'flurry' ? (behind ? .4 : 1.7) : name === 'pounce' ? 1.1 : name === 'seed' ? (this.enraged ? 1.3 : .9) : behind ? 1.5 : 1.0;
@@ -378,7 +386,8 @@ export class Creature {
         const front = Math.abs(rel) < .55, side = Math.abs(rel) < 1.6;
         w = { chop: front ? 1.5 : 0, backhand: side && !front ? 1.6 : side ? .8 : 0, charge: dist > 6.5 ? 1.5 : .6, pound: behind ? 2 : dist < 3.2 ? 1.1 : .5,
           boulder: dist > 8 ? 1.4 : .5, roar: this.roarRest > 0 ? 0 : this.phase > 1 ? .7 : .45,
-          combo: Math.abs(rel) < .9 ? 2 : 0, leap: dist > 5 ? 1.6 : 0, erupt: dist > 4 ? 1.2 : .7 }[name] ?? 0;
+          combo: Math.abs(rel) < .9 ? 2 : 0, leap: dist > 5 ? 1.6 : 0, erupt: dist > 4 ? 1.2 : .7,
+          barrage: dist > 6 ? 1.5 : .6, whirl: dist < 3.6 ? 1.4 : .6, grab: Math.abs(rel) < .7 && dist < 3.4 ? 1.3 : 0 }[name] ?? 0;
         if (name === this.lastAttack) w *= .3;      // rarely the same move twice in a row
         if (w > 0) options.push([name, w]);
         continue;
@@ -410,6 +419,7 @@ export class Creature {
     if (this.brokeNow) { this.brokeNow = false; events.push({ type: 'shellBroken' }); }
     if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
     if (this.state === 'dormant') return events;
+    if (this.state === 'bound' || this.state === 'calm') { this.rest(dt, time); return events; }
     if (this.state === 'defeated') {
       this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.vine) this.vine.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
@@ -482,7 +492,7 @@ export class Creature {
         if (this.t >= tm.windup) {
           // The vine swing needs somewhere to land behind you; with nowhere to go it holds off.
           if (this.attack === 'swing' && !(this.swingPath = this.planSwing(p, dist, ctx.grid))) { this.attack = null; this.cooldown = .3; this.setState('circle'); break; }
-          this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.hits = new Set(); this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
+          this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.hits = new Set(); this.grabbed = false; this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
           if (this.attack === 'leap') { const reach = Math.min(Math.max(0, dist - 1.2), 14); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
           if (this.attack === 'boulder') { const fw = this.forward(); events.push({ type: 'boulder', x: this.x + fw.x * .6, y: groundY(this.x, this.z) + 3.9, z: this.z + fw.z * .6, tx: p.x, tz: p.z, flight: THREE.MathUtils.clamp(dist / 15, .7, 1.25), damage: a.damage }); }
           if (this.attack === 'erupt') this.marks = [];
@@ -756,6 +766,35 @@ export class Creature {
         }
         break;
       }
+      case 'barrage':
+        if (t >= .05 && once('fx:barrage')) {
+          const y = groundY(this.x, this.z) + 3.3;
+          events.push({ type: 'shards', x: this.x + fw.x * .4, y, z: this.z + fw.z * .4, yaw: Math.atan2(dx, dz), n: 3, spread: .26, speed: 19, ty: (p.y ?? groundY(p.x, p.z)) + 1.2, dist, damage: a.damage });
+        }
+        this.closest = 0; this.connected = true;     // the shards do the hitting (main.js)
+        break;
+      case 'whirl': {
+        // Two turns, drifting after you; each turn can catch you once.
+        this.spinAngle += dt * 9;
+        const step = Math.min(Math.max(0, dist - 1.6), 3.2 * dt);
+        this.travel(Math.sin(Math.atan2(dx, dz)) * step, Math.cos(Math.atan2(dx, dz)) * step, ctx.grid);
+        const turn = Math.min(1, Math.floor(t / (a.active / 2))), g = dist - a.reach;
+        if (g <= 0) hit('whirl' + turn); else miss(g);
+        break;
+      }
+      case 'grab': {
+        // A lunge with the open hand; caught, it lifts you and slams you down. A miss is a long opening.
+        if (!this.grabbed && t < .3) {
+          const step = 2.6 / .3 * dt * Math.max(0, 1 - t / .3) * 1.8;
+          this.travel(fw.x * Math.min(step, Math.max(0, dist - 1.4)), fw.z * Math.min(step, Math.max(0, dist - 1.4)), ctx.grid);
+          const hx = this.x + fw.x * 1.9, hz = this.z + fw.z * 1.9, g = Math.hypot(p.x - hx, p.z - hz) - 1.45;
+          if (t >= .06 && g <= 0 && Math.abs(rel) < .8) { this.grabbed = true; hit('grab', { ring: true, unblockable: true }); events.push({ type: 'grabbed', x: hx, z: hz }); }
+          else miss(g);
+        }
+        if (this.grabbed && t >= .9 && once('fx:slam')) events.push({ type: 'grabSlam', x: this.x + fw.x * 1.6, z: this.z + fw.z * 1.6 });
+        if (!this.grabbed && t >= .36) { events.push({ type: 'missed', attack: 'grab', label: a.label, gap: this.closest ?? 9 }); this.setState('recover'); return true; }
+        break;
+      }
       case 'erupt':
         // Three marks where you stand, each bursting a moment later.
         a.marks.forEach((at, i) => {
@@ -823,6 +862,8 @@ export class Creature {
     if (this.attack === 'roar') return t < .2 ? [{ x: this.x, y: g + 1, z: this.z, r: a.reach }] : [];
     if (this.attack === 'combo') { const n = this.swipe ?? -1, since = n >= 0 ? t - a.swipes[n] : -1; return since >= 0 && since < .16 ? (n === 0 ? line(.4, 3.6, .55) : ahead(1.4, n === 1 ? 2 : 1.4)) : []; }
     if (this.attack === 'leap') return this.leap?.landed ? [{ x: this.x, y: g + .5, z: this.z, r: 2.4 }] : [];
+    if (this.attack === 'whirl') return [{ x: this.x, y: g + 1.2, z: this.z, r: a.reach }];
+    if (this.attack === 'grab') return !this.grabbed && t >= .06 && t < .3 ? ahead(1.9, 1.45) : [];
     if (this.attack === 'erupt') return (this.marks || []).filter(m => t >= m.at + a.fuse && t < m.at + a.fuse + .2).map(m => ({ x: m.x, y: groundY(m.x, m.z) + .5, z: m.z, r: 1.5 }));
     return [];
   }
@@ -844,6 +885,9 @@ export class Creature {
       if (a === 'combo') { P.R = [-2.3 * w, 0]; P.rear = -.15 * w; P.sword = .4 * w; }
       if (a === 'leap') { P.rear = .4 * w; P.lift = -.4 * w; P.L = P.R = [1.0 * w, 0]; }
       if (a === 'erupt') { P.R = [-2.7 * w, 0]; P.rear = -.25 * w; P.sword = -.3 * w; }
+      if (a === 'barrage') { P.L = [-3.5 * w, -.3 * w]; P.rear = -.2 * w; P.spin = .35 * w; }       // reaching over its shoulder for the crystals
+      if (a === 'whirl') { P.R = [-.4 * w, 1.45 * w]; P.L = [-.3 * w, -1.2 * w]; P.spin = -.7 * w; P.lift = -.15 * w; }
+      if (a === 'grab') { P.L = [1.3 * w, -.3 * w]; P.rear = -.15 * w; P.lift = -.2 * w; P.headOut = .2 * w; }
     }
     if (st === 'attack' && A) {
       if (a === 'chop') { const k = ease(t / .1); P.R = [-2.9 + 2.5 * k, -.2]; P.rear = -.22 + .55 * k; P.sword = .5 - .9 * k; }
@@ -861,6 +905,12 @@ export class Creature {
       }
       if (a === 'leap') { const f = Math.min(1, t / (A.active * .7)); P.lift = f < 1 ? Math.sin(f * Math.PI) * 3 : 0; P.R = [f < 1 ? -2.9 : -.4, 0]; P.L = [f < 1 ? -1.5 : -.8, 0]; P.rear = f < 1 ? -.2 + .2 * f : .45; P.sword = f < 1 ? .5 : -.4; }
       if (a === 'erupt') { P.R = [-.35, 0]; P.L = [-.4, .2]; P.rear = .55; P.sword = .9; P.lift = -.15; }
+      if (a === 'barrage') { const k = ease(t / .12); P.L = [-3.5 + 2.3 * k, -.3]; P.spin = .35 - .7 * k; P.rear = .25 * k; }
+      if (a === 'whirl') { P.R = [-.4, 1.45]; P.L = [-.3, -1.2]; P.spin = this.spinAngle; P.whirl = true; P.lift = -.1; }
+      if (a === 'grab') {
+        if (!this.grabbed) { const k = ease(t / .18); P.L = [1.3 - 2.8 * k, -.3 + .3 * k]; P.rear = .45 * k; P.headOut = .3; }
+        else { P.L = [kf([[0, -1.5], [.3, -1.5], [.75, -2.9], [.9, -.3]]), 0]; P.rear = kf([[0, .45], [.75, -.3], [.9, .55]]); P.R = [-.5, 0]; }
+      }
     }
     if (st === 'phase') {
       if (t < 1.45) { drum(1); P.rear = -.3 - .2 * t / 1.45; P.lift = .2; }
@@ -903,6 +953,7 @@ export class Creature {
     if (st === 'emerge') { const e = Math.min(1, t / EMERGE_TIME); lift = -2.6 * (1 - e) ** 2; rear = -.35 * Math.sin(e * Math.PI); legRate = 2.5; }
     const G = this.type === 'gorilla' ? this.gorillaPose(st, t, tm) : null;
     if (G && G.rear !== null) { rear = G.rear; lift = G.lift; spin = G.spin; headOut = G.headOut; lean = G.lean; glow = st === 'phase' ? .8 : glow; }
+    if (G?.whirl) this.body.rotation.y = spin;
     // Monkey poses: crouch before the pounce, an arc through the air, the hop back.
     if (this.type === 'monkey') {
       const w = tm ? Math.min(1, t / tm.windup) : 0;
@@ -916,7 +967,7 @@ export class Creature {
     }
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
-    this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
+    if (!G?.whirl) this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
     this.body.position.y = damp(this.body.position.y, lift + flip * 2.3 + Math.sin(time * 7) * .01, 12, dt);
     // A dressed monkey or gorilla (shadowmere.js) keeps its head on its own neck, moving less.
     const nb = this.neckBase || { y: 1.2, z: 1.2, k: 1 };
@@ -972,7 +1023,7 @@ export class Creature {
         this.vine.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
       }
     }
-    if (this.type === 'gorilla') this.crownGlow(st === 'phase' ? Math.min(1, Math.max(0, (t - .8) / .65)) : this.phase > 1 ? 1 : 0, time);
+
     const rage = this.enraged ? 1 : 0;
     if (this.isBoss) {
       this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
@@ -981,6 +1032,7 @@ export class Creature {
     this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
     this.eyeMat.emissive.setRGB(.35 + glow * .8 + rage * .9, (.26 + glow * .4) * (1 - rage * .8), .13 * (1 - rage));
+    if (this.type === 'gorilla') this.crownGlow(st === 'phase' ? Math.min(1, Math.max(0, (t - .8) / .65)) : this.phase > 1 ? 1 : 0, time);
     this.tell.visible = this.alive && (st === 'windup' || st === 'attack' || st === 'recover');
     if (this.tell.visible) {
       const warning = st === 'windup', w = warning ? Math.min(1, t / tm.windup) : 1;
@@ -1018,6 +1070,51 @@ export class Creature {
     const violet = new THREE.Color(0xa45cff), pulse = 1 + Math.sin(time * 6) * .15 * k;
     for (const g of this.glowMats) { g.m.emissive.copy(g.color).lerp(violet, k); g.m.emissiveIntensity = (g.k + (2.6 - g.k) * k) * pulse; }
     this.glowLight.intensity = 6 * k * pulse;
+    // Phase 2 changes the whole body: crown-glass bursts from its back, shoulders and head and
+    // creeps up the sword arm, the fur goes dark, the eyes burn violet, and it stands taller.
+    if (k > 0 && !this.growth) this.buildGrowth();
+    if (this.growth) {
+      for (const c of this.growth) { const s = c.size * Math.min(1, k * 1.25 - c.delay * .25); c.mesh.visible = s > .01; c.mesh.scale.setScalar(Math.max(.001, s)); }
+      const dark = new THREE.Color(0x14101c);
+      for (const f of this.furTint) f.m.color.copy(f.color).lerp(dark, k * .7);
+      if (this.eyeMat) { this.eyeMat.emissive.lerp(violet, k); this.eyeMat.emissiveIntensity = 1 + 2 * k; }
+      this.aura.intensity = 5 * k * pulse;
+      this.root.scale.setScalar(this.kind.size * (1 + .1 * k));
+    }
+  }
+  /** The crystals of phase 2, sized to the model it wears (the Blender body or the fallback). */
+  buildGrowth() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4a2a80, emissive: 0x7a3cff, emissiveIntensity: 1.6, roughness: .2, metalness: .3, flatShading: true });
+    const geo = new THREE.ConeGeometry(.15, 1, 5); geo.translate(0, .5, 0);      // base at the origin, so it grows out of the body
+    const boxOf = g => { const box = new THREE.Box3(), tmp = new THREE.Box3(); g.updateMatrixWorld(true); const inv = g.matrixWorld.clone().invert();
+      g.traverse(m => { if (m.isMesh) { m.geometry.computeBoundingBox(); tmp.copy(m.geometry.boundingBox).applyMatrix4(inv.clone().multiply(m.matrixWorld)); box.union(tmp); } }); return box; };
+    this.growth = [];
+    const add = (parent, x, y, z, rx, rz, size, delay) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.visible = false; m.castShadow = true; parent.add(m); this.growth.push({ mesh: m, size, delay }); };
+    const torso = this.body.children[0], tb = boxOf(torso), o = torso.position, h = tb.max.y - tb.min.y;
+    for (let i = 0; i < 6; i++) add(this.body, o.x + (i % 2 ? .14 : -.14), o.y + tb.max.y - .12 - i * h * .09, o.z + tb.min.z + .12, -.85 - i * .05, (i % 2 ? .2 : -.2), 1.05 - i * .1, i / 6);
+    for (const side of [-1, 1]) for (let i = 0; i < 3; i++) add(this.body, o.x + side * (tb.max.x * .78 - i * .12), o.y + tb.max.y - .2 - i * .1, o.z + (i - 1) * .16, (i - 1) * .3, -side * (.75 + i * .15), .75 - i * .12, .3 + i * .1);
+    if (this.neck) { const hb = boxOf(this.neck); for (let i = 0; i < 4; i++) { const a = -1 + i * .66; add(this.neck, Math.sin(a) * .22, hb.max.y - .08, -.05 + Math.cos(a) * .05, -.35, -a * .6, .42 + (i % 2) * .12, .5); } }
+    const arm = this.arms?.find(a => a.side > 0)?.mesh;
+    if (arm) { const ab = boxOf(arm); for (let i = 0; i < 4; i++) add(arm, ab.max.x - .04, ab.min.y + (ab.max.y - ab.min.y) * (.15 + i * .18), (i % 2 ? .1 : -.08), (i % 2 ? .5 : -.4), -1.1, .5 - i * .06, .2 + i * .15); }
+    this.furTint = [this.shellMat, this.skinMat].filter(Boolean).map(m => ({ m, color: m.color.clone() }));
+    this.aura = new THREE.PointLight(0x9d5cff, 0, 9, 2); this.aura.position.set(0, 1.6, .4); this.body.add(this.aura);
+  }
+  /** Before its quest: kneeling inside the seal. After it: freed, at rest, the crown-glass gone. */
+  bind() { this.respawn(); this.alive = false; this.setState('bound'); this.heading = 0; }
+  calm() { this.respawn(); this.alive = false; this.setState('calm'); this.heading = 0; }
+  /** Its quest begins: up off its knees and into the fight. */
+  wake() { this.respawn(); this.setState('alert'); }
+  rest(dt, time) {
+    this.place();
+    const calm = this.state === 'calm';
+    this.body.rotation.x = damp(this.body.rotation.x, calm ? .2 : .42, 4, dt); this.body.rotation.z = damp(this.body.rotation.z, 0, 4, dt); this.body.rotation.y = 0;
+    this.body.position.y = damp(this.body.position.y, -.38 + Math.sin(time * 1.3) * .03, 4, dt);
+    for (const { mesh } of this.legs) mesh.rotation.x = damp(mesh.rotation.x, -1.0, 4, dt);
+    for (const { mesh, side } of this.arms || []) { mesh.rotation.x = damp(mesh.rotation.x, calm ? -.25 : .3, 4, dt); mesh.rotation.z = damp(mesh.rotation.z, side * .15, 4, dt); }
+    if (this.sword) this.sword.visible = !calm;
+    this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; this.bar.visible = false;
+    if (this.type === 'gorilla') this.crownGlow(0, time);
+    this.root.visible = true; this.root.updateMatrixWorld(true);
   }
   showBar(visible, camera) {
     this.bar.visible = !this.isBoss && !this.bossBar && visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
@@ -1039,7 +1136,7 @@ export class Creature {
     this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false; this.phase = 1; this.pendingPhase = false;
     if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
-    this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0);
+    this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); if (this.sword) this.sword.visible = true;
     this.setState('wander'); this.cooldown = 1.5; this.push = { x: 0, z: 0 }; this.attack = null;
   }
 }
@@ -1055,10 +1152,15 @@ export function createCreatures(scene, chapters = []) {
   }
   // Shadowmere patrols and its guardian belong to the second atlas destination.
   // They keep their own home radius and never change Verdant Reach progression.
-  for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-3,SHADOWMERE.z-13],[3,SHADOWMERE.x+8,SHADOWMERE.z+26],[4,SHADOWMERE.x-9,SHADOWMERE.z+31]]){
+  for(const [i,x,z] of [[0,SHADOWMERE.x-10,SHADOWMERE.z+8],[1,SHADOWMERE.x+11,SHADOWMERE.z+4],[2,SHADOWMERE.x-15,SHADOWMERE.z-4],[3,SHADOWMERE.x+8,SHADOWMERE.z+26],[4,SHADOWMERE.x-9,SHADOWMERE.z+31]]){
     const monkey=new Creature(scene,x,z,'monkey',{id:`shadow-monkey-${i}`,respawn:45});monkey.name='GREEN MONKEY';list.push(monkey);
   }
   const guardian=new Creature(scene,SHADOWMERE.guardian.x,SHADOWMERE.guardian.z,'gorilla',{id:'shadow-gorilla',respawn:150});guardian.name='GARROW · THE ROOTBOUND';list.push(guardian);
+  // Lantern thieves: two at each dark lantern round Garrow's seal; they drop from the canopy when you come.
+  for(const L of GARROW_SEAL.lanterns)for(const j of [0,1]){
+    const a=L.a+(j?.5:-.5),x=GARROW_SEAL.x+Math.sin(a)*11.8,z=GARROW_SEAL.z+Math.cos(a)*11.8;
+    const t=new Creature(scene,x,z,'monkey',{id:`seal-thief-${L.i}-${j}`});t.name='LANTERN THIEF';t.lantern=L.i;t.sleep();list.push(t);
+  }
   return list;
 }
 

@@ -143,6 +143,9 @@ export const STAGES = [
   { id: 'shadow_meet', book: 2, objective: 'Find Maren the Lamplighter under the root arch', target: 'maren' },
   { id: 'shadow_hunt', book: 2, objective: 'Drive off the green monkeys stealing the lantern seeds', target: { x: SM.x, z: SM.z + 14, title: 'THE LANTERN TRAIL' }, count: ['monkeys', 3] },
   { id: 'shadow_memory', book: 2, objective: 'Find what the falls remember', target: { ...SEED_SHRINE, title: 'THE FALLS' } },
+  // Garrow is sealed in crown-glass until the three lanterns round its clearing are lit again (owner,
+  // 2026-10-07: "lock him behind the quest line, like world 1").
+  { id: 'shadow_seal', book: 2, objective: 'Relight the three dark lanterns round Garrow’s seal', target: { x: SM.guardian.x, z: SM.guardian.z + 11, title: 'GARROW’S SEAL' }, count: ['lanterns', 3] },
   { id: 'shadow_guardian', book: 2, objective: 'Boss fight: free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
   { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
   // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
@@ -305,8 +308,9 @@ const DIALOGUE = {
     },
     idle: [
       ['<shadow_meet', 'Who is there? Step into the light where I can see you.'],
-      ['<shadow_memory', 'They chain their blows. Guard the first, expect the second, and the third comes faster. And if one crouches low, it is about to leap.'],
-      ['<shadow_guardian', 'The falls were Garrow’s favourite place. If anything remembers what happened to it, the water does.'],
+      ['<shadow_memory', 'They chain their blows. Guard the first, expect the second, and the third comes faster. If one crouches low, it is about to leap; if it looks up at the canopy, it is going for a vine. Turn to face it.'],
+      ['<shadow_seal', 'The falls were Garrow’s favourite place. If anything remembers what happened to it, the water does.'],
+      ['<shadow_guardian', 'Crown-glass drinks light, but it cannot hold it. Those three lanterns by the clearing went dark the night Garrow was sealed. Light them again, and mind the thieves who nest there.'],
       ['<shadow_report', 'Garrow carried the light from tree to tree when I was young. Whatever is holding that sword is not Garrow. Free it, please.'],
       ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Two lights of five, {name}. Come back stronger. I will keep a lantern lit for you.']
     ]
@@ -518,7 +522,8 @@ export function createStory(saved, memories) {
       pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
       pages.push({ title: 'BOOK I · THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. But the roots still pull: the Heartseed is one of five seeds, one for every world the great root holds up, and one of them is going dark.', open: story.reached('end') });
       pages.push({ title: 'BOOK II · SHADOWMERE', text: 'West of the Reach lies Shadowmere, where every lantern holds a seed of light. Maren the Lamplighter keeps them, but the green monkeys, once lantern-keepers themselves, now steal and hoard the light, and Garrow, the realm’s keeper, guards the dark with a sword it never chose.', open: story.reached('shadow_meet') });
-      pages.push({ title: 'THE FOURTH MEMORY · THE LAMPLIGHTERS', text: 'Garrow carried the Lantern Seed’s light from tree to tree, and the monkeys followed it like moths. Then riders in Ashmere grey came through the falls with a blade of black crown-glass. They did not drink. They fused the blade to Garrow’s hand, so the keeper’s own strength would keep the lights out for them.', open: story.reached('shadow_guardian') });
+      pages.push({ title: 'THE FOURTH MEMORY · THE LAMPLIGHTERS', text: 'Garrow carried the Lantern Seed’s light from tree to tree, and the monkeys followed it like moths. Then riders in Ashmere grey came through the falls with a blade of black crown-glass. They did not drink. They fused the blade to Garrow’s hand, so the keeper’s own strength would keep the lights out for them.', open: story.reached('shadow_seal') });
+      pages.push({ title: 'THE SEAL', text: 'They sealed Garrow inside a ring of crown-glass and put out the three lanterns round its clearing. Crown-glass drinks light but cannot hold it: relight the lanterns and the seal breaks. Then Garrow will fight, and the glass will fight harder once it is losing.', open: story.reached('shadow_seal') });
       pages.push({ title: 'THE SHARD POINTS NORTH', text: 'Garrow sleeps, and the crown-glass broke. Every cut face points north, to the Frostbound Crown, where whatever is left of Ashmere waits, frozen and patient. The Rootway north opens at level 5.', open: story.reached('frost_wait') });
       return pages;
     },

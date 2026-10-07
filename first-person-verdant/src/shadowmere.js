@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SHADOWMERE as SM, SEED_SHRINE } from './world.js';
+import { SHADOWMERE as SM, SEED_SHRINE, GARROW_SEAL } from './world.js';
 import { NPCS } from './story.js';
 
 // Shadowmere, built from the owner's concept image (public/concepts/shadowmere-forest-concept.png):
@@ -128,6 +128,7 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
   seed.position.set(SEED_SHRINE.x, shrineY + 1.45, SEED_SHRINE.z); root.add(seed);
   const seedHalo = new THREE.Sprite(haloMat); seedHalo.position.copy(seed.position); seedHalo.scale.setScalar(1.8); root.add(seedHalo);
   const state = { ready: false, shade: 0 };
+  const seal = garrowSeal(root, { groundY, addCollider, lanternSpots, haloMat });
   const loaded = new GLTFLoader().loadAsync(`${BASE}worlds/shadowmere.glb`).then(gltf => {
     const proto = name => gltf.scene.getObjectByName(name);
     gltf.scene.updateMatrixWorld(true);
@@ -198,10 +199,10 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
 
   const nearest = [];
   return {
-    state, loaded, lanternSpots,
+    state, loaded, lanternSpots, seal,
     /** Per frame: moon and halo follow the camera's sky, fireflies drift, water flows, lights hop to the nearest lanterns. */
     update(dt, t, player, camera, shade) {
-      state.shade = shade; back.update(t); seed.rotation.y = t * .8; seed.position.y = shrineY + 1.45 + Math.sin(t * 1.6) * .08;
+      state.shade = shade; back.update(t); seal.update(dt, t); seed.rotation.y = t * .8; seed.position.y = shrineY + 1.45 + Math.sin(t * 1.6) * .08;
       const on = shade > .02; moon.visible = moonHalo.visible = on; root.visible = on || Math.hypot(player.x - SM.x, player.z - SM.z) < SM.r + 60;
       if (on) {
         moon.position.copy(camera.position).addScaledVector(MOON_DIR, 400); moon.lookAt(camera.position); moon.material.opacity = shade;
@@ -225,6 +226,84 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
         const p = nearest[i]?.[1]; if (!p || !on) { l.intensity = 0; return; }
         l.position.set(p[0], p[1] - 1.1, p[2]); l.intensity = shade * (16 + Math.sin(t * 7 + i * 2) * 1.1);
       });
+    }
+  };
+}
+
+/**
+ * Garrow's seal (Book II): a ring of crown-glass spires and a shimmering wall round the keeper,
+ * and three dark lanterns in the clearing. main.js says what the story allows: setSealed() and
+ * setLit(). While the seal stands its colliders close the ring; when it breaks they drop away.
+ * Each lantern lit cracks a third of the spires.
+ */
+function garrowSeal(root, { groundY, addCollider, lanternSpots, haloMat }) {
+  const C = GARROW_SEAL, g = new THREE.Group(); root.add(g);
+  const crystal = new THREE.MeshStandardMaterial({ color: 0x3b2266, emissive: 0x7a3cff, emissiveIntensity: 1.6, roughness: .2, metalness: .3, flatShading: true });
+  const spireGeo = new THREE.ConeGeometry(.42, 1, 5); spireGeo.translate(0, .5, 0);
+  const r = rng(61), spires = [], colliders = [];
+  for (let i = 0; i < 30; i++) {
+    const a = i / 30 * Math.PI * 2 + (r() - .5) * .08, rr = C.r + (r() - .5) * .5, x = C.x + Math.sin(a) * rr, z = C.z + Math.cos(a) * rr, y = groundY(x, z);
+    const m = new THREE.Mesh(spireGeo, crystal), h = 2.2 + r() * 2.4; m.position.set(x, y - .3, z);
+    m.rotation.set(Math.cos(a) * .22 * (r() + .4), r() * 3, -Math.sin(a) * .22 * (r() + .4)); m.scale.set(1, h, 1); m.castShadow = true; g.add(m);
+    // Spires near a lantern's side crack when that lantern is lit.
+    const near = C.lanterns.reduce((b, L) => Math.abs(Math.atan2(Math.sin(a - L.a), Math.cos(a - L.a))) < Math.abs(Math.atan2(Math.sin(a - C.lanterns[b].a), Math.cos(a - C.lanterns[b].a))) ? L.i : b, 0);
+    spires.push({ m, h, y, lantern: near, k: 1 });
+  }
+  for (let i = 0; i < 40; i++) {
+    const a = i / 40 * Math.PI * 2, x = C.x + Math.sin(a) * C.r, z = C.z + Math.cos(a) * C.r, c = { x, z, r: .8, top: groundY(x, z) + 9 };
+    addCollider(c); colliders.push(c);
+  }
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(C.r, C.r, 6, 56, 1, true), new THREE.MeshBasicMaterial({ color: 0x9a6bff, transparent: true, opacity: .1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  wall.position.set(C.x, groundY(C.x, C.z) + 2.7, C.z); g.add(wall);
+  const glow = new THREE.PointLight(0x8a55ff, 6, 16, 2); glow.position.set(C.x, groundY(C.x, C.z) + 3, C.z); g.add(glow);
+  // The three lanterns: a post leaning toward the seal, an arm, and a cage that is dark until relit.
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x2a2219, roughness: 1, flatShading: true });
+  const lanterns = C.lanterns.map(L => {
+    const y = groundY(L.x, L.z), nx = (C.x - L.x) / 10.6, nz = (C.z - L.z) / 10.6;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(.13, .24, 3.9, 6), postMat); post.position.set(L.x, y + 1.95, L.z); post.castShadow = true; g.add(post);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.3, .12, .12), postMat); arm.position.set(L.x + nx * .55, y + 3.8, L.z + nz * .55); arm.rotation.y = Math.atan2(nx, nz) + Math.PI / 2; g.add(arm);
+    addCollider({ x: L.x, z: L.z, r: .32, top: y + 3.9 });
+    const spot = [L.x + nx * 1.1, y + 3.8, L.z + nz * 1.1], cage = new THREE.Group(); cage.position.set(spot[0], spot[1] - .45, spot[2]); g.add(cage);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x2b2a24, emissive: 0x000000, roughness: .4 });
+    cage.add(new THREE.Mesh(new THREE.BoxGeometry(.36, .5, .36), glass));
+    for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) { const bar = new THREE.Mesh(new THREE.BoxGeometry(.05, .58, .05), postMat); bar.position.set(sx * .19, 0, sz * .19); cage.add(bar); }
+    for (const sy of [-1, 1]) { const cap = new THREE.Mesh(new THREE.BoxGeometry(.46, .06, .46), postMat); cap.position.y = sy * .29; cage.add(cap); }
+    const halo = new THREE.Sprite(haloMat); halo.position.copy(cage.position); halo.scale.setScalar(2.3); halo.visible = false; g.add(halo);
+    return { ...L, glass, halo, spot, lit: false };
+  });
+  let sealed = true, breakT = -1, strength = 1;
+  return {
+    lanterns,
+    get sealed() { return sealed; },
+    get breaking() { return breakT >= 0 && breakT < 1.6; },
+    /** Light (or darken) lantern i: its glass glows and Shadowmere's lantern lights pick it up. */
+    setLit(i, on) {
+      const L = lanterns[i]; if (!L || L.lit === on) return;
+      L.lit = on; L.halo.visible = on; L.glass.emissive.setHex(on ? 0xffa53a : 0x000000); L.glass.emissiveIntensity = on ? 2.2 : 0;
+      const at = lanternSpots.indexOf(L.spot); if (on && at < 0) lanternSpots.push(L.spot); else if (!on && at >= 0) lanternSpots.splice(at, 1);
+    },
+    /** Raise the seal (instantly), or break it: the spires shatter and sink and the way in opens. */
+    setSealed(on, instant = false) {
+      if (on === sealed && !instant) return;
+      sealed = on;
+      for (const c of colliders) c.top = on ? groundY(c.x, c.z) + 9 : -1e9;
+      if (on) { breakT = -1; for (const sp of spires) { sp.k = 1; sp.m.visible = true; } }
+      else if (instant) { breakT = 9; strength = 0; for (const sp of spires) { sp.k = 0; sp.m.visible = false; } }
+      else breakT = 0;
+    },
+    update(dt, t) {
+      const lit = lanterns.filter(L => L.lit).length;
+      strength += ((sealed ? 1 - lit * .22 : 0) - strength) * Math.min(1, dt * 3);
+      for (const s of spires) {
+        const cracked = sealed && lanterns[s.lantern]?.lit, want = breakT >= 0 ? 0 : cracked ? .35 : 1;
+        s.k += (want - s.k) * Math.min(1, dt * (breakT >= 0 ? 2.2 : 3));
+        s.m.scale.set(.6 + .4 * s.k, s.h * s.k + .001, .6 + .4 * s.k); s.m.position.y = s.y - .3 - (1 - s.k) * .4;
+        if (breakT >= 0 && s.k < .03) s.m.visible = false;
+      }
+      crystal.emissiveIntensity = (1 + strength * .8) * (1 + Math.sin(t * 2.4) * .12);
+      wall.material.opacity = .1 * strength * (1 + Math.sin(t * 1.7) * .25); wall.visible = strength > .02;
+      glow.intensity = 6 * strength; glow.visible = strength > .02;
+      if (breakT >= 0 && breakT < 9) breakT += dt;
     }
   };
 }

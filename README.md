@@ -2,7 +2,48 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
-## Latest handoff — 2026-10-07 (night) · Monkeys' own attack, Garrow as a two-phase boss (Claude)
+## Latest handoff — 2026-10-07 (late) · Garrow sealed behind a quest line; phase 2 transforms it (Claude)
+
+The owner asked for three things: Garrow should change appearance in phase 2, it should have new moves there, and it should be locked behind a quest line like world 1.
+
+**Quest line (Book II):** shadow_cross → shadow_meet → shadow_hunt (3 monkeys) → shadow_memory (the falls) → **shadow_seal (new)** → shadow_guardian (the boss) → shadow_report → frost_wait.
+- `shadow_seal` sits between two existing stages. Saves store stage ids and the order of the old stages is unchanged, so saves are unaffected.
+- **The seal** (`GARROW_SEAL` in `world.js`, `garrowSeal()` in `shadowmere.js`):
+  - A ring of crown-glass spires and a shimmering wall, 6.5 m round Garrow. Its colliders close the ring.
+  - The walkway between the ring and the trees stays open, so the falls can still be reached.
+  - Garrow kneels inside, bound (`bind()`, a creature that can't be hit or targeted).
+- **Three dark lanterns** (east, west, south, 10.6 m out):
+  - Two **lantern thieves** (monkeys `seal-thief-i-j`, asleep until then) drop from the canopy when you come within 10 m.
+  - Each lantern can be relit (E) once its thieves are gone; each one lit cracks a third of the spires.
+  - Progress is saved in `story.tally` (`lanterns`, `lit0`…`lit2`).
+- **All three lit:** the seal shatters (the colliders drop) and Garrow rises about 1.6 s later as the boss. `updateGarrowQuest()` in `main.js` keeps Garrow and the seal in step with the story.
+- **During the fight:**
+  - It's one-on-one: roaming monkeys within 26 m scatter to the canopy and come back afterwards.
+  - If you fall, Garrow resets to full health and phase 1.
+- **After it's freed:** it kneels at rest in the clearing (`calm()`), its blade gone.
+- **Dev:** GARROW IN FRONT and GARROW PHASE 2 set `devAwake`, so the story doesn't rebind it.
+- Maren has new idle lines, and the journal has a new page, THE SEAL.
+
+**Phase 2 transformation** (`crownGlow()` / `buildGrowth()` in `creatures.js`, grows in during the roar):
+- 20 crown-glass crystals burst out of its back, shoulders and head and climb the sword arm (fitted to the Blender model's bounds).
+- The fur goes dark, the eyes and blade burn violet, a violet light surrounds it, and it grows 10% taller. The boss bar turns violet.
+- Everything resets when Garrow respawns.
+
+**Phase 2 moveset:**
+- Backhand, boulder and roar are phase-1 only (`phase1: true`).
+- Chop, charge and pound stay in both phases.
+- Phase 2 adds six moves:
+  - combo, leaping cleave, eruption,
+  - **shard barrage**: three crystals off its back thrown in a fan; dash or guard,
+  - **crown-glass whirl**: two spinning turns while it walks you down; back away,
+  - **crushing grab**: unblockable lunge; caught, you're lifted and slammed for 2. A miss leaves a long opening.
+
+**Checks** (Playwright, Supabase aborted):
+- The quest test runs falls → seal (Garrow bound, ring blocks, walkway open) → thieves ambush at every lantern → can't light while they live → 3 lanterns → seal breaks → Garrow wakes as the boss with the bar → phase 2 (20/20 crystals, scale 1.34, glow) → phase-2 moves land and only the phase-2 set is chosen → freed → calm, blade hidden.
+- The fight test passes for every move in both phases and the monkey swing.
+- The dev panel test passes, and there are no page errors.
+
+## Earlier handoff — 2026-10-07 (night) · Monkeys' own attack, Garrow as a two-phase boss (Claude)
 
 The owner asked for two things: the monkeys should drop the turtle dash for an attack of their own, and Garrow (the gorilla) should be a boss quest again, with a massive moveset and a phase 2. All of it is in `creatures.js` (ATTACKS, `runGorilla`, `gorillaPose`, `crownGlow`) and `main.js` (cues, effects, crystal hazards, boulder, boss bar).
 

@@ -30,6 +30,10 @@ export const REALMS = [
 export const ROOTWAY = { x:2.6, z:49.2 };
 /** Where Shadowmere's memory waits: a lantern seed on a root pedestal by the falls' pool. */
 export const SEED_SHRINE = { x:SHADOWMERE.x-5.4, z:SHADOWMERE.z-20.5 };
+// Garrow's seal (owner, 2026-10-07: "lock him behind the quest, like world 1"): a ring of crown-glass
+// round the keeper, and three dark lanterns in the clearing; relighting all three breaks it.
+export const GARROW_SEAL = { x:SHADOWMERE.guardian.x, z:SHADOWMERE.guardian.z, r:6.5,
+  lanterns:[[Math.PI/2,'EAST'],[-Math.PI/2,'WEST'],[0,'SOUTH']].map(([a,side],i)=>({ i, side, x:SHADOWMERE.guardian.x+Math.sin(a)*10.6, z:SHADOWMERE.guardian.z+Math.cos(a)*10.6, a })) };
 export const realmAt = (x,z) => Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z) < SHADOWMERE.r+40 ? 'shadow' : 'grove';
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;

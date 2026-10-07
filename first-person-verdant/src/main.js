@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE, GARROW_SEAL } from './world.js';
 import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
@@ -291,6 +291,7 @@ function nearestInteractable(){
   if(d(RIFT)<2.6)return{type:'rift'};
   if(d(ROOTWAY)<2.4)return{type:'rootway'};
   if(story.stage==='shadow_memory'&&d(SEED_SHRINE)<3.2)return{type:'shadowSeed'};
+  if(story.stage==='shadow_seal'){const L=GARROW_SEAL.lanterns.find(L=>!story.tally['lit'+L.i]&&d(L)<2.8);if(L)return{type:'sealLantern',value:L};}
   if(d(ROOTWAY_BACK)<2.4)return{type:'rootwayBack'};
   if(d(HOLLOW_RIFT)<2.6)return{type:'riftHome'};
   if(d(GATE)<6)return{type:'gate'};
@@ -311,9 +312,15 @@ function interact(){
   }else if(nearby.type==='rift')enterRift();
   else if(nearby.type==='rootway'){if(!travelling)crossRealm('shadow');}
   else if(nearby.type==='shadowSeed'){
-    story.advance('shadow_guardian');persist();playTone(660,.8,.06,'sine');
-    const g=creatures.find(c=>c.type==='gorilla');if(g&&!g.alive)g.respawn();
-    toast('MEMORY FOUND · THE LAMPLIGHTERS','Garrow carried the light from tree to tree. Then riders in Ashmere grey came through the falls and fused a blade of black crown-glass to its hand, so its own strength would keep the lights out for them.<br><br>'+story.info.objective);toastTimer=9;}
+    story.advance('shadow_seal');persist();playTone(660,.8,.06,'sine');
+    toast('MEMORY FOUND · THE LAMPLIGHTERS','Garrow carried the light from tree to tree. Then riders in Ashmere grey came through the falls, fused a blade of black crown-glass to its hand, sealed it in the clearing and put out the lanterns round it.<br><br>'+story.objectiveText);toastTimer=9;}
+  else if(nearby.type==='sealLantern'){
+    const L=nearby.value;
+    if(thievesAt(L.i).length){toast('THE THIEVES ARE STILL HERE','Drive off the lantern thieves first.');playTone(180,.3,.04);return;}
+    story.tally['lit'+L.i]=1;const done=story.bump('lanterns');shadowmere.seal.setLit(L.i,true);persist();playTone(700,.6,.08,'sine');playTone(1050,.5,.04,'triangle');
+    if(done){story.advance('shadow_guardian');persist();announce('story','broke the crown-glass seal in Shadowmere');sound.erupt();shoulderCam.punch(.4);toast('THE SEAL BREAKS','Light is the one thing crown-glass cannot hold. Garrow rises.');}
+    else toast(`THE ${L.side} LANTERN BURNS AGAIN`,`The seal cracks. ${story.objectiveText}`);
+  }
   else if(nearby.type==='rootwayBack'){if(!travelling)crossRealm('grove');}
   else if(nearby.type==='riftHome')travel(RIFT.x,RIFT.z-2.2,'MOSSGATE','Back through the rift.');
   else if(nearby.type==='gate'){
@@ -475,7 +482,7 @@ function updateBoss(rawDt){
   }
   // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
   // Garrow (Shadowmere) is a boss too: its bar shows while it is fighting you.
-  const garrow=creatures.find(c=>c.type==='gorilla'),garrowFight=garrow?.alive&&!['wander','return','dormant','defeated'].includes(garrow.state)&&Math.hypot(garrow.x-player.x,garrow.z-player.z)<34;
+  const garrow=creatures.find(c=>c.type==='gorilla'),garrowFight=garrow?.alive&&!['wander','return','dormant','defeated','bound','calm'].includes(garrow.state)&&Math.hypot(garrow.x-player.x,garrow.z-player.z)<34;
   const boss=warden?.awake&&warden.alive?warden:garrowFight?garrow:null;
   if(boss!==bossShown){bossShown=boss;bossTrail=1;$('bossBar').classList.toggle('hidden',!boss);}
   if(boss){
@@ -632,8 +639,8 @@ devPanel.addEventListener('click',e=>{
     case 'freeze':dev.freeze=!dev.freeze;toast('DEV · ENEMIES',dev.freeze?'FROZEN':'MOVING');break;
     case 'revive':{let n=0;for(const c of creatures)if(c!==warden&&!c.alive&&!c.chapter){c.respawn();n++;}toast('DEV · REVIVED',`${n} creatures back on their feet.`);break;}
     case 'summon-monkey':{const m=creatures.filter(c=>c.type==='monkey').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · GREEN MONKEY','In front of you.');}break;}
-    case 'summon-gorilla':{const g=creatures.find(c=>c.type==='gorilla');if(g){bring(g);toast('DEV · GARROW','In front of you.');}break;}
-    case 'garrow-phase':{const g=creatures.find(c=>c.type==='gorilla');if(g){if(!g.alive)g.respawn();g.health=Math.min(g.health,g.maxHealth*.49);g.pendingPhase=true;toast('DEV · GARROW','Phase 2 on its next free moment.');}break;}
+    case 'summon-gorilla':{const g=creatures.find(c=>c.type==='gorilla');if(g){g.devAwake=true;bring(g);toast('DEV · GARROW','In front of you.');}break;}
+    case 'garrow-phase':{const g=creatures.find(c=>c.type==='gorilla');if(g){g.devAwake=true;if(!g.alive)g.respawn();g.health=Math.min(g.health,g.maxHealth*.49);g.pendingPhase=true;toast('DEV · GARROW','Phase 2 on its next free moment.');}break;}
     case 'inventory':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.inventory();return;
     case 'atlas':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.show('map');return;
     case 'next':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i<STAGES.length-1)devJumpTo(STAGES[i+1].id);break;}
@@ -694,7 +701,36 @@ function raiseExtras(id){
   raised[id]=Math.max(raised[id]||0,want);
 }
 let askedAt=-9;
+// Book II: Garrow and its seal follow your story. Before the seal stage it kneels, bound, inside the
+// crown-glass; once the three lanterns burn the seal shatters and it rises to fight (the boss); after
+// it is freed it rests in its clearing, the blade gone. Thieves drop from the canopy at each dark lantern.
+const ambushed=new Set();let garrowStage='';
+const thievesAt=i=>creatures.filter(c=>c.lantern===i&&c.alive);
+function updateGarrowQuest(){
+  const seal=shadowmere.seal,g=creatures.find(c=>c.type==='gorilla');if(!seal||!g)return;
+  if(garrowStage!==story.stage){if(garrowStage)g.devAwake=false;const first=!garrowStage;garrowStage=story.stage;seal.setSealed(story.before('shadow_guardian'),first);if(story.before('shadow_seal'))ambushed.clear();}
+  for(const L of GARROW_SEAL.lanterns)seal.setLit(L.i,!story.before('shadow_guardian')||!!story.tally['lit'+L.i]);
+  if(!g.devAwake){
+    if(story.before('shadow_guardian')){if(g.state!=='bound')g.bind();}
+    else if(story.reached('shadow_report')){if(g.state!=='calm'&&!(g.state==='defeated'&&g.t<2.4))g.calm();}
+    else if(['bound','calm'].includes(g.state)&&!seal.breaking)g.wake();
+  }
+  // While Garrow fights you, the monkeys keep to the canopy (a one-on-one fight, like Orrun's); they come back after.
+  const bossOn=g.alive&&!['bound','calm','wander','return','dormant','defeated'].includes(g.state)&&Math.hypot(player.x-g.x,player.z-g.z)<34;
+  for(const m of creatures){
+    if(m.type!=='monkey'||m.lantern!==undefined)continue;
+    if(bossOn&&m.alive&&Math.hypot(m.x-g.x,m.z-g.z)<26){m.sleep();m.heldForBoss=true;if(!g.scattered){g.scattered=true;cue('THE MONKEYS SCATTER INTO THE CANOPY',1);}}
+    else if(!bossOn&&m.heldForBoss){m.heldForBoss=false;m.respawn();}
+  }
+  if(!bossOn)g.scattered=false;
+  if(story.stage==='shadow_seal')for(const L of GARROW_SEAL.lanterns){
+    if(story.tally['lit'+L.i]||ambushed.has(L.i)||Math.hypot(player.x-L.x,player.z-L.z)>10)continue;
+    ambushed.add(L.i);for(const t of creatures.filter(c=>c.lantern===L.i)){t.emerge();t.body.position.y=7;}
+    sound.alert();cue('LANTERN THIEVES · DRIVE THEM OFF, THEN RELIGHT THE LANTERN',1.6);
+  }
+}
 function updateEncounters(){
+  updateGarrowQuest();
   // Book II: arriving in Shadowmere moves the story on.
   if(story.stage==='shadow_cross'&&realmAt(player.x,player.z)==='shadow'){story.advance('shadow_meet');persist();toast('BOOK II · SHADOWMERE',story.info.objective);playTone(620,.35,.05,'sine');}
   if(story.stage==='trial'&&creatures.some(c=>c.id==='trial'&&c.state==='defeated')){story.advance('trial_report');persist();toast('THE TRIAL IS PASSED',story.info.objective);playTone(620,.35,.05,'sine');}
@@ -754,6 +790,7 @@ function respawn(){
   const othersHunting=coop.others().some(o=>inHollow(o));
   if(warden?.awake&&warden.alive&&!othersHunting&&!coop.guest)warden.reset();
   const inShadow=realmAt(player.x,player.z)==='shadow';
+  {const g=creatures.find(c=>c.type==='gorilla');if(inShadow&&g?.alive&&story.stage==='shadow_guardian'&&!g.devAwake)g.respawn();}
   player.defeated=0;player.health=maxHealth();player.x=inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
   if(inShadow){toast('THE LANTERNS CATCH YOU','You wake under the root arch. The forest is still watching.');return;}
@@ -835,7 +872,8 @@ function attackCue(ev){
   return {quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',flurry:ev.chained?'INTO THE FLURRY · GUARD ×3':'CLAW FLURRY · GUARD ×3 OR BACK OFF',pounce:'POUNCE · DODGE ASIDE',seed:'SEED PELLET · DASH OR GUARD',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH',
     swing:'VINE SWING · IT KICKS FROM THE SIDE · TURN AND GUARD OR DASH',
     chop:'CLEAVER CHOP · STEP OUT OF THE LINE',backhand:'BACKHAND · BACK OFF OR GUARD',charge:'KNUCKLE CHARGE · SIDESTEP · TREES STOP IT',pound:'DOUBLE POUND · JUMP BOTH WAVES',boulder:'BOULDER · MOVE OFF YOUR SPOT',roar:'CHEST-DRUM ROAR · DASH THROUGH IT',
-    combo:'CROWN-GLASS COMBO · GUARD ×3',leap:'LEAPING CLEAVE · DODGE SIDEWAYS',erupt:'CROWN-GLASS ERUPTS · KEEP MOVING'}[ev.attack]||'';
+    combo:'CROWN-GLASS COMBO · GUARD ×3',leap:'LEAPING CLEAVE · DODGE SIDEWAYS',erupt:'CROWN-GLASS ERUPTS · KEEP MOVING',
+    barrage:'SHARD BARRAGE · DASH OR GUARD',whirl:'CROWN-GLASS WHIRL · BACK AWAY',grab:'CRUSHING GRAB · UNBLOCKABLE · DODGE IT'}[ev.attack]||'';
 }
 // Garrow's crown-glass: spikes that burst out of the ground, the marks that warn of them, and the
 // boulders it throws (they land where you stood; guard facing Garrow, dash, or move off the mark).
@@ -871,12 +909,20 @@ function updateHazards(dt){
     if(done){scene.remove(h.mesh);if(h.kind==='mark'){h.mesh.geometry.dispose();h.mesh.material.dispose();}hazards.splice(i,1);}
   }
 }
+// Garrow's shard barrage (phase 2): three crystals in a fan, flying flat and fast at your chest.
+function throwShards(c,ev){
+  for(let i=0;i<ev.n;i++){
+    const yaw=ev.yaw+(i-(ev.n-1)/2)*ev.spread,T=Math.max(.15,ev.dist/ev.speed),vel=new THREE.Vector3(Math.sin(yaw)*ev.speed,(ev.ty-ev.y)/T,Math.cos(yaw)*ev.speed);
+    const mesh=new THREE.Mesh(crystalGeo,crystalMat);mesh.scale.setScalar(.42);mesh.position.set(ev.x,ev.y,ev.z);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vel.clone().normalize());mesh.castShadow=true;scene.add(mesh);
+    enemyShots.push({mesh,vel,t:0,c,shard:true,gravity:0,label:'crystal shard',damage:ev.damage||1});
+  }
+}
 function updateEnemyShots(dt){
   for(let i=enemyShots.length-1;i>=0;i--){
-    const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=6*dt;p.addScaledVector(s.vel,dt);s.mesh.rotation.x+=dt*14;
+    const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=(s.gravity??6)*dt;p.addScaledVector(s.vel,dt);if(!s.shard)s.mesh.rotation.x+=dt*14;
     const feet=groundY(player.x,player.z)+player.height,hitMe=Math.hypot(p.x-player.x,p.z-player.z)<.62&&p.y>feet&&p.y<feet+1.9&&!player.defeated;
     const stop=s.t>1.6||p.y<groundY(p.x,p.z)||collisionGrid.near(p.x,p.z).some(o=>p.y<o.top&&Math.hypot(p.x-o.x,p.z-o.z)<o.r);
-    if(hitMe){const from={type:'monkey',name:'GREEN MONKEY',x:p.x-s.vel.x*.2,z:p.z-s.vel.z*.2,deflect:()=>true};incomingStrike(from,{attack:'seed',label:'seed pellet',kind:'light',damage:1});}
+    if(hitMe){const from={type:s.shard?'gorilla':'monkey',name:s.shard?'GARROW':'GREEN MONKEY',x:p.x-s.vel.x*.2,z:p.z-s.vel.z*.2,deflect:()=>true};incomingStrike(from,{attack:s.shard?'barrage':'seed',label:s.label||'seed pellet',kind:'light',damage:s.damage||1});}
     if(hitMe||stop){scene.remove(s.mesh);enemyShots.splice(i,1);}
   }
 }
@@ -1182,6 +1228,7 @@ function updateHUD(){
   else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
   else if(nearby?.type==='rootway')$('interaction').innerHTML=`<b>E</b> · CROSS INTO SHADOWMERE <small>${realmLocked('shadow')?`NEEDS LEVEL ${REALM_LEVEL.shadow} · YOU ARE ${level()}`:'THE ROOTWAY IS OPEN'}</small>`;
   else if(nearby?.type==='shadowSeed')$('interaction').innerHTML='<b>E</b> · TOUCH THE LANTERN SEED <small>WHAT THE FALLS REMEMBER</small>';
+  else if(nearby?.type==='sealLantern')$('interaction').innerHTML=thievesAt(nearby.value.i).length?'<b>E</b> · THE LANTERN <small>DRIVE OFF THE THIEVES FIRST</small>':`<b>E</b> · RELIGHT THE ${nearby.value.side} LANTERN <small>GARROW’S SEAL</small>`;
   else if(nearby?.type==='rootwayBack')$('interaction').innerHTML='<b>E</b> · RETURN TO THE VERDANT REACH <small>MOSSGATE</small>';
   else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
 }
@@ -1383,13 +1430,16 @@ function update(rawDt){
       else if(ev.type==='chopImpact'){sound.attack('chop');shoulderCam.punch(.3);hitstop=Math.max(hitstop,.04);for(let d=1;d<=ev.len;d+=.9){const x=c.x+Math.sin(ev.yaw)*d,z=c.z+Math.cos(ev.yaw)*d;effects.ring(new THREE.Vector3(x,groundY(x,z),z));}}
       else if(ev.type==='poundRing'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),ev.from,ev.to,ev.duration);sound.attack('slam');shoulderCam.punch(.4);}
       else if(ev.type==='boulder')throwBoulder(c,ev);
+      else if(ev.type==='shards')throwShards(c,ev);
+      else if(ev.type==='grabbed'){cue('CAUGHT',.8);shoulderCam.punch(.35);sound.attack('charge');}
+      else if(ev.type==='grabSlam'){sound.thud();sound.attack('slam');shoulderCam.punch(.6);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,2,.25);effects.chips(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z));}
       else if(ev.type==='roar'){sound.roar();shoulderCam.punch(.5);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.35);}
       else if(ev.type==='chargeCrash'){sound.thud();sound.topple();shoulderCam.punch(.5);cue(`${c.name||'GARROW'} IS DAZED · ROOT STRIKE`,1.2);}
       else if(ev.type==='leapLand'){sound.attack('leap');shoulderCam.punch(.55);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.6,2.4,.25);}
       else if(ev.type==='spikeLine'){spikeLine(ev.x,ev.z,ev.yaw,ev.from,ev.len);sound.erupt();}
       else if(ev.type==='eruptMark')markAt(ev.x,ev.z,ev.r,ev.fuse);
       else if(ev.type==='eruptBurst'){spikesAt(ev.x,ev.z,7,ev.r*.8);sound.erupt();shoulderCam.punch(.2);}
-      else if(ev.type==='phase'){sound.roar();slowMo(.4,.5);toast('THE CROWN-GLASS TAKES HOLD','Garrow fights itself and loses. The blade burns violet: new attacks, and faster.');}
+      else if(ev.type==='phase'){sound.roar();slowMo(.4,.5);introsSeen.delete(c);introShot(c,2.6);toast('PHASE 2 · THE CROWN-GLASS TAKES HOLD','Crystal bursts through Garrow’s back and climbs its arm. New attacks, faster, and a grab you cannot block.');}
       else if(ev.type==='phaseBlast'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.3);shoulderCam.punch(.6);sound.attack('slam');spikesAt(ev.x,ev.z,10,ev.radius*.7);}
       else if(ev.type==='alert'&&c.type==='gorilla'&&!c.introduced){c.introduced=true;sound.roar();introShot(c,2.4);toast('BOSS · GARROW, THE ROOTBOUND','Shadowmere’s old lamplighter. Black crown-glass is fused to its hand, and it fights for whoever put it there.');}
       else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
