@@ -1,5 +1,12 @@
 # Verdant Reach · 3D prototype
 
+## 2026-10-07 · Weekly Quest pings
+
+- WEEKLY QUEST has an optional global daily push at 7 PM in each player's local timezone. The player only opts in or out; the app sets the schedule.
+- Supabase Cron checks every 15 minutes. Push arrives even if the game is closed, and stops after the player completes the week's plan. Clicking it opens the game.
+- Web Push requires browser permission. Subscription and progress use private Supabase RPCs; the push endpoint is never exposed to anon/authenticated table reads.
+- To activate delivery, follow [`../supabase/weekly-ping-setup.md`](../supabase/weekly-ping-setup.md). Without that backend setup, the in-game button reports that push is not configured.
+
 ## 2026-10-01 · Lift log and tutorials
 
 - The WEEKLY QUEST page has a personal lift log: search an exercise, enter weight, reps and sets. It tracks personal records (estimated 1RM) and unlocks cosmetic titles that show on the leaderboard. It gives no XP.
