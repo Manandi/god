@@ -24,7 +24,8 @@ const KINDS = {
   shellback: { size: .64, pace: 1, health: 45, poise: 12, walk: 1.0, chase: 2.3, turn: 3.2, notice: 12, spacing: 2.4, cooldown: [1.0, 2.0], biteRadius: .42 },
   thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
   monkey: { size: .82, pace: .78, health: 50, poise: 12, walk: 1.9, chase: 4.3, turn: 6, notice: 16, spacing: 2.1, cooldown: [.55, 1.15], biteRadius: .5 },
-  gorilla: { size: 1.22, pace: 1.12, health: 225, poise: 28, walk: .9, chase: 2.6, turn: 2.8, notice: 24, spacing: 3.1, cooldown: [1.25, 2.1], biteRadius: .8 },
+  // Garrow, Shadowmere's boss (owner, 2026-10-07: "a boss quest again, an entire massive moveset plus a phase 2").
+  gorilla: { size: 1.22, pace: 1.06, health: 360, poise: 34, walk: .9, chase: 3.0, turn: 2.8, notice: 24, spacing: 3.1, cooldown: [.95, 1.7], biteRadius: .8 },
   // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
   // from the game on the owner's request; its isBoss / quake code paths below are unused.
 };
@@ -38,16 +39,40 @@ const ATTACKS = {
   slam:  { windup: .85, track: .55, active: .44, recover: 1.2, range: [.6, 2.9], damage: 2, kind: 'heavy', label: 'root slam' },
   // Old Shell only: rears for over a second, then the ground breaks around it.
   quake: { windup: 1.28, track: .4, active: .3, recover: 1.4, range: [0, 5.8], damage: 2, kind: 'heavy', label: 'quake', boss: true },
-  // Green monkeys only (owner, 2026-10-05: "a new combo, harder, more unique"). They keep the
-  // lunge, and often chain it straight into the flurry.
+  // Green monkeys only (owner, 2026-10-05: "a new combo, harder, more unique"; 2026-10-07: "not the
+  // turtle dash, their own attack"). The vine swing replaced the lunge and often chains into the flurry.
   // Claw flurry: three quick swipes, stepping in and re-aiming between them. Guard each, parry one
   // to break the chain, or back out of reach.
   flurry: { windup: .5, track: .5, active: 1.08, recover: .95, range: [0, 2.6], damage: 1, kind: 'light', label: 'claw flurry', monkey: true, swipes: [.1, .44, .78] },
   // Leaping pounce: crouches, then leaps to where you stood and lands claws-first. Dodge sideways.
   pounce: { windup: .72, track: .64, active: .62, recover: 1.05, range: [3.6, 8.5], damage: 1, kind: 'heavy', label: 'leaping pounce', monkey: true },
   // Seed pellet: hurls a hard seed from range (main.js flies it). Dash through, guard, or parry it away.
-  seed: { windup: .62, track: .62, active: .22, recover: .8, range: [5.5, 13], damage: 1, kind: 'light', label: 'seed pellet', monkey: true }
+  seed: { windup: .62, track: .62, active: .22, recover: .8, range: [5.5, 13], damage: 1, kind: 'light', label: 'seed pellet', monkey: true },
+  // Vine swing: grabs a vine from the canopy, swings round you and kicks you from the side, landing
+  // behind you. Turn and guard (lock-on helps), dash, or step out of the circle it marked.
+  swing: { windup: .62, track: .62, active: 1.0, recover: .85, range: [2.2, 7.5], damage: 1, kind: 'heavy', label: 'vine swing', monkey: true },
+  // Garrow only. `phase: 2` moves open once the crown-glass takes hold (below half health).
+  // Cleaver chop: the blade comes down in a line in front of it. Step aside.
+  chop: { windup: .95, track: .62, active: .42, recover: 1.1, range: [0, 4.2], damage: 2, kind: 'heavy', label: 'cleaver chop', gorilla: true, line: [.5, 4.1, .6] },
+  // Backhand: a fast sweep of the free fist across its front. Back off or guard.
+  backhand: { windup: .55, track: .45, active: .32, recover: .8, range: [0, 3.3], damage: 1, kind: 'light', label: 'backhand sweep', gorilla: true },
+  // Knuckle charge: down on all fours across the clearing. Sidestep late; into a tree it dazes itself.
+  charge: { windup: .85, track: .8, active: 1.45, recover: 1.0, range: [5, 16], damage: 2, kind: 'heavy', label: 'knuckle charge', gorilla: true, line: [0, 13, 1.1] },
+  // Double ground pound: two shockwaves, one after the other. Jump or dash through each.
+  pound: { windup: 1.0, track: .5, active: 1.05, recover: 1.15, range: [0, 4.6], damage: 1, kind: 'heavy', label: 'double ground pound', gorilla: true, rings: [.02, .57], ring: [.8, 4.6, .45] },
+  // Boulder hurl: rips up a mossy stone and lobs it where you stand (main.js flies it).
+  boulder: { windup: 1.05, track: 1.0, active: .3, recover: .95, range: [6, 20], damage: 2, kind: 'heavy', label: 'boulder hurl', gorilla: true },
+  // Chest-drum roar: everyone close is knocked off balance. Dash through it, then punish or get punished.
+  roar: { windup: .9, track: .9, active: .5, recover: .45, range: [0, 7], damage: 0, kind: 'light', label: 'chest-drum roar', gorilla: true, reach: 7 },
+  // Crown-glass combo: chop, backhand, rising cut, stepping in between. Guard all three or get out.
+  combo: { windup: .7, track: .55, active: 1.5, recover: 1.15, range: [0, 3.6], damage: 1, kind: 'light', label: 'crown-glass combo', gorilla: true, phase: 2, swipes: [.12, .6, 1.08] },
+  // Leaping cleave: lands on you, and crystal spikes burst out in a line ahead. Dodge sideways.
+  leap: { windup: .9, track: .85, active: 1.0, recover: 1.25, range: [4, 15], damage: 2, kind: 'heavy', label: 'leaping cleave', gorilla: true, phase: 2 },
+  // Rootglass eruption: the cleaver goes into the ground and crystal bursts up where you stand,
+  // three times. Keep moving.
+  erupt: { windup: .8, track: .8, active: 1.75, recover: .95, range: [0, 16], damage: 1, kind: 'heavy', label: 'crown-glass eruption', gorilla: true, phase: 2, marks: [0, .5, 1.0], fuse: .7 }
 };
+const GORILLA_PHASE_AT = .5, PHASE_TIME = 2.8, DAZE_TIME = 1.8;
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .8, belly: 2 };
 const healthFor = (type, k) => type === 'oldshell' ? k.health : Math.round(k.health * (1 + (level() - 1) * .15));
@@ -121,7 +146,7 @@ export class Creature {
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
     this.id = options.id || null; this.chapter = options.chapter || null;
-    this.isBoss = type === 'oldshell'; this.isMajorEnemy = type === 'gorilla'; this.name = this.isBoss ? 'THE OLD SHELL' : this.isMajorEnemy ? 'ROOTBOUND GORILLA' : ''; this.shellDamage = 0; this.shellBroken = false;
+    this.isBoss = type === 'oldshell'; this.isMajorEnemy = type === 'gorilla'; this.bossBar = type === 'gorilla'; this.phase = 1; this.hits = new Set(); this.name = this.isBoss ? 'THE OLD SHELL' : this.isMajorEnemy ? 'ROOTBOUND GORILLA' : ''; this.shellDamage = 0; this.shellBroken = false;
     if (this.isBoss) { this.markerHeight = 3.6; this.focusHeight = 1.6; }
     if (this.isMajorEnemy) { this.markerHeight = 4.2; this.focusHeight = 1.8; }
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
@@ -189,11 +214,21 @@ export class Creature {
     // tracking, red marks the committed attack, pale green marks recovery.
     this.tell = new THREE.Mesh(new THREE.RingGeometry(.82, .91, 32), new THREE.MeshBasicMaterial({ color: 0xe9ad62, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
     this.tell.rotation.x = -Math.PI / 2; this.tell.visible = false; scene.add(this.tell);
+    if (type === 'gorilla') {
+      // A strip on the ground for Garrow's line attacks (the chop, the charge, the spike line).
+      this.lineTell = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xe9ad62, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+      this.lineTell.rotation.order = 'YXZ'; this.lineTell.visible = false; scene.add(this.lineTell);
+    }
+    if (type === 'monkey') {
+      // The vine it swings on, from the canopy to its hand.
+      this.vine = new THREE.Mesh(new THREE.CylinderGeometry(.07, .09, 1, 6), new THREE.MeshStandardMaterial({ color: 0x6aa040, emissive: 0x24420f, emissiveIntensity: .8, roughness: .9 }));
+      this.vine.visible = false; scene.add(this.vine);
+    }
     this.place();
   }
   get toppled() { return this.state === 'toppled'; }
   /** Open to a Root Strike: on its back, or reeling from a parry. */
-  get exposed() { return this.state === 'toppled' || this.state === 'reeling'; }
+  get exposed() { return this.state === 'toppled' || this.state === 'reeling' || this.state === 'dazed'; }
   /** A parried attack: the creature recoils and is open to a riposte. */
   deflect() {
     if (!this.alive || this.state !== 'attack') return false;
@@ -242,6 +277,8 @@ export class Creature {
    */
   hit({ damage, poise, fromX, fromZ, push, stagger, part, pierce = 0 }) {
     if (!this.alive) return null;
+    // Garrow shrugs off blows while the crown-glass takes hold.
+    if (this.state === 'phase') { this.flash = .05; this.lastEvent = 'unharmed (phase change)'; return { damage: 0, effect: 'armored', toppled: false, defeated: false, staggered: false }; }
     const onBack = this.state === 'toppled' || this.state === 'rising';
     // Armour-piercing weapons (the Stonebreaker) turn shell hits into full hits.
     let mult = PART_DAMAGE[part] ?? 1;
@@ -263,7 +300,8 @@ export class Creature {
     this.flash = .12; this.shake = .09 + stagger * .08;
     const out = { damage: dealt, effect: part === 'belly' ? 'belly' : mult > 1 ? 'weak' : mult < 1 ? 'armored' : 'normal', toppled: false, defeated: false, staggered: false };
     if (this.health <= 0) { this.alive = false; this.setState('defeated'); this.lastEvent = 'defeated'; out.defeated = true; return out; }
-    if (this.health < this.maxHealth * ENRAGE_AT && !this.enraged) { this.enraged = true; this.enragedNow = true; }
+    if (this.type === 'gorilla') { if (this.phase === 1 && this.health < this.maxHealth * GORILLA_PHASE_AT) this.pendingPhase = true; }
+    else if (this.health < this.maxHealth * ENRAGE_AT && !this.enraged) { this.enraged = true; this.enragedNow = true; }
     if (onBack) { this.lastEvent = 'struck while toppled'; return out; }
     this.push = { x: dx * push * .6, z: dz * push * .6 };
     this.poise -= poise; this.poiseDelay = 2.5; this.flinchMeter += dealt;
@@ -272,7 +310,7 @@ export class Creature {
       out.toppled = true; return out;
     }
     const committed = this.state === 'attack';
-    if (stagger >= .6 || (this.flinchMeter >= 22 && !committed)) {
+    if (stagger >= .6 || (this.flinchMeter >= (this.type === 'gorilla' ? 45 : 22) && !committed)) {
       this.flinchMeter = 0; this.staggerTime = stagger >= .6 ? .8 : .45; this.setState('stagger'); this.attack = null;
       this.lastEvent = 'staggered'; out.staggered = true;
     } else this.lastEvent = committed ? 'hit (kept attacking)' : 'flinched';
@@ -324,13 +362,24 @@ export class Creature {
   chooseAttack(dist, rel) {
     const behind = Math.abs(rel) > 1.3;
     const options = [];
-    const monkey = this.type === 'monkey';
+    const monkey = this.type === 'monkey', gorilla = this.type === 'gorilla';
     for (const [name, a] of Object.entries(ATTACKS)) {
       if (dist < a.range[0] || dist > a.range[1]) continue;
-      if (!!a.monkey !== monkey && name !== 'lunge') continue;     // monkeys: lunge + their own three
+      // Monkeys and Garrow use only their own moves; the hollowed never use theirs.
+      if (monkey ? !a.monkey : gorilla ? !a.gorilla : (a.monkey || a.gorilla)) continue;
+      if (a.phase && this.phase < a.phase) continue;
       let w = 1;
       if (monkey) {
-        w = name === 'flurry' ? (behind ? .4 : 1.7) : name === 'pounce' ? 1.2 : name === 'seed' ? (this.enraged ? 1.3 : .9) : behind ? 0 : .8;
+        w = name === 'flurry' ? (behind ? .4 : 1.7) : name === 'pounce' ? 1.1 : name === 'seed' ? (this.enraged ? 1.3 : .9) : behind ? 1.5 : 1.0;
+        if (w > 0) options.push([name, w]);
+        continue;
+      }
+      if (gorilla) {
+        const front = Math.abs(rel) < .55, side = Math.abs(rel) < 1.6;
+        w = { chop: front ? 1.5 : 0, backhand: side && !front ? 1.6 : side ? .8 : 0, charge: dist > 6.5 ? 1.5 : .6, pound: behind ? 2 : dist < 3.2 ? 1.1 : .5,
+          boulder: dist > 8 ? 1.4 : .5, roar: this.roarRest > 0 ? 0 : this.phase > 1 ? .7 : .45,
+          combo: Math.abs(rel) < .9 ? 2 : 0, leap: dist > 5 ? 1.6 : 0, erupt: dist > 4 ? 1.2 : .7 }[name] ?? 0;
+        if (name === this.lastAttack) w *= .3;      // rarely the same move twice in a row
         if (w > 0) options.push([name, w]);
         continue;
       }
@@ -342,7 +391,7 @@ export class Creature {
       if (w > 0) options.push([name, w]);
     }
     let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
-    for (const [name, w] of options) { if ((r -= w) <= 0) return name; }
+    for (const [name, w] of options) { if ((r -= w) <= 0) { this.lastAttack = name; return name; } }
     return null;
   }
 
@@ -362,7 +411,7 @@ export class Creature {
     if (this.enragedNow) { this.enragedNow = false; events.push({ type: 'enrage' }); }
     if (this.state === 'dormant') return events;
     if (this.state === 'defeated') {
-      this.tell.visible = false;
+      this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.vine) this.vine.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
       if (this.t > 2.2) this.root.visible = false;
@@ -377,6 +426,11 @@ export class Creature {
     let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
     if (!this.remote && ['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
+    this.roarRest = Math.max(0, (this.roarRest || 0) - dt);
+    // Below half health Garrow stops, roars, and the crown-glass blade ignites (phase 2).
+    if (this.pendingPhase && !this.remote && !['attack', 'toppled', 'rising', 'phase', 'defeated'].includes(this.state)) {
+      this.pendingPhase = false; this.attack = null; this.phaseBlasted = false; this.setState('phase'); events.push({ type: 'phase' });
+    }
 
     switch (this.state) {
       case 'wander':
@@ -409,7 +463,7 @@ export class Creature {
         wantHeading = this.steer(toPlayer, ctx.grid); wantSpeed = k.chase * THREE.MathUtils.clamp((dist - k.spacing) / 1.5, .25, 1);
         if (dist < k.spacing + .3) this.setState('circle');
         if (dist > k.notice * 1.6) this.setState('wander');
-        if (this.cooldown <= 0 && dist < (this.type === 'monkey' ? 13 : 3.4)) this.beginAttack(dist, rel, events, ctx);
+        if (this.cooldown <= 0 && dist < (this.type === 'monkey' ? 13 : this.type === 'gorilla' ? 20 : 3.4)) this.beginAttack(dist, rel, events, ctx);
         break;
       case 'circle': {
         // Hold spacing and face the explorer; turn in place when flanked.
@@ -426,7 +480,13 @@ export class Creature {
         const a = ATTACKS[this.attack], tm = this.timing(a);
         if (this.t < tm.track) { wantHeading = toPlayer; turn = 4.5; } else turn = 0;
         if (this.t >= tm.windup) {
-          this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
+          // The vine swing needs somewhere to land behind you; with nowhere to go it holds off.
+          if (this.attack === 'swing' && !(this.swingPath = this.planSwing(p, dist, ctx.grid))) { this.attack = null; this.cooldown = .3; this.setState('circle'); break; }
+          this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.hits = new Set(); this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
+          if (this.attack === 'leap') { const reach = Math.min(Math.max(0, dist - 1.2), 14); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
+          if (this.attack === 'boulder') { const fw = this.forward(); events.push({ type: 'boulder', x: this.x + fw.x * .6, y: groundY(this.x, this.z) + 3.9, z: this.z + fw.z * .6, tx: p.x, tz: p.z, flight: THREE.MathUtils.clamp(dist / 15, .7, 1.25), damage: a.damage }); }
+          if (this.attack === 'erupt') this.marks = [];
+          if (this.attack === 'roar') this.roarRest = 9;
           if (this.attack === 'pounce') { const reach = Math.min(dist - .9, 8.5); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
           if (this.attack === 'seed') { const hand = new THREE.Vector3(); this.head.getWorldPosition(hand); events.push({ type: 'throw', x: hand.x, y: hand.y + .2, z: hand.z, tx: p.x, ty: (p.y ?? groundY(p.x, p.z)) + 1.1, tz: p.z, speed: 17 }); }
         }
@@ -435,6 +495,21 @@ export class Creature {
       case 'attack':
         turn = 0;
         this.runAttack(dt, p, ctx, events, dx, dz);
+        break;
+      case 'phase': {
+        // Rears up and roars; the blast at 1.45 s throws everyone close back. Then phase 2.
+        wantHeading = toPlayer; turn = 1.2;
+        if (this.t >= 1.45 && !this.phaseBlasted) {
+          this.phaseBlasted = true; events.push({ type: 'phaseBlast', x: this.x, z: this.z, radius: 5.5 });
+          if (dist < 5.5) events.push({ type: 'strike', attack: 'phase', label: 'crown-glass blast', kind: 'heavy', damage: 0, ring: true, x: this.x, z: this.z });
+        }
+        if (this.t >= PHASE_TIME) { this.phase = 2; this.enraged = true; this.cooldown = .35; this.setState('circle'); events.push({ type: 'phaseDone' }); }
+        break;
+      }
+      case 'dazed':
+        // Ran headlong into a trunk: open to a Root Strike for a moment.
+        turn = 0;
+        if (this.t >= DAZE_TIME) { this.cooldown = .5; this.setState(dist < k.spacing + 1 ? 'circle' : 'approach'); }
         break;
       case 'hop': {
         // A monkey springs back out of reach after being struck, then comes straight back in.
@@ -446,13 +521,14 @@ export class Creature {
       }
       case 'recover': {
         turn = .6;
-        if (this.type === 'monkey' && this.attack === 'lunge' && !this.chained && this.t > .16 && dist < 2.7 && !this.remote) {
+        if (this.type === 'monkey' && this.attack === 'swing' && !this.chained && this.t > .16 && dist < 2.9 && !this.remote) {
           this.chained = true;
           if (Math.random() < .55 && (!ctx.mayAttack || ctx.mayAttack(this))) { this.attack = 'flurry'; this.quick = true; this.setState('windup'); events.push({ type: 'windup', attack: 'flurry', chained: true }); break; }
         }
         if (this.t >= this.timing(ATTACKS[this.attack]).recover) {
           this.cooldown = k.cooldown[0] + Math.random() * (k.cooldown[1] - k.cooldown[0]);
           if (this.enraged) this.cooldown *= .65;
+          if (this.attack === 'roar') this.cooldown = .15;     // the roar sets up a follow-up at once
           this.setState(dist < k.spacing + 1 ? 'circle' : 'approach');
         }
         break;
@@ -562,7 +638,19 @@ export class Creature {
     } else if (this.attack === 'seed') {
       this.closest = 0;          // the seed itself does the hitting (main.js)
       this.connected = true;
+    } else if (this.attack === 'swing') {
+      // Round the circle it planned: wide, then in close at the side for the kick, then out behind you.
+      const P = this.swingPath, u = Math.min(1, this.t / a.active), e = u * u * (3 - 2 * u);
+      const th = P.th0 + P.side * P.sweep * e, r = P.r0 + (P.r1 - P.r0) * e - P.dip * Math.sin(e * Math.PI);
+      this.x = P.cx + Math.sin(th) * r; this.z = P.cz + Math.cos(th) * r; this.swingU = u;
+      this.heading = Math.atan2(P.cx - this.x, P.cz - this.z); this.attackYaw = this.heading;
+      if (u >= .36 && u <= .64) {
+        const gap = Math.hypot(this.x - p.x, this.z - p.z) - 1.25;
+        if (gap <= 0) { strike(); this.anyHit = true; } else this.closest = Math.min(this.closest, gap);
+      }
+      if (u >= 1 && !P.landed) { P.landed = true; events.push({ type: 'swingLand', x: this.x, z: this.z }); }
     }
+    if (this.type === 'gorilla' && this.runGorilla(dt, p, ctx, events, dx, dz, a)) return;
     if (this.attack === 'quake' && this.t >= .1 && !this.connected) {
       // The ground breaks around it: dash through (i-frames), guard, or be out of range.
       const gap = Math.hypot(this.x - p.x, this.z - p.z) - QUAKE_RADIUS;
@@ -576,9 +664,122 @@ export class Creature {
       this.setState('recover');
     }
   }
+  /** Where the vine swing goes: round you to a clear spot behind, or null if there is none. */
+  planSwing(p, dist, grid) {
+    const cx = p.x, cz = p.z, th0 = Math.atan2(this.x - cx, this.z - cz), r0 = Math.max(dist, 2), r1 = 2.2, sweep = Math.PI * .92;
+    for (const side of Math.random() < .5 ? [1, -1] : [-1, 1]) {
+      const th1 = th0 + side * sweep, x1 = cx + Math.sin(th1) * r1, z1 = cz + Math.cos(th1) * r1;
+      if (!canOccupy(x1, z1, groundY(x1, z1), grid, groundY, this.radius * .8)) continue;
+      return { cx, cz, th0, side, sweep, r0, r1, dip: Math.max(0, (r0 + r1) / 2 - 1.05), ay: groundY(cx, cz) + 7.5, landed: false };
+    }
+    return null;
+  }
+  /**
+   * Garrow's moves. Each blow lands once (`hits` keys); effects fire once (`fx:` keys).
+   * Returns true when the attack was cut short (a charge into a tree).
+   */
+  runGorilla(dt, p, ctx, events, dx, dz, a) {
+    const t = this.t, fw = this.forward(), dist = Math.hypot(dx, dz), rel = angleTo(this.heading, Math.atan2(dx, dz));
+    const once = key => !this.hits.has(key) && !!this.hits.add(key);
+    const hit = (key, extra = {}) => {
+      if (!once(key)) return; this.anyHit = true;
+      events.push({ type: 'strike', attack: this.attack, label: a.label, kind: a.kind, damage: a.damage, x: this.x, z: this.z, ...extra });
+    };
+    const miss = gap => { this.closest = Math.min(this.closest, gap); };
+    // How far outside a strip ahead of (ox, oz) the explorer stands (<= 0: inside it).
+    const strip = (ox, oz, yaw, from, to, half) => {
+      const rx = p.x - ox, rz = p.z - oz, ahead = rx * Math.sin(yaw) + rz * Math.cos(yaw), lat = Math.abs(rx * Math.cos(yaw) - rz * Math.sin(yaw));
+      return Math.max(from - ahead, ahead - to, lat - half - .34);
+    };
+    switch (this.attack) {
+      case 'chop': {
+        if (t >= .1 && once('fx:chop')) events.push({ type: 'chopImpact', x: this.x + fw.x * 2.3, z: this.z + fw.z * 2.3, yaw: this.heading, len: a.line[1] });
+        if (t >= .08 && t <= .24) { const g = strip(this.x, this.z, this.heading, ...a.line); g <= 0 ? hit('chop') : miss(g); }
+        break;
+      }
+      case 'backhand':
+        if (t >= .05 && t <= .24) { const g = dist - 3.5; g <= 0 && Math.abs(rel) < 1.7 ? hit('backhand') : miss(Math.max(g, .1)); }
+        break;
+      case 'charge': {
+        // Steers early, then commits; slows to a skid at the end. A trunk in the way stops it dead.
+        const steer = t < .45 ? 1.1 : .12;
+        this.heading += THREE.MathUtils.clamp(angleTo(this.heading, Math.atan2(dx, dz)), -steer * dt, steer * dt); this.attackYaw = this.heading;
+        const speed = 9.5 * Math.min(1, t / .18) * Math.min(1, Math.max(0, (a.active - t) / .3)), step = speed * dt, x0 = this.x, z0 = this.z;
+        this.travel(Math.sin(this.heading) * step, Math.cos(this.heading) * step, ctx.grid);
+        if (t > .2 && step > .03 && Math.hypot(this.x - x0, this.z - z0) < step * .3) {
+          events.push({ type: 'chargeCrash', x: this.x, z: this.z }); this.shake = .4; this.setState('dazed'); return true;
+        }
+        const hx = this.x + Math.sin(this.heading) * 1.3, hz = this.z + Math.cos(this.heading) * 1.3, g = Math.hypot(hx - p.x, hz - p.z) - 1.45;
+        if (t > .1 && g <= 0) hit('charge'); else miss(g);
+        break;
+      }
+      case 'pound':
+        a.rings.forEach((start, i) => {
+          if (t < start) return;
+          if (once('fx:ring' + i)) events.push({ type: 'poundRing', x: this.x, z: this.z, from: a.ring[0], to: a.ring[1], duration: a.ring[2] });
+          if (t > start + a.ring[2] + .03) return;
+          const R = a.ring[0] + (a.ring[1] - a.ring[0]) * Math.min(1, (t - start) / a.ring[2]), g = Math.abs(dist - R) - .45;
+          if (g <= 0 && ctx.playerGrounded) hit('ring' + i, { ring: true }); else miss(g);
+        });
+        break;
+      case 'boulder':
+        this.closest = 0; this.connected = true;     // the boulder itself does the hitting (main.js)
+        break;
+      case 'roar':
+        if (once('fx:roar')) { events.push({ type: 'roar', x: this.x, z: this.z, radius: a.reach }); if (dist < a.reach) hit('roar', { ring: true }); else miss(dist - a.reach); }
+        break;
+      case 'combo': {
+        // Chop, backhand, rising cut; it steps in and turns between them.
+        this.heading += THREE.MathUtils.clamp(angleTo(this.heading, Math.atan2(dx, dz)), -2.6 * dt, 2.6 * dt); this.attackYaw = this.heading;
+        const n = a.swipes.findIndex((h, i) => t >= h && (i === a.swipes.length - 1 || t < a.swipes[i + 1]));
+        if (n !== this.swipe && n >= 0) { this.swipe = n; events.push({ type: 'swipe', n, heavy: true }); }
+        const since = n >= 0 ? t - a.swipes[n] : -1;
+        if (since >= 0 && since < .16) {
+          const step = Math.min(Math.max(0, dist - this.radius - .8), 3.6 * dt);
+          this.travel(Math.sin(this.heading) * step, Math.cos(this.heading) * step, ctx.grid);
+          const g = n === 0 ? strip(this.x, this.z, this.heading, .4, 3.6, .55) : n === 1 ? (Math.abs(rel) < 1.7 ? dist - 3.4 : 1) : (Math.abs(rel) < .9 ? dist - 2.8 : 1);
+          if (g <= 0) hit('combo' + n, n === 2 ? { kind: 'heavy', label: 'rising cut' } : {}); else miss(g);
+        }
+        break;
+      }
+      case 'leap': {
+        // Up and over to where you stood; the cleaver lands first, then spikes burst ahead.
+        const L = this.leap, land = a.active * .7, f = Math.min(1, t / land), e = f * f * (3 - 2 * f);
+        if (!L.landed) this.travel(L.x0 + (L.x1 - L.x0) * e - this.x, L.z0 + (L.z1 - L.z0) * e - this.z, ctx.grid);
+        if (f >= 1 && !L.landed) {
+          L.landed = true; events.push({ type: 'leapLand', x: this.x, z: this.z });
+          const g = dist - 2.4; if (g <= 0 && ctx.playerGrounded) hit('land'); else miss(g);
+        }
+        if (L.landed && t >= land + .18) {
+          if (once('fx:spikes')) events.push({ type: 'spikeLine', x: this.x, z: this.z, yaw: this.heading, from: .6, len: 7 });
+          if (t <= land + .34) { const g = strip(this.x, this.z, this.heading, .6, 7, .75); if (g <= 0) hit('spikes', { ring: true, damage: 1, label: 'crown-glass spikes' }); else miss(g); }
+        }
+        break;
+      }
+      case 'erupt':
+        // Three marks where you stand, each bursting a moment later.
+        a.marks.forEach((at, i) => {
+          if (t >= at && once('mark' + i)) { this.marks.push({ x: p.x, z: p.z, at }); events.push({ type: 'eruptMark', x: p.x, z: p.z, fuse: a.fuse, r: 1.5 }); }
+        });
+        this.marks.forEach((m, i) => {
+          if (t < m.at + a.fuse) return;
+          if (once('fx:burst' + i)) events.push({ type: 'eruptBurst', x: m.x, z: m.z, r: 1.5 });
+          if (t > m.at + a.fuse + .15) return;
+          const g = Math.hypot(p.x - m.x, p.z - m.z) - 1.5 - .3;
+          if (g <= 0) hit('burst' + i, { ring: true }); else miss(g);
+        });
+        break;
+    }
+    return false;
+  }
   /** Damage volumes for the current attack (debug draws these). */
   damageVolumes() {
     const s = this.kind.size, f = new THREE.Vector3();
+    if (this.type === 'gorilla') return this.state === 'attack' ? this.gorillaVolumes() : [];
+    if (this.attack === 'swing') {
+      const u = this.swingU ?? 0;
+      return this.state === 'attack' && u >= .36 && u <= .64 ? [{ x: this.x, y: groundY(this.x, this.z) + 1.2, z: this.z, r: 1.0 }] : [];
+    }
     if (this.attack === 'lunge') {
       this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .5 * s);
       return [{ x: f.x, y: f.y, z: f.z, r: this.kind.biteRadius }];
@@ -610,6 +811,65 @@ export class Creature {
     return [];
   }
 
+  gorillaVolumes() {
+    const a = ATTACKS[this.attack], fw = this.forward(), g = groundY(this.x, this.z), t = this.t;
+    if (!a) return [];
+    const line = (from, to, r) => { const out = []; for (let d = from; d <= to; d += r * 1.4) out.push({ x: this.x + fw.x * d, y: g + .8, z: this.z + fw.z * d, r }); return out; };
+    const ahead = (d, r) => [{ x: this.x + fw.x * d, y: g + 1.2, z: this.z + fw.z * d, r }];
+    if (this.attack === 'chop') return t >= .08 && t <= .24 ? line(.5, 4.1, .6) : [];
+    if (this.attack === 'backhand') return t >= .05 && t <= .24 ? ahead(1.2, 2.1) : [];
+    if (this.attack === 'charge') return ahead(1.3, 1.45);
+    if (this.attack === 'pound') return a.rings.filter(st => t >= st && t <= st + a.ring[2]).map(st => ({ x: this.x, y: g + .1, z: this.z, r: a.ring[0] + (a.ring[1] - a.ring[0]) * Math.min(1, (t - st) / a.ring[2]), ring: true }));
+    if (this.attack === 'roar') return t < .2 ? [{ x: this.x, y: g + 1, z: this.z, r: a.reach }] : [];
+    if (this.attack === 'combo') { const n = this.swipe ?? -1, since = n >= 0 ? t - a.swipes[n] : -1; return since >= 0 && since < .16 ? (n === 0 ? line(.4, 3.6, .55) : ahead(1.4, n === 1 ? 2 : 1.4)) : []; }
+    if (this.attack === 'leap') return this.leap?.landed ? [{ x: this.x, y: g + .5, z: this.z, r: 2.4 }] : [];
+    if (this.attack === 'erupt') return (this.marks || []).filter(m => t >= m.at + a.fuse && t < m.at + a.fuse + .2).map(m => ({ x: m.x, y: groundY(m.x, m.z) + .5, z: m.z, r: 1.5 }));
+    return [];
+  }
+  /** Garrow's body for the state it is in: lean, lift, twist, and where each arm (and the cleaver) points. */
+  gorillaPose(st, t, tm) {
+    const a = this.attack, A = a ? ATTACKS[a] : null, w = st === 'windup' && tm ? Math.min(1, t / tm.windup) : 0;
+    const ease = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+    const kf = pts => { for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) { const [t0, v0] = pts[i - 1], [t1, v1] = pts[i]; return v0 + (v1 - v0) * ease((t - t0) / (t1 - t0)); } return pts[pts.length - 1][1]; };
+    const P = { rear: null, lift: 0, spin: 0, headOut: 0, lean: 0, L: [st === 'alert' ? -.3 : 0, 0], R: [st === 'alert' ? -.3 : 0, 0], sword: 0 };
+    const drum = k => { P.L = [-1.3 + Math.sin(t * 24) * .45 * k, .35 * k]; P.R = [-1.3 - Math.sin(t * 24) * .45 * k, -.35 * k]; };
+    if (st === 'windup') {
+      P.rear = 0;
+      if (a === 'chop') { P.R = [-2.9 * w, -.2 * w]; P.L = [-.5 * w, 0]; P.rear = -.22 * w; P.sword = .5 * w; }
+      if (a === 'backhand') { P.L = [-1.0 * w, 1.1 * w]; P.spin = .55 * w; P.rear = .1 * w; }
+      if (a === 'charge') { P.rear = .6 * w; P.lift = -.3 * w; P.L = P.R = [-.55 * w, 0]; P.headOut = .25 * w; }
+      if (a === 'pound') { P.L = P.R = [-2.8 * w, 0]; P.rear = -.3 * w; P.lift = .25 * w; }
+      if (a === 'boulder') { const down = ease(t / (tm.windup * .45)), up = ease((t / tm.windup - .45) / .55); P.rear = .6 * down * (1 - up) - .3 * up; P.L = P.R = [-.8 * down * (1 - up) - 3 * up, 0]; P.lift = -.25 * down * (1 - up); }
+      if (a === 'roar') { drum(1); P.rear = -.15 * w; }
+      if (a === 'combo') { P.R = [-2.3 * w, 0]; P.rear = -.15 * w; P.sword = .4 * w; }
+      if (a === 'leap') { P.rear = .4 * w; P.lift = -.4 * w; P.L = P.R = [1.0 * w, 0]; }
+      if (a === 'erupt') { P.R = [-2.7 * w, 0]; P.rear = -.25 * w; P.sword = -.3 * w; }
+    }
+    if (st === 'attack' && A) {
+      if (a === 'chop') { const k = ease(t / .1); P.R = [-2.9 + 2.5 * k, -.2]; P.rear = -.22 + .55 * k; P.sword = .5 - .9 * k; }
+      if (a === 'backhand') { const k = ease(t / .2); P.L = [-1.2, 1.1 - 2.5 * k]; P.spin = .55 - 1.3 * k; P.rear = .1; }
+      if (a === 'charge') { P.rear = .62; P.lift = -.25 + Math.abs(Math.sin(t * 9)) * .2; P.L = [-.5 + Math.sin(t * 18) * .7, 0]; P.R = [-.5 - Math.sin(t * 18) * .7, 0]; P.headOut = .3; }
+      if (a === 'pound') { const x = kf([[0, -2.8], [.1, -.4], [.42, -2.6], [.57, -2.7], [.67, -.4]]); P.L = P.R = [x, 0]; P.rear = kf([[0, -.3], [.1, .35], [.42, -.25], [.57, -.25], [.67, .4]]); }
+      if (a === 'boulder') { const x = kf([[0, -3], [.15, -.9]]); P.L = P.R = [x, 0]; P.rear = kf([[0, -.3], [.15, .3]]); }
+      if (a === 'roar') { P.rear = -.45; P.headOut = .35; P.L = [-.7, -1.1]; P.R = [-.7, 1.1]; }
+      if (a === 'combo') {
+        const n = this.swipe ?? -1, since = n >= 0 ? t - A.swipes[n] : 0;
+        P.R = [-2.3, 0]; P.rear = 0;
+        if (n === 0) { const k = ease(since / .1); P.R = [-2.3 + 1.9 * k, 0]; P.rear = .3 * k; P.sword = .4 - .8 * k; }
+        if (n === 1) { const k = ease(since / .18); P.L = [-1.1, 1.1 - 2.4 * k]; P.spin = .5 - 1.2 * k; P.R = [-.6, 0]; }
+        if (n === 2) { const k = ease(since / .14); P.R = [.8 - 3.7 * k, 0]; P.rear = -.25 * k; P.lift = .15 * k; }
+      }
+      if (a === 'leap') { const f = Math.min(1, t / (A.active * .7)); P.lift = f < 1 ? Math.sin(f * Math.PI) * 3 : 0; P.R = [f < 1 ? -2.9 : -.4, 0]; P.L = [f < 1 ? -1.5 : -.8, 0]; P.rear = f < 1 ? -.2 + .2 * f : .45; P.sword = f < 1 ? .5 : -.4; }
+      if (a === 'erupt') { P.R = [-.35, 0]; P.L = [-.4, .2]; P.rear = .55; P.sword = .9; P.lift = -.15; }
+    }
+    if (st === 'phase') {
+      if (t < 1.45) { drum(1); P.rear = -.3 - .2 * t / 1.45; P.lift = .2; }
+      else if (t < 2.4) { P.rear = -.55; P.headOut = .4; P.L = [-.8, -1.25]; P.R = [-.8, 1.25]; P.lift = .1; }
+      else { const k = ease((t - 2.4) / .4); P.rear = -.55 * (1 - k); P.L = [-.8 * (1 - k), -1.25 * (1 - k)]; P.R = [-.8 * (1 - k), 1.25 * (1 - k)]; }
+    }
+    if (st === 'dazed') { P.rear = .25; P.lean = Math.sin(t * 7) * .15; P.headOut = -.2; P.L = P.R = [.2, 0]; }
+    return P;
+  }
   animate(dt, time) {
     this.place();
     const s = this.kind.size * 1.1, h = this.heading;
@@ -641,6 +901,8 @@ export class Creature {
     if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
     if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
     if (st === 'emerge') { const e = Math.min(1, t / EMERGE_TIME); lift = -2.6 * (1 - e) ** 2; rear = -.35 * Math.sin(e * Math.PI); legRate = 2.5; }
+    const G = this.type === 'gorilla' ? this.gorillaPose(st, t, tm) : null;
+    if (G && G.rear !== null) { rear = G.rear; lift = G.lift; spin = G.spin; headOut = G.headOut; lean = G.lean; glow = st === 'phase' ? .8 : glow; }
     // Monkey poses: crouch before the pounce, an arc through the air, the hop back.
     if (this.type === 'monkey') {
       const w = tm ? Math.min(1, t / tm.windup) : 0;
@@ -649,6 +911,8 @@ export class Creature {
       if (st === 'attack' && this.attack === 'pounce') { const f = Math.min(1, t / (a.active * .8)); lift = Math.sin(f * Math.PI) * 1.8; rear = .45 - f * .3; headOut = 0; }
       if (st === 'attack' && this.attack === 'flurry') { rear = .22; headOut = 0; }
       if (st === 'hop') { lift = Math.sin(Math.min(1, t / .34) * Math.PI) * .75; rear = -.35; headOut = 0; }
+      if (st === 'windup' && this.attack === 'swing') { rear = -.25 * w; lift = -.15 * w; headOut = 0; }     // crouch, eyes on the canopy
+      if (st === 'attack' && this.attack === 'swing') { const u = this.swingU ?? 0; lift = .5 + Math.sin(u * Math.PI) * 1.4; rear = -.3 + u * .3; headOut = 0; }
     }
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
@@ -658,13 +922,21 @@ export class Creature {
     const nb = this.neckBase || { y: 1.2, z: 1.2, k: 1 };
     this.neck.position.z = damp(this.neck.position.z, nb.z + headOut * nb.k, st === 'attack' ? 26 : 12, dt);
     this.neck.position.y = damp(this.neck.position.y, nb.y + headLow * nb.k, 10, dt);
-    const moving = st === 'attack' && this.attack === 'lunge' ? 2.2 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
+    const moving = st === 'attack' && this.attack === 'lunge' ? 2.2 : st === 'attack' && this.attack === 'charge' ? 2.6 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
     this.legPhase += dt * (4 + this.speed * 4.5) * legRate;
     this.legs.forEach(({ mesh, phase }) => {
       mesh.rotation.x = Math.sin(this.legPhase + phase) * .5 * moving;
       mesh.scale.setScalar(damp(mesh.scale.x, 1 - legsIn * .55, 14, dt));
     });
-    if(this.arms){
+    // The swing's kick: both feet out at the side of you.
+    if (this.type === 'monkey' && st === 'attack' && this.attack === 'swing') { const u = this.swingU ?? 0; for (const { mesh } of this.legs) mesh.rotation.x = u > .3 && u < .7 ? -1.4 : -.4; }
+    if (G && this.arms) {
+      for (const { mesh, side } of this.arms) {
+        const [x, z] = side < 0 ? G.L : G.R, fast = st === 'attack' ? 22 : 10;
+        mesh.rotation.x = damp(mesh.rotation.x, x, fast, dt); mesh.rotation.z = damp(mesh.rotation.z, z, fast, dt);
+      }
+      if (this.sword) this.sword.rotation.x = damp(this.sword.rotation.x, G.sword, st === 'attack' ? 18 : 8, dt);
+    } else if(this.arms){
       const wind=st==='windup'?Math.min(1,t/(tm?.windup||1)):0,attack=st==='attack'?Math.max(0,1-t/.22):0;
       for(const {mesh,side} of this.arms){
         const guard=st==='alert'?.18:0,lift=this.type==='gorilla'?(wind*.95+attack*-.75):wind*.52;
@@ -678,16 +950,29 @@ export class Creature {
       const w = Math.min(1, t / (tm?.windup || 1));
       for (const { mesh, side } of this.arms) {
         let x = null;
-        if (st === 'windup') x = this.attack === 'flurry' ? 1.25 * w : this.attack === 'pounce' ? .9 * w : this.attack === 'seed' && side > 0 ? 2.3 * w : null;
+        if (st === 'windup') x = this.attack === 'flurry' ? 1.25 * w : this.attack === 'pounce' ? .9 * w : this.attack === 'seed' && side > 0 ? 2.3 * w : this.attack === 'swing' && side > 0 ? -2.6 * w : null;
         if (st === 'attack') {
           if (this.attack === 'flurry') { const mine = (this.swipe ?? 0) % 2 === (side > 0 ? 0 : 1), since = t - (a.swipes[this.swipe] ?? 0); x = mine ? (since < .14 ? 1.3 - since / .14 * 2.8 : -1.5) : .5; }
           if (this.attack === 'pounce') x = -1.35;
           if (this.attack === 'seed' && side > 0) x = -1.4;
+          if (this.attack === 'swing') x = side > 0 ? -2.9 : -.6;
         }
         if (x !== null) mesh.rotation.x = damp(mesh.rotation.x, x, st === 'attack' ? 30 : 12, dt);
       }
     }
     if(this.tail)this.tail.rotation.x=Math.sin(time*(this.type==='monkey'&&st!=='wander'?7:4)+this.home.x)*.25;
+    if (this.vine) {
+      // From high in the canopy above you down to its raised hand.
+      const P = this.swingPath, on = this.alive && st === 'attack' && this.attack === 'swing' && P;
+      this.vine.visible = !!on;
+      if (on) {
+        const hand = new THREE.Vector3(); (this.arms[1] || this.arms[0]).mesh.getWorldPosition(hand); hand.y += .55;
+        const top = new THREE.Vector3(P.cx, P.ay, P.cz), d = top.clone().sub(hand), len = d.length();
+        this.vine.position.copy(hand).addScaledVector(d, .5); this.vine.scale.set(1, len, 1);
+        this.vine.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+      }
+    }
+    if (this.type === 'gorilla') this.crownGlow(st === 'phase' ? Math.min(1, Math.max(0, (t - .8) / .65)) : this.phase > 1 ? 1 : 0, time);
     const rage = this.enraged ? 1 : 0;
     if (this.isBoss) {
       this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
@@ -700,17 +985,42 @@ export class Creature {
     if (this.tell.visible) {
       const warning = st === 'windup', w = warning ? Math.min(1, t / tm.windup) : 1;
       // The spin's danger zone is wider than the body; size the tell to match.
-      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : this.attack === 'quake' ? QUAKE_RADIUS / this.radius : 1;
+      const A2 = this.attack ? ATTACKS[this.attack] : null;
+      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : this.attack === 'quake' ? QUAKE_RADIUS / this.radius : A2?.ring ? A2.ring[1] / this.radius : A2?.reach ? A2.reach / this.radius : 1;
       this.tell.position.set(this.x, groundY(this.x, this.z) + .065, this.z);
       this.tell.scale.setScalar(this.radius * reach * (warning ? .9 + .45 * w : st === 'attack' ? 1.42 : 1.18));
       this.tell.material.color.setHex(warning ? 0xe9ad62 : st === 'attack' ? 0xf27d56 : 0xb9d892);
       this.tell.material.opacity = warning ? .25 + .45 * w : st === 'attack' ? .75 : .3;
     }
+    if (this.lineTell) {
+      // Garrow's line attacks: amber while it winds up, red as it strikes; the spike line after a leap.
+      const A3 = this.attack ? ATTACKS[this.attack] : null, spikes = this.attack === 'leap' && st === 'attack' && this.leap?.landed && t < A3.active * .7 + .4;
+      const line = spikes ? [.6, 7, .75] : A3?.line && (st === 'windup' || st === 'attack') ? A3.line : this.attack === 'combo' && st === 'windup' ? [.4, 3.6, .55] : null;
+      this.lineTell.visible = this.alive && !!line;
+      if (line) {
+        const [from, to, half] = line, mid = (from + to) / 2, cx = this.x + Math.sin(this.heading) * mid, cz = this.z + Math.cos(this.heading) * mid, warn = st === 'windup';
+        this.lineTell.position.set(cx, groundY(cx, cz) + .07, cz); this.lineTell.rotation.set(-Math.PI / 2, this.heading, 0); this.lineTell.scale.set(half * 2, to - from, 1);
+        this.lineTell.material.color.setHex(warn ? 0xe9ad62 : spikes ? 0xb57cff : 0xf27d56);
+        this.lineTell.material.opacity = warn ? .12 + .3 * Math.min(1, t / (tm?.windup || 1)) : .42;
+      }
+    }
     if (this.shake > 0) { this.root.position.x += (Math.random() - .5) * .07; this.root.position.z += (Math.random() - .5) * .07; }
     this.root.updateMatrixWorld(true);
   }
+  /** The crown-glass in Garrow's blade wakes in phase 2: a violet glow and light. */
+  crownGlow(k, time) {
+    if (!this.sword) return;
+    if (this.glowOf !== this.sword) {
+      this.glowOf = this.sword; this.glowMats = [];
+      this.sword.traverse(m => { if (m.material?.emissive) { m.material = m.material.clone(); this.glowMats.push({ m: m.material, color: m.material.emissive.clone(), k: m.material.emissiveIntensity }); } });
+      this.glowLight = new THREE.PointLight(0xa070ff, 0, 7, 2); this.glowLight.position.set(0, -.9, .2); this.sword.add(this.glowLight);
+    }
+    const violet = new THREE.Color(0xa45cff), pulse = 1 + Math.sin(time * 6) * .15 * k;
+    for (const g of this.glowMats) { g.m.emissive.copy(g.color).lerp(violet, k); g.m.emissiveIntensity = (g.k + (2.6 - g.k) * k) * pulse; }
+    this.glowLight.intensity = 6 * k * pulse;
+  }
   showBar(visible, camera) {
-    this.bar.visible = !this.isBoss && visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
+    this.bar.visible = !this.isBoss && !this.bossBar && visible && this.alive && this.state !== 'toppled' && this.state !== 'rising' && this.state !== 'return';
     if (!this.bar.visible) return;
     this.bar.quaternion.copy(this.root.quaternion).invert().multiply(camera.quaternion);
     const f = this.health / this.maxHealth;
@@ -719,14 +1029,14 @@ export class Creature {
   }
   /** Dormant: out of the world until its chapter of the story calls it. */
   sleep() {
-    this.alive = false; this.setState('dormant'); this.root.visible = false; this.tell.visible = false; this.bar.visible = false;
+    this.alive = false; this.setState('dormant'); this.root.visible = false; this.tell.visible = false; this.bar.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.vine) this.vine.visible = false;
   }
   /** Rise out of the ground at home, then notice the explorer. */
   emerge() {
     this.respawn(); this.setState('emerge'); this.body.position.y = -2.6; this.heading = Math.random() * Math.PI * 2;
   }
   respawn() {
-    this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false;
+    this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false; this.phase = 1; this.pendingPhase = false;
     if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
     this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0);

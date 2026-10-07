@@ -143,7 +143,7 @@ export const STAGES = [
   { id: 'shadow_meet', book: 2, objective: 'Find Maren the Lamplighter under the root arch', target: 'maren' },
   { id: 'shadow_hunt', book: 2, objective: 'Drive off the green monkeys stealing the lantern seeds', target: { x: SM.x, z: SM.z + 14, title: 'THE LANTERN TRAIL' }, count: ['monkeys', 3] },
   { id: 'shadow_memory', book: 2, objective: 'Find what the falls remember', target: { ...SEED_SHRINE, title: 'THE FALLS' } },
-  { id: 'shadow_guardian', book: 2, objective: 'Free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
+  { id: 'shadow_guardian', book: 2, objective: 'Boss fight: free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
   { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
   // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
   { id: 'frost_wait', book: 3, objective: 'Grow to level 5: Book III, the Frostbound Crown, opens next (from Oct 15)', target: 'maren' }

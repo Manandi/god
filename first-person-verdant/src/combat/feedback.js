@@ -51,6 +51,11 @@ export class CombatSound {
     if (name === 'lunge') { this.hiss(.25, .07, 500, 180, 1.2); this.tone(90, .2, .06, 'triangle', .6); }
     if (name === 'spin') { for (let i = 0; i < 5; i++) this.hiss(.12, .05, 700, 300, 3, i * .18); }
     if (name === 'slam') { this.tone(48, .7, .26, 'sine', .45); this.hiss(.5, .12, 400, 90, .8); }
+    if (name === 'chop' || name === 'leap') { this.tone(40, .8, .3, 'sine', .45); this.hiss(.5, .16, 500, 90, .8); }
+    if (name === 'backhand' || name === 'swing') this.hiss(.35, .1, 1100, 260, .9);
+    if (name === 'charge') this.tone(42, 1.2, .14, 'triangle', .6);
+    if (name === 'boulder') this.hiss(.4, .12, 700, 200, .8);
+    if (name === 'erupt') { this.tone(46, .5, .2, 'triangle', .5); this.hiss(.35, .12, 1600, 300, .8); }
   }
   // The Warden: everything an octave lower and longer.
   wardenWindup(attack) {
@@ -88,6 +93,17 @@ export class CombatSound {
     if (attack === 'flurry') { for (let i = 0; i < 4; i++) this.tone(520 + i * 40, .06, .03, 'square', 1.2, i * .07); }
     if (attack === 'pounce') { this.tone(300, .6, .05, 'sawtooth', 3.2); this.hiss(.45, .03, 600, 2400, 2); }
     if (attack === 'seed') { this.tone(700, .1, .03, 'triangle', .8); this.tone(900, .08, .025, 'triangle', .8, .12); }
+    if (attack === 'swing') { this.tone(420, .5, .045, 'triangle', 2.2); this.tone(640, .25, .03, 'square', 1.4, .3); }   // a rising whoop
+    // Garrow: deep and long, each move its own.
+    if (attack === 'chop') { this.tone(60, .9, .1, 'sawtooth', 2.4); this.hiss(.8, .04, 300, 1400, 2); }
+    if (attack === 'backhand') { this.tone(80, .5, .07, 'triangle', 1.8); this.hiss(.4, .03, 600, 1800, 2); }
+    if (attack === 'charge') { for (let i = 0; i < 4; i++) this.tone(50, .16, .1, 'triangle', .7, i * .2); this.hiss(.8, .05, 200, 900, 1); }
+    if (attack === 'pound') { this.tone(44, 1.0, .12, 'sawtooth', 2.6); this.hiss(.9, .05, 150, 1100, 2); }
+    if (attack === 'boulder') { this.hiss(.6, .08, 200, 120, .8); this.tone(55, .8, .08, 'sine', 1.6, .4); }
+    if (attack === 'roar') { for (let i = 0; i < 6; i++) this.tone(70, .08, .12, 'sine', .8, i * .13); }
+    if (attack === 'combo') { this.tone(70, .7, .09, 'sawtooth', 2.2); this.tone(520, .4, .03, 'triangle', 1.6, .2); }
+    if (attack === 'leap') { this.tone(52, .8, .1, 'sawtooth', 2.6); this.hiss(.7, .05, 150, 900, 2); }
+    if (attack === 'erupt') { this.tone(38, .9, .12, 'sine', 1.8); this.tone(660, .6, .025, 'triangle', 1.5, .1); }
   }
   swipe() { this.hiss(.12, .07, 2600, 900, 1.4); }
   thud() { this.tone(70, .35, .14, 'sine', .5); this.hiss(.3, .08, 500, 120, 1); }

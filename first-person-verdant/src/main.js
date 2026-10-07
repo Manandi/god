@@ -474,12 +474,14 @@ function updateBoss(rawDt){
     if(gateRoots&&witherT>=0){witherT+=rawDt;const k=Math.max(0,1-witherT/3.5);gateRoots.scale.set(1,k,1);gateRoots.visible=k>0;}
   }
   // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
-  const boss=warden?.awake&&warden.alive?warden:null;
+  // Garrow (Shadowmere) is a boss too: its bar shows while it is fighting you.
+  const garrow=creatures.find(c=>c.type==='gorilla'),garrowFight=garrow?.alive&&!['wander','return','dormant','defeated'].includes(garrow.state)&&Math.hypot(garrow.x-player.x,garrow.z-player.z)<34;
+  const boss=warden?.awake&&warden.alive?warden:garrowFight?garrow:null;
   if(boss!==bossShown){bossShown=boss;bossTrail=1;$('bossBar').classList.toggle('hidden',!boss);}
   if(boss){
     const f=boss.health/boss.maxHealth;bossTrail=Math.max(f,bossTrail-rawDt*.25);
     $('bossName').textContent=boss.name;
-    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',warden.phase>1);
+    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',(boss.phase||1)>1);$('bossBar').classList.toggle('crown',boss===garrow);
   }
 }
 // Boss intro shots (Monster Hunter style): the camera swings low beside the
@@ -631,6 +633,7 @@ devPanel.addEventListener('click',e=>{
     case 'revive':{let n=0;for(const c of creatures)if(c!==warden&&!c.alive&&!c.chapter){c.respawn();n++;}toast('DEV · REVIVED',`${n} creatures back on their feet.`);break;}
     case 'summon-monkey':{const m=creatures.filter(c=>c.type==='monkey').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · GREEN MONKEY','In front of you.');}break;}
     case 'summon-gorilla':{const g=creatures.find(c=>c.type==='gorilla');if(g){bring(g);toast('DEV · GARROW','In front of you.');}break;}
+    case 'garrow-phase':{const g=creatures.find(c=>c.type==='gorilla');if(g){if(!g.alive)g.respawn();g.health=Math.min(g.health,g.maxHealth*.49);g.pendingPhase=true;toast('DEV · GARROW','Phase 2 on its next free moment.');}break;}
     case 'inventory':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.inventory();return;
     case 'atlas':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.show('map');return;
     case 'next':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i<STAGES.length-1)devJumpTo(STAGES[i+1].id);break;}
@@ -827,6 +830,47 @@ function throwSeed(c,ev){
   const from=new THREE.Vector3(ev.x,ev.y,ev.z),to=new THREE.Vector3(ev.tx,ev.ty,ev.tz),vel=to.sub(from).normalize().multiplyScalar(ev.speed||17);vel.y+=1.2;
   const mesh=new THREE.Mesh(seedGeo,seedMat);mesh.position.copy(from);mesh.castShadow=true;scene.add(mesh);enemyShots.push({mesh,vel,t:0,c});
 }
+// What the cue line says as each attack winds up.
+function attackCue(ev){
+  return {quake:'QUAKE · DASH THROUGH OR GUARD',lunge:'LUNGE COMING',flurry:ev.chained?'INTO THE FLURRY · GUARD ×3':'CLAW FLURRY · GUARD ×3 OR BACK OFF',pounce:'POUNCE · DODGE ASIDE',seed:'SEED PELLET · DASH OR GUARD',spin:'SHELL SPIN · GET CLEAR',slam:'SLAM · JUMP OR DASH THROUGH',
+    swing:'VINE SWING · IT KICKS FROM THE SIDE · TURN AND GUARD OR DASH',
+    chop:'CLEAVER CHOP · STEP OUT OF THE LINE',backhand:'BACKHAND · BACK OFF OR GUARD',charge:'KNUCKLE CHARGE · SIDESTEP · TREES STOP IT',pound:'DOUBLE POUND · JUMP BOTH WAVES',boulder:'BOULDER · MOVE OFF YOUR SPOT',roar:'CHEST-DRUM ROAR · DASH THROUGH IT',
+    combo:'CROWN-GLASS COMBO · GUARD ×3',leap:'LEAPING CLEAVE · DODGE SIDEWAYS',erupt:'CROWN-GLASS ERUPTS · KEEP MOVING'}[ev.attack]||'';
+}
+// Garrow's crown-glass: spikes that burst out of the ground, the marks that warn of them, and the
+// boulders it throws (they land where you stood; guard facing Garrow, dash, or move off the mark).
+const crystalGeo=new THREE.ConeGeometry(.22,1.6,5),crystalMat=new THREE.MeshStandardMaterial({color:0x6b3fb0,emissive:0x5a2ad0,emissiveIntensity:1.4,roughness:.25,metalness:.2,flatShading:true});
+const markMat=new THREE.MeshBasicMaterial({color:0xb57cff,transparent:true,opacity:.5,depthWrite:false,side:THREE.DoubleSide});
+const boulderGeo=new THREE.DodecahedronGeometry(.5,0),boulderMat=new THREE.MeshStandardMaterial({color:0x4f5a3e,roughness:1,flatShading:true});
+const hazards=[];
+function spikesAt(x,z,n,spread,delay=0){
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*spread,px=x+Math.sin(a)*r,pz=z+Math.cos(a)*r,base=groundY(px,pz),m=new THREE.Mesh(crystalGeo,crystalMat);
+    m.position.set(px,base-1.7,pz);m.rotation.set((Math.random()-.5)*.6,Math.random()*3,(Math.random()-.5)*.6);m.scale.setScalar(.7+Math.random()*.7);m.castShadow=true;scene.add(m);hazards.push({kind:'spike',mesh:m,t:-delay,base});}
+}
+function spikeLine(x,z,yaw,from,len){for(let d=from;d<=len;d+=.7)spikesAt(x+Math.sin(yaw)*d,z+Math.cos(yaw)*d,2,.35,(d-from)*.035);}
+function ringMark(x,z,r){const m=new THREE.Mesh(new THREE.RingGeometry(r*.82,r,32),markMat.clone());m.rotation.x=-Math.PI/2;m.position.set(x,groundY(x,z)+.08,z);scene.add(m);return m;}
+function markAt(x,z,r,fuse){hazards.push({kind:'mark',mesh:ringMark(x,z,r),t:0,life:fuse});}
+function throwBoulder(c,ev){
+  const m=new THREE.Mesh(boulderGeo,boulderMat);m.position.set(ev.x,ev.y,ev.z);m.castShadow=true;scene.add(m);
+  hazards.push({kind:'boulder',mesh:m,mark:ringMark(ev.tx,ev.tz,1.8),t:0,c,ev,from:new THREE.Vector3(ev.x,ev.y,ev.z),to:new THREE.Vector3(ev.tx,groundY(ev.tx,ev.tz)+.4,ev.tz)});
+}
+function updateHazards(dt){
+  for(let i=hazards.length-1;i>=0;i--){
+    const h=hazards[i];h.t+=dt;let done=false;
+    if(h.kind==='spike'){if(h.t<0)continue;const up=Math.min(1,h.t/.1),down=Math.max(0,(h.t-.75)/.35);h.mesh.position.y=h.base-1.7+1.75*up-1.9*down;done=h.t>1.1;}
+    else if(h.kind==='mark'){const k=h.t/h.life;h.mesh.material.opacity=.25+.5*Math.abs(Math.sin(h.t*14))*k;h.mesh.scale.setScalar(1.1-.1*k);done=h.t>=h.life;}
+    else if(h.kind==='boulder'){
+      const k=Math.min(1,h.t/h.ev.flight);h.mesh.position.lerpVectors(h.from,h.to,k);h.mesh.position.y+=Math.sin(k*Math.PI)*3.2;h.mesh.rotation.x+=dt*6;h.mark.material.opacity=.3+.4*k;
+      if(k>=1){
+        effects.shockwave(h.to,.4,1.8,.25);effects.chips(h.to);sound.thud();shoulderCam.punch(.2);
+        const feet=groundY(player.x,player.z)+player.height;
+        if(!player.defeated&&Math.hypot(player.x-h.to.x,player.z-h.to.z)<1.8+.34&&feet<h.to.y+1.2)incomingStrike(h.c,{attack:'boulder',label:'boulder',kind:'heavy',damage:h.ev.damage||2});
+        scene.remove(h.mark);h.mark.geometry.dispose();h.mark.material.dispose();done=true;
+      }
+    }
+    if(done){scene.remove(h.mesh);if(h.kind==='mark'){h.mesh.geometry.dispose();h.mesh.material.dispose();}hazards.splice(i,1);}
+  }
+}
 function updateEnemyShots(dt){
   for(let i=enemyShots.length-1;i>=0;i--){
     const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=6*dt;p.addScaledVector(s.vel,dt);s.mesh.rotation.x+=dt*14;
@@ -837,7 +881,7 @@ function updateEnemyShots(dt){
   }
 }
 function updateProjectiles(dt){
-  updateEnemyShots(dt);
+  updateEnemyShots(dt);updateHazards(dt);
   if(!projectiles.count)return;
   const blocked=v=>collisionGrid.near(v.x,v.z).some(o=>v.y<o.top&&Math.hypot(v.x-o.x,v.z-o.z)<o.r);
   for(const h of projectiles.update(dt,{targets:creatures.filter(c=>c.alive&&!(c===warden&&warden.sealed)),blocked,ground:groundY}))landShot(h);
@@ -1330,11 +1374,24 @@ function update(rawDt){
       if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
-      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(c.type==='gorilla'&&ev.attack==='quake'?'SEED GRENADE · MOVE OR DASH THROUGH':({quake:'QUAKE · DASH THROUGH OR GUARD',lunge:c.type==='monkey'?'CLAW LUNGE COMING':'LUNGE COMING',flurry:ev.chained?'INTO THE FLURRY · GUARD ×3':'CLAW FLURRY · GUARD ×3 OR BACK OFF',pounce:'POUNCE · DODGE ASIDE',seed:'SEED PELLET · DASH OR GUARD',spin:'SHELL SPIN · GET CLEAR',slam:c.type==='gorilla'?'SWORD SLAM · JUMP OR DASH':'SLAM · JUMP OR DASH THROUGH'}[ev.attack]),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(attackCue(ev),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
       else if(ev.type==='attack')sound.attack(ev.attack);
       else if(ev.type==='swipe')sound.swipe();
       else if(ev.type==='pounceLand'){sound.thud();effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,1.6,.25);}
       else if(ev.type==='throw')throwSeed(c,ev);
+      else if(ev.type==='swingLand')sound.thud();
+      else if(ev.type==='chopImpact'){sound.attack('chop');shoulderCam.punch(.3);hitstop=Math.max(hitstop,.04);for(let d=1;d<=ev.len;d+=.9){const x=c.x+Math.sin(ev.yaw)*d,z=c.z+Math.cos(ev.yaw)*d;effects.ring(new THREE.Vector3(x,groundY(x,z),z));}}
+      else if(ev.type==='poundRing'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),ev.from,ev.to,ev.duration);sound.attack('slam');shoulderCam.punch(.4);}
+      else if(ev.type==='boulder')throwBoulder(c,ev);
+      else if(ev.type==='roar'){sound.roar();shoulderCam.punch(.5);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.35);}
+      else if(ev.type==='chargeCrash'){sound.thud();sound.topple();shoulderCam.punch(.5);cue(`${c.name||'GARROW'} IS DAZED · ROOT STRIKE`,1.2);}
+      else if(ev.type==='leapLand'){sound.attack('leap');shoulderCam.punch(.55);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.6,2.4,.25);}
+      else if(ev.type==='spikeLine'){spikeLine(ev.x,ev.z,ev.yaw,ev.from,ev.len);sound.erupt();}
+      else if(ev.type==='eruptMark')markAt(ev.x,ev.z,ev.r,ev.fuse);
+      else if(ev.type==='eruptBurst'){spikesAt(ev.x,ev.z,7,ev.r*.8);sound.erupt();shoulderCam.punch(.2);}
+      else if(ev.type==='phase'){sound.roar();slowMo(.4,.5);toast('THE CROWN-GLASS TAKES HOLD','Garrow fights itself and loses. The blade burns violet: new attacks, and faster.');}
+      else if(ev.type==='phaseBlast'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.3);shoulderCam.punch(.6);sound.attack('slam');spikesAt(ev.x,ev.z,10,ev.radius*.7);}
+      else if(ev.type==='alert'&&c.type==='gorilla'&&!c.introduced){c.introduced=true;sound.roar();introShot(c,2.4);toast('BOSS · GARROW, THE ROOTBOUND','Shadowmere’s old lamplighter. Black crown-glass is fused to its hand, and it fights for whoever put it there.');}
       else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
       else if(ev.type==='strike')incomingStrike(c,ev);
       else if(ev.type==='missed')debug.note(`${c.type} ${ev.label} → missed (${ev.gap.toFixed(2)} m clear)`,elapsed);

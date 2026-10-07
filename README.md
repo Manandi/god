@@ -2,7 +2,47 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
-## Latest handoff — 2026-10-07 (evening) · Workout logs count, week 1 is one workout (Claude)
+## Latest handoff — 2026-10-07 (night) · Monkeys' own attack, Garrow as a two-phase boss (Claude)
+
+The owner asked for two things: the monkeys should drop the turtle dash for an attack of their own, and Garrow (the gorilla) should be a boss quest again, with a massive moveset and a phase 2. All of it is in `creatures.js` (ATTACKS, `runGorilla`, `gorillaPose`, `crownGlow`) and `main.js` (cues, effects, crystal hazards, boulder, boss bar).
+
+**Green monkeys:** no more `lunge`.
+- The new move is the **vine swing** (`swing`).
+  - The monkey grabs a vine from the canopy and swings round you.
+  - It kicks you from the side mid-swing and lands behind you; about half the time it chains straight into the claw flurry.
+  - Counter: turn and guard (lock-on helps), dash, or step away from where you stood.
+- `planSwing` only commits when there is clear ground to land on.
+- The monkeys keep their flurry, pounce and seed throw.
+
+**Garrow, the Rootbound:** a boss with only gorilla moves.
+- Health is 360 base, scaled +15% per level (about 470 at level 3). Poise is higher than before.
+- The boss bar shows while it fights you (violet in phase 2).
+- The first time it notices you there is an intro camera shot and a "BOSS · GARROW" toast.
+- **Phase 1:**
+  - Cleaver chop: a line strip on the ground; step out of it.
+  - Backhand sweep: back off or guard.
+  - Knuckle charge: about 13 m. A tree in its path stops it dead, and it stays **dazed** for 1.8 s, open to a Root Strike.
+  - Double ground pound: two shockwaves; jump or dash through each.
+  - Boulder hurl: a ring marks where it lands; guard facing Garrow, dash, or move off the ring.
+  - Chest-drum roar: no damage, but it knocks you off balance and Garrow follows up at once. Dash through it.
+- **Phase 2** starts at half health.
+  - Garrow stops, drums its chest and roars (takes no damage during the change), and a blast knocks back anyone within 5.5 m.
+  - The crown-glass blade turns violet and its attacks get faster.
+  - New moves:
+    - **Crown-glass combo**: chop, backhand, rising cut.
+    - **Leaping cleave**: lands on you, then a line of crystal spikes bursts out ahead.
+    - **Crown-glass eruption**: three marks appear where you stand, each bursting 0.7 s later.
+- The quest objective now reads "Boss fight: free Garrow…". The stage ids are unchanged, so saves are unaffected.
+- The dev panel's FIGHT tab has a new **GARROW PHASE 2** button.
+
+**Checks** (Supabase aborted, Playwright):
+- Every Garrow move and the vine swing land on a player standing still in range.
+- Phase 2 triggers at half health; Garrow is immune during the change and the blade glows.
+- Phase-2 moves are only chosen in phase 2, and monkeys never pick `lunge`.
+- The Book II story test runs from `end` to `frost_wait`, with Garrow beaten.
+- The dev panel test passes, and there are no page errors.
+
+## Earlier handoff — 2026-10-07 (evening) · Workout logs count, week 1 is one workout (Claude)
 
 **Bug:** a workout logged under **OTHER ACTIVITY → Workout day** gave XP but never ticked the plan's workout. Only the button on the workout page did, so the owner's 10-06 workout didn't show on the plan.
 - Now any log counts toward the plan item of its kind, whichever form it came from. `counts()` in `profile.js` accepts a plan check, or a free log at least as big as one check.
