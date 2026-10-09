@@ -45,7 +45,9 @@ import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE } from './world.js'
  * The saga's road to the end of the 90-day challenge (owner, 2026-10-05: "the chapters must
  * build on each other till the final boss at the end of the 3-month challenge, and keep going
  * after"). Levels rise about 2 a week (week n ends near level 1 + 2n, the Thursday hunt levels),
- * so each world opens on the week the challenge reaches it, and the finale lands on Thursday,
+ * so each world opens on the week the challenge reaches it. Week 1 ran two weeks (Oct 1 – 14, owner
+ * 2026-10-09), so everything after it moved a week later and two levels lower; Book III gave up its
+ * third week so the later Books keep their dates, and the finale lands on Thursday,
  * 31 December, the last day of the challenge.
  * Threads that carry from Book to Book:
  *  - The Five Lights: each Book ends by freeing a world's keeper, who gives you its Seed's light.
@@ -56,17 +58,17 @@ import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE } from './world.js'
  * `built` marks the worlds that are playable today; the rest are the plan for the builders.
  */
 export const SAGA = [
-  { book: 'I', realm: 'grove', title: 'THE VERDANT REACH', level: 1, weeks: 'Oct 1 – 8', keeper: 'Orrun', light: 'the Heartseed', built: true,
+  { book: 'I', realm: 'grove', title: 'THE VERDANT REACH', level: 1, weeks: 'Oct 1 – 14', keeper: 'Orrun', light: 'the Heartseed', built: true,
     reveals: 'Ashmere bought strength without labour, through Mosswatch. The rot is its leftovers.' },
-  { book: 'II', realm: 'shadow', title: 'SHADOWMERE', level: 3, weeks: 'Oct 8 – 14', keeper: 'Garrow', light: 'the Lantern Seed', built: true,
+  { book: 'II', realm: 'shadow', title: 'SHADOWMERE', level: 3, weeks: 'Oct 8 – 21', keeper: 'Garrow', light: 'the Lantern Seed', built: true,
     reveals: 'Ashmere did not only drink: it put the lights out to hide where it went. Its blade was cut from a crown.' },
-  { book: 'III', realm: 'frost', title: 'THE FROSTBOUND CROWN', level: 5, weeks: 'Oct 15 – Nov 4', keeper: 'the White Maw', light: 'the Rime Seed',
+  { book: 'III', realm: 'frost', title: 'THE FROSTBOUND CROWN', level: 5, weeks: 'Oct 22 – Nov 4', keeper: 'the White Maw', light: 'the Rime Seed',
     reveals: 'Ashmere’s court froze itself here to wait for its ruler, the Hollow Crown, who left long ago to steal fire.' },
-  { book: 'IV', realm: 'ember', title: 'THE EMBER WASTES', level: 11, weeks: 'Nov 5 – 25', keeper: 'the Pyreback Colossus', light: 'the Ember Seed',
+  { book: 'IV', realm: 'ember', title: 'THE EMBER WASTES', level: 9, weeks: 'Nov 5 – 25', keeper: 'the Pyreback Colossus', light: 'the Ember Seed',
     reveals: 'The Crown burned the Colossus to forge itself a body that cannot die, as long as no one knows its name.' },
-  { book: 'V', realm: 'wraith', title: 'WRAITHMOOR', level: 17, weeks: 'Nov 26 – Dec 16', keeper: 'the Veiled Queen', light: 'the Grave Seed',
+  { book: 'V', realm: 'wraith', title: 'WRAITHMOOR', level: 15, weeks: 'Nov 26 – Dec 16', keeper: 'the Veiled Queen', light: 'the Grave Seed',
     reveals: 'The dead of Ashmere remember what the Crown was called before it was hollow: its true name.' },
-  { book: 'FINALE', realm: 'crown', title: 'ASHMERE · THE HOLLOW CROWN', level: 23, weeks: 'Dec 17 – 31', keeper: 'all five keepers', light: 'the five lights together',
+  { book: 'FINALE', realm: 'crown', title: 'ASHMERE · THE HOLLOW CROWN', level: 21, weeks: 'Dec 17 – 31', keeper: 'all five keepers', light: 'the five lights together',
     reveals: 'Final boss, Thursday 31 December: every hunter together, five lights, one true name.' }
 ];
 /** How many of the Five Lights you carry (a keeper freed in each finished Book). */
@@ -149,7 +151,7 @@ export const STAGES = [
   { id: 'shadow_guardian', book: 2, objective: 'Boss fight: free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
   { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
   // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
-  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: Book III, the Frostbound Crown, opens next (from Oct 15)', target: 'maren' }
+  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: Book III, the Frostbound Crown, opens next (from Oct 22)', target: 'maren' }
 ];
 const index = id => STAGES.findIndex(s => s.id === id);
 

@@ -2,6 +2,16 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-09 (evening) · Schedule moved a week later after the longer week 1 (Claude)
+
+The owner said: "move everything forward if you have to". Week 1 now runs Oct 1 – 14, so the schedule after it moves a week later.
+- **Thursday hunt levels** (`bossLevel` in `weeklyWorld.js`): Oct 8 and Oct 15 both need level 3, then +2 a week: Oct 22 → 5, Oct 29 → 7, Nov 5 → 9…
+- **Book III, the Frostbound Crown** (level 5) opens **Oct 22** instead of Oct 15 (the `frost_wait` objective and the SAGA). It gave up its third week, so later Books keep their dates.
+- **Later gates are 2 levels lower**, because everyone is a week behind the old pace. Ember Wastes is level 9 (was 11), Wraithmoor 15 (was 17), and the finale 21 (was 23). Changed in the atlas `BIOMES` (`profile.js`), `SAGA` (`story.js`) and the saga table below.
+- **The final boss stays on Thursday Dec 31.**
+- The XP curve is unchanged.
+- Checks: production build. The hunt shows lv3 on 10-15, lv5 on 10-22, lv7 on 10-29 and lv9 on 11-05. The SAGA, atlas and frost objective read as above, with no page errors.
+
 ## Latest handoff — 2026-10-09 (later) · Taunt openings and Garrow's breakable crystals (Claude)
 
 Ideas taken from the soulslike references the owner shared. None of those repos has a license, so only the ideas were used, no code. Everything is in `creatures.js`, with cues and effects in `main.js`.
@@ -201,12 +211,12 @@ Checks, with supabase.co aborted and the clock faked:
 
 | Book | World (atlas id) | Opens at | Weeks | Keeper to free → light | What it reveals about the final boss |
 |---|---|---|---|---|---|
-| I | Verdant Reach (`grove`) | start | Oct 1 – 8 | Orrun → the Heartseed | Ashmere bought strength without labour, through Mosswatch |
-| II | Shadowmere (`shadow`) | lv 3 | Oct 8 – 14 | Garrow → the Lantern Seed | Ashmere put the lights out to hide; its blade was cut from a crown |
-| III | Frostbound Crown (`frost`) | lv 5 | Oct 15 – Nov 4 | the White Maw → the Rime Seed | Ashmere's court froze itself here waiting for its ruler, the Hollow Crown, who left to steal fire |
-| IV | Ember Wastes (`ember`) | lv 11 | Nov 5 – 25 | the Pyreback Colossus → the Ember Seed | The Crown forged itself an undying body; it can't die while its name is hidden |
-| V | Wraithmoor (`wraith`) | lv 17 | Nov 26 – Dec 16 | the Veiled Queen → the Grave Seed | The dead of Ashmere give its true name |
-| Finale | Ashmere (`crown`) | lv 23 + five lights | Dec 17 – 31 | — | **Final boss: the Hollow Crown, Thursday 31 Dec**, every hunter together, five lights, one true name (the same rule that freed Orrun) |
+| I | Verdant Reach (`grove`) | start | Oct 1 – 14 | Orrun → the Heartseed | Ashmere bought strength without labour, through Mosswatch |
+| II | Shadowmere (`shadow`) | lv 3 | Oct 8 – 21 | Garrow → the Lantern Seed | Ashmere put the lights out to hide; its blade was cut from a crown |
+| III | Frostbound Crown (`frost`) | lv 5 | Oct 22 – Nov 4 | the White Maw → the Rime Seed | Ashmere's court froze itself here waiting for its ruler, the Hollow Crown, who left to steal fire |
+| IV | Ember Wastes (`ember`) | lv 9 | Nov 5 – 25 | the Pyreback Colossus → the Ember Seed | The Crown forged itself an undying body; it can't die while its name is hidden |
+| V | Wraithmoor (`wraith`) | lv 15 | Nov 26 – Dec 16 | the Veiled Queen → the Grave Seed | The dead of Ashmere give its true name |
+| Finale | Ashmere (`crown`) | lv 21 + five lights | Dec 17 – 31 | — | **Final boss: the Hollow Crown, Thursday 31 Dec**, every hunter together, five lights, one true name (the same rule that freed Orrun) |
 
 **Threads that must carry through every Book:**
 - **The Five Lights:** each Book ends by freeing that world's keeper, who gives its Seed's light. `lightsFrom(story)` counts them, and the HUD shows LIGHTS n / 5 after Book I.

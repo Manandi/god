@@ -21,7 +21,9 @@ export function centralNow(now=new Date()){
 const addDays=(date,n)=>new Date(Date.parse(`${date}T00:00:00Z`)+n*DAY).toISOString().slice(0,10);
 /** Which boss a Thursday is (1 for 2026-10-08), and the level it asks for. */
 export const bossNumber=date=>Math.floor((Date.parse(`${date}T00:00:00Z`)-Date.parse(`${FIRST_BOSS}T00:00:00Z`))/(7*DAY))+1;
-export const bossLevel=n=>1+2*Math.max(1,n);
+// Week 1 ran two weeks (owner, 2026-10-09), so the 2026-10-15 hunt asks level 3 again and the climb
+// (+2 a week) starts a week later: 3, 3, 5, 7, 9…
+export const bossLevel=n=>1+2*Math.max(1,n-1);
 export function bossWindow(now=new Date()){
   const c=centralNow(now),open=c.dow===4&&c.date>=FIRST_BOSS;
   // The next (or current) boss Thursday, and the time until it opens or closes.
