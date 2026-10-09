@@ -2,6 +2,18 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-09 (later) · Taunt openings and Garrow's breakable crystals (Claude)
+
+Ideas taken from the soulslike references the owner shared. None of those repos has a license, so only the ideas were used, no code. Everything is in `creatures.js`, with cues and effects in `main.js`.
+- **Taunts.** After an attack that lands, a monkey (40%) or Garrow (45%, ×0.7 in phase 2) may stop to show off: a new `taunt` state.
+  - Monkeys hop and screech for 1.3 s. Garrow drums its chest and roars for 1.7 s.
+  - Blows during a taunt deal ×1.3 damage and ×1.5 poise damage, so it's a real punish window.
+  - The cue reads "PUNISH IT".
+- **Breakable back crystals (Garrow, phase 2).** A `crystal` hurt volume sits on its back, so it can only be reached from behind. It takes ×1.2 damage.
+  - After 12% of Garrow's max health in crystal damage, the crystals shatter: the back crystals vanish, Garrow topples (open to a Root Strike), and it can no longer choose the shard barrage.
+  - Respawning restores the crystals.
+- Checks: Garrow taunted after 5/12 landed chops, and a 10-damage hit during a taunt dealt 13. The crystals broke after 5 back hits, Garrow toppled, and barrage was no longer picked. Monkeys taunted after 6/10 landed flurries. The fight test, the quest test (×2) and the build all pass with no page errors.
+
 ## Latest handoff — 2026-10-09 · Week 1 runs to Oct 14; repaired shell.js and README (Claude)
 
 - **Week 1 is two weeks long** (owner: the heat wave kept people in). It runs Thu 2026-10-01 to Wed 2026-10-14, and week 2 starts Thu 2026-10-15. Every week after that is seven days.

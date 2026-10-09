@@ -1431,6 +1431,8 @@ function update(rawDt){
       else if(ev.type==='poundRing'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),ev.from,ev.to,ev.duration);sound.attack('slam');shoulderCam.punch(.4);}
       else if(ev.type==='boulder')throwBoulder(c,ev);
       else if(ev.type==='shards')throwShards(c,ev);
+      else if(ev.type==='taunt'){if(c.type==='gorilla'){sound.roar();cue('GARROW IS TAUNTING · PUNISH IT',1);}else{sound.windup('monkey','flurry');cue('IT’S SHOWING OFF · PUNISH IT',.9);}}
+      else if(ev.type==='crystalsBroken'){const at=new THREE.Vector3(ev.x,ev.y,ev.z);sound.erupt();sound.topple();slowMo(.35,.5);shoulderCam.punch(.5);effects.burst(at,new THREE.Vector3(0,1,0),true);effects.chips(at);spikesAt(c.x,c.z,6,1.2);toast('BACK CRYSTALS SHATTERED','Garrow is down, and it has nothing left to throw. Root Strike while it’s on its back.');}
       else if(ev.type==='grabbed'){cue('CAUGHT',.8);shoulderCam.punch(.35);sound.attack('charge');}
       else if(ev.type==='grabSlam'){sound.thud();sound.attack('slam');shoulderCam.punch(.6);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,2,.25);effects.chips(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z));}
       else if(ev.type==='roar'){sound.roar();shoulderCam.punch(.5);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.35);}
