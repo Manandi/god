@@ -85,13 +85,16 @@ export function weekKey(date=new Date()){
 // Challenge weeks run Thursday to Wednesday (owner, 2026-10-07): week 1 is launch day, Thursday
 // 2026-10-01, to Wednesday 2026-10-07, and each new week starts on boss day. The weekly quest, its
 // step up and its bonus follow these weeks; the weekly world and cloud saves keep weekKey above.
-export const CHALLENGE_START='2026-10-01';
+// Week 1 runs two weeks, to Wednesday 2026-10-14 (owner, 2026-10-09: the heat wave kept people in);
+// week 2 starts Thursday 2026-10-15, and every week after is seven days again.
+export const CHALLENGE_START='2026-10-01',WEEK1_END='2026-10-15';
 export function planWeekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+3)%7);
-  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+  const key=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+  return key>=CHALLENGE_START&&key<WEEK1_END?CHALLENGE_START:key;
 }
-/** Which week of the 90-day challenge it is (1 from launch day). */
-export const challengeWeek=(date=new Date())=>Math.max(1,Math.floor(daysBetween(CHALLENGE_START,planWeekKey(date))/7)+1);
+/** Which week of the 90-day challenge it is (1 from launch day, 2 from 2026-10-15). */
+export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return k<WEEK1_END?1:Math.floor(daysBetween(WEEK1_END,k)/7)+2;};
 /** A Monday-week key from before 2026-10-07 as the Thursday week it falls in (never before launch). */
 const thursdayOf=key=>{const k=planWeekKey(new Date(`${key}T12:00:00`));return k<CHALLENGE_START?CHALLENGE_START:k;};
 const isThursday=key=>new Date(`${key}T12:00:00Z`).getUTCDay()===4;
@@ -136,7 +139,10 @@ export function loadProfile(){
       if(profile.program.key>CHALLENGE_START&&profile.program.week>1)profile.program.week--;
       profile.program.key=thursdayOf(profile.program.key);
     }
-    profile.claimed=profile.claimed.map(v=>{const m=/^(\d{4}-\d{2}-\d{2}):plan$/.exec(v);return m&&!isThursday(m[1])?`${thursdayOf(m[1])}:plan`:v;}).filter((v,i,a)=>a.indexOf(v)===i);
+    // Week 1 grew to two weeks (2026-10-09): a browser that already moved to the 2026-10-08 week goes
+    // back to week 1, and the step up it took is undone (it comes back on 2026-10-15 if earned).
+    if(profile.program.key>CHALLENGE_START&&profile.program.key<WEEK1_END){if(profile.program.week>1)profile.program.week--;profile.program.key=CHALLENGE_START;}
+    profile.claimed=profile.claimed.map(v=>{const m=/^(\d{4}-\d{2}-\d{2}):plan$/.exec(v);return m&&!isThursday(m[1])?`${thursdayOf(m[1])}:plan`:m&&m[1]>CHALLENGE_START&&m[1]<WEEK1_END?`${CHALLENGE_START}:plan`:v;}).filter((v,i,a)=>a.indexOf(v)===i);
     const appearance=raw.appearance||{};
     profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
@@ -291,11 +297,12 @@ export {rawStats};
 // the activity. Finishing half or more of a week moves the plan up a step the
 // next week; otherwise the step repeats.
 const addDays=(key,n)=>{const d=new Date(`${key}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
+const weekEnd=key=>key===CHALLENGE_START?WEEK1_END:addDays(key,7);
 // Anything you log counts toward the plan item of its kind (owner, 2026-10-07: a workout logged
 // under OTHER ACTIVITY left the plan's workout unchecked): a plan check, or a free log at least as
 // big as one check. One a day per item.
 const counts=(a,i)=>a.item===i.id||(!a.item&&a.kind===i.kind&&a.amount>=Math.min(i.amount,i.amountUS||i.amount)-.01);
-function doneIn(key,item){const days=new Set();return profile.activities.filter(a=>counts(a,item)&&a.date>=key&&a.date<addDays(key,7)&&!days.has(a.date)&&days.add(a.date));}
+function doneIn(key,item){const days=new Set();return profile.activities.filter(a=>counts(a,item)&&a.date>=key&&a.date<weekEnd(key)&&!days.has(a.date)&&days.add(a.date));}
 /** The week's bonus: week 1 pays a little more so a full first week still reaches level 3 with one workout. */
 export const stepBonus=week=>planStep(week).bonus||PLAN_BONUS;
 function claimWeek(key,week){if(profile.claimed.includes(`${key}:plan`))return false;profile.claimed.push(`${key}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=stepBonus(week);return true;}
