@@ -2,6 +2,13 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Note — 2026-10-14 · The site went down: the repo was renamed and made private (Claude)
+
+- About 04:07 UTC, `Manandi/god` was renamed to `Hollow-roots` and made private. GitHub Pages stops serving private repos on the free plan, and the site address follows the repo name, so https://manandi.github.io/god/ returned 404.
+- The owner made it public again, renamed it back to `god`, and set Pages → Source to GitHub Actions. The last deploy was re-run (2ad8853, success).
+- Verified: the page returns 200, and the bundle, CSS, `sw.js` and every GLB load. The default lobby is still HROOTS.
+- **Keep the repo public and named `god`.** The link and the lobby depend on it.
+
 ## Latest handoff — 2026-10-14 · Week 1 through Thursday Oct 15; log your own workout (Claude)
 
 - **Week 1 now ends Thursday 2026-10-15**, the first hunt day. A friend starting on Wednesday night can log a step day Wednesday and Thursday, plus the workout and learning. That finishes week 1 with its bonus (535 XP, level 3) in time for Thursday's hunt.
