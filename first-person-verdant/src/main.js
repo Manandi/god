@@ -679,7 +679,7 @@ devPanel.addEventListener('click',e=>{
 // --------------------------------------------------------------------- co-op
 // Everyone enters the same weekly world. Positions and fights are shared, but
 // memories, nests and dialogue remain personal quest progress.
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getStage:()=>story.stage,getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
   defaultCode:weeklyLobbyCode()});
 
 // ---------------------------------------------------------------- encounters
@@ -744,7 +744,7 @@ function updateEncounters(){
   if(ch&&!story.cleared.has(ch.id)&&!spawned.has(ch.id)&&(step==='find'||step==='fight')){
     const d=Math.hypot(player.x-ch.site.x,player.z-ch.site.z);
     // A guest asks the host, whose game runs the nest (it rises for everyone).
-    if(d<(step==='fight'?24:12)){if(!coop.guest)spawnEncounter(ch.id);else if(elapsed-askedAt>1){askedAt=elapsed;coop.sendSpawn(ch.id);}}
+    if(d<(step==='fight'?24:12)){if(!coop.guest||!nearTo(player,coop.hostPos()))spawnEncounter(ch.id);else if(elapsed-askedAt>1){askedAt=elapsed;coop.sendSpawn(ch.id);}}
   }
   for(const id of spawned){
     const mobs=creatures.filter(c=>c.chapter===id);
@@ -1056,13 +1056,28 @@ const ev_attack_slam=c=>c.state==='attack'&&c.attack==='slam'&&c.t<.02;
 // Host-authoritative (coop.js): the host's game runs every creature and sends a
 // snapshot ten times a second; guests follow it and send their hits to the host.
 const SNAP_KEYS=['x','z','heading','state','t','attack','health','maxHealth','alive','enraged','poise'];
+// Team fights only where you are together (owner, 2026-10-14: "it feels awful with two people"). A creature is
+// shared, run by the host's game, only while the host and you are both within SHARE_R of it; everywhere else
+// each game runs its own creatures. Garrow and the lantern thieves follow each explorer's own story, so they
+// are shared only when the host is at the same point of that quest (do it together, or each on your own).
+const SHARE_R=36,questPart=st=>!st?'?':STAGES.findIndex(x=>x.id===st)<STAGES.findIndex(x=>x.id==='shadow_seal')?'before':st;
+const storyCreature=c=>c.type==='gorilla'||c.lantern!==undefined,sameQuest=st=>questPart(st)===questPart(story.stage);
+/** Guest: a story creature the host is not at the same point of the quest for (so it stays this game's own). */
+const personal=c=>storyCreature(c)&&!sameQuest(coop.hostPos()?.stage);
+/** Host: can this other explorer share this creature with me? */
+const sharesWith=(c,o)=>nearTo(c,o)&&(!storyCreature(c)||sameQuest(o.stage));
+const nearTo=(c,o,r=SHARE_R)=>!!o&&Math.hypot(c.x-o.x,c.z-o.z)<r;
+/** Guest: is this creature in a fight with the host right now? */
+function sharedHere(c){if(!coop.guest||personal(c))return false;const h=coop.hostPos();return nearTo(c,h)&&nearTo(c,player);}
 const byNet=id=>creatures.find(c=>c.netId===id);
 let snapTimer=0,snapTick=0;
 function sendWorld(dt){
   if((snapTimer-=dt)>0)return;snapTimer=.1;snapTick++;
   const out=[];
+  const others=coop.others();
   for(const c of creatures){
     if(!c.netId||(c.state==='dormant'&&snapTick%10))continue;   // sleeping ones once a second
+    if(!nearTo(c,player)||!others.some(o=>sharesWith(c,o)))continue;   // only what you are fighting together
     const s={id:c.netId,vis:c.root.visible};for(const k of SNAP_KEYS)s[k]=c[k];
     if(c.isBoss)s.shellBroken=!!c.shellBroken;
     if(c===warden){Object.assign(s,{phase:c.phase,awake:c.awake,clubBroken:!!c.clubBroken,chargeRun:!!c.chargeRun,sealed:!!c.sealed});if(c.attack==='erupt'&&c.plan)s.plan=c.plan;}
@@ -1073,7 +1088,7 @@ function sendWorld(dt){
 function applyWorld(world){
   for(const s of world.c||[]){
     const [x,chId,k]=s.id.split(':'),ch=x==='x'&&CHAPTERS.find(c=>c.id===chId);
-    const c=byNet(s.id)||(ch&&s.state!=='dormant'?extraFor(ch,+k):null);if(!c)continue;
+    const c=byNet(s.id)||(ch&&s.state!=='dormant'?extraFor(ch,+k):null);if(!c||!sharedHere(c))continue;
     c.net=s;
     // The host's nest rising: show it rising here too.
     if(c.chapter&&c.state==='dormant'&&s.state!=='dormant'&&!spawned.has(c.chapter)&&!story.cleared.has(c.chapter)){spawned.add(c.chapter);sound.attack('slam');sound.enrage();cue('THE HOLLOWED RISE',1.4);}
@@ -1106,8 +1121,10 @@ function applyTeamHit(h){
  * has room, and keep their explorer while they can.
  */
 function assignTargets(local){
-  const who=[{...local,key:'me',ref:local},...coop.others().map(o=>({...o,ref:o}))],load=new Map(who.map(o=>[o.key,0])),out=new Map();
-  const d=(c,o)=>Math.hypot(c.x-o.x,c.z-o.z),near=c=>Math.min(...who.map(o=>d(c,o)));
+  const all=[{...local,key:'me',ref:local},...coop.others().map(o=>({...o,ref:o}))],load=new Map(all.map(o=>[o.key,0])),out=new Map();
+  // A creature only goes after someone who is fighting it together with the host (both close to it).
+  const whoFor=c=>!nearTo(c,local)?[all[0]]:all.filter(o=>o.key==='me'||sharesWith(c,o));
+  const d=(c,o)=>Math.hypot(c.x-o.x,c.z-o.z),near=c=>Math.min(...all.map(o=>d(c,o)));
   const small=[];
   for(const c of creatures){
     if(c===warden||c.isBoss||!c.alive||c.state==='dormant')out.set(c,{o:teamTarget(c,local),key:null});
@@ -1115,7 +1132,7 @@ function assignTargets(local){
   }
   small.sort((a,b)=>near(a)-near(b));
   for(const c of small){
-    const byDist=[...who].sort((a,b)=>d(c,a)-d(c,b)),reach=d(c,byDist[0])+15;
+    const who=whoFor(c),byDist=[...who].sort((a,b)=>d(c,a)-d(c,b)),reach=d(c,byDist[0])+15;
     const free=o=>load.get(o.key)<2&&d(c,o)<reach;
     const pick=byDist.find(o=>o.key===c.targetKey&&free(o))||byDist.find(free)||byDist[0];
     load.set(pick.key,load.get(pick.key)+1);out.set(c,{o:pick.ref,key:pick.key});
@@ -1125,7 +1142,8 @@ function assignTargets(local){
 /** Host: the explorer each creature goes after (the nearest one). */
 function teamTarget(c,local){
   let best=local,bd=Math.hypot(c.x-local.x,c.z-local.z);
-  for(const o of coop.others()){const d=Math.hypot(c.x-o.x,c.z-o.z);if(d<bd){bd=d;best=o;}}
+  if(!nearTo(c,local))return best;
+  for(const o of coop.others()){if(!nearTo(c,o))continue;const d=Math.hypot(c.x-o.x,c.z-o.z);if(d<bd){bd=d;best=o;}}
   return best;
 }
 /** Host, when a creature is after someone else: does its attack still catch you? */
@@ -1162,7 +1180,7 @@ function creatureDefeated(c){
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
 function strikeCreature(c,params){
   const res=c.hit(params);
-  if(coop.guest&&c.netId)coop.sendHit({id:c.netId,...params});
+  if(c.remote&&c.netId)coop.sendHit({id:c.netId,...params});
   return res;
 }
 function incomingStrike(c,ev){
@@ -1177,7 +1195,7 @@ function incomingStrike(c,ev){
   // The Old Shell's quake comes from all around and can be guarded; other rings must be jumped or dashed.
   if(combat.guarding&&(inFront||ev.quake)&&(!ev.ring||ev.quake)){
     if(combat.parrying&&c.deflect()){
-      if(coop.guest&&c.netId)coop.sendHit({id:c.netId,deflect:true});
+      if(c.remote&&c.netId)coop.sendHit({id:c.netId,deflect:true});
       sound.parry();slowMo(.35,.35);hitstop=Math.max(hitstop,.12);effects.burst(new THREE.Vector3(player.x+toward.x/tl*.6,groundY(player.x,player.z)+1.2,player.z+toward.z/tl*.6),new THREE.Vector3(-toward.x/tl,0,-toward.z/tl),true);
       player.stamina=Math.min(STAMINA.max,player.stamina+mech.parryReward);player.winded=false;
       cue('PARRY · RIPOSTE',.9);debug.note(`${c.type} ${ev.label} → PARRIED (guard raised ${(combat.clock-combat.guardSince).toFixed(2)} s before)`,elapsed);return;
@@ -1413,12 +1431,12 @@ function update(rawDt){
   if(team&&coop.authority)scaleBosses();
   const targets=team&&!guest?assignTargets(playerPos):null;
   for(const c of creatures){
-    c.remote=guest;
+    c.remote=guest&&sharedHere(c);
     // The host's creatures go after their explorer (assignTargets); a guest's follow the host's snapshots.
     const pick=targets?.get(c),target=pick?.o||playerPos;
     c.target=target;c.targetKey=pick?.key??'me';
     const events=frozen?[]:c.update(dt,elapsed,{player:target,playerGrounded:target===playerPos?player.grounded:target.y-groundY(target.x,target.z)<.3,grid:collisionGrid,mayAttack,canWake:huntLive()});
-    if(guest&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
+    if(c.remote&&c.net){const k=1-Math.exp(-8*dt);c.x+=(c.net.x-c.x)*k;c.z+=(c.net.z-c.z)*k;c.heading+=angleTo(c.heading,c.net.heading)*k;c.place?.();}
     // Chasing someone else, its blows are judged against that explorer; check whether one also catches you.
     if(target!==playerPos){const key=c.state+c.attack;if(c.localKey!==key){c.localKey=key;c.localHit=false;}
       if(!c.localHit&&strikesLocal(c)){c.localHit=true;const a=c.attackInfo||{};incomingStrike(c,{attack:c.attack,label:a.label||c.attack,kind:a.kind||'heavy',damage:a.damage||1});}

@@ -2,6 +2,29 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-14 (night) · Co-op lag fixed: share only what you fight together (Claude)
+
+The owner said it felt awful with two people in the lobby: "end the lag, bosses and quests are still fought together".
+
+**Cause:** with two players in the permanent lobby, the guest's game handed over **every** creature in its world to the host's snapshots (`c.remote = coop.guest`), wherever either player was. Away from the host, the guest's enemies froze, slid or ignored them. The host also sent the whole world at 10 Hz, and Garrow, the thieves and chapter states were overwritten by the host's story.
+
+**Fix (`main.js`, `coop.js`):**
+- A creature is shared (run by the host) only while the host **and** the guest are both within `SHARE_R` = 36 m of it (`sharedHere()`). Everywhere else each game runs its own creatures.
+- Team fights are unchanged when you are together: Orrun's hunt, nests and Shadowmere fights.
+- **Garrow and the lantern thieves** (story creatures) are shared only when both players are at the same point of the Book II quest: before the seal, at the seal, at Garrow, or after. Otherwise each keeps its own.
+  - Each game now sends its story stage in `pos`, once a second (`getStage`, `coop.others()[].stage`, `coop.hostPos().stage`).
+- The host's snapshot carries only creatures it shares with someone. Targeting (`assignTargets`, `teamTarget`) only goes after explorers who share that creature.
+- Hits go to the host only for shared creatures (`c.remote`).
+- A guest whose host is far away raises its own nest instead of waiting on the host.
+- `pos` messages are smaller: position 10×/s, but name, look and stage only once a second.
+- Remote figures turn the short way round.
+
+**Checks:** two players in one browser on a local test lobby (`?lobby=TESTCO&net=local`, Supabase aborted).
+- Apart, the guest's monkey is local and attacks the guest.
+- Together, it is the host's, matching the host to within 0.2 m and in the same state.
+- Garrow is shared at the same stage and stays local when the host is at a different stage.
+- The solo fight test passes, with no page errors.
+
 ## Latest handoff — 2026-10-14 (later) · Escape toggles the pause menu (Claude)
 
 - Escape now toggles the pause menu, as the owner asked. While the mouse is locked the browser keeps the first Escape for itself, so the `pointerlockchange` handler opens the menu as before. Escape again on the menu calls `resume()`, back into the game with the mouse re-locked.
