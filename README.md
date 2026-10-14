@@ -2,6 +2,20 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-14 · Week 1 through Thursday Oct 15; log your own workout (Claude)
+
+- **Week 1 now ends Thursday 2026-10-15**, the first hunt day. A friend starting on Wednesday night can log a step day Wednesday and Thursday, plus the workout and learning. That finishes week 1 with its bonus (535 XP, level 3) in time for Thursday's hunt.
+  - Week 2 is Fri 10-16 to Wed 10-21. It's still keyed by Thursday `WEEK2_KEY` = 10-15, as the server RPCs require, and starts at `weekStart()`. After that, weeks are Thursday to Wednesday again.
+  - `planWeekKey()` now decides week 1 by date (`WEEK1_END` = 10-16, exclusive). `weekly-ping` uses the same rule (still not deployed).
+- **Log your own workout:**
+  - The plan's home workout has an "OR LOG YOUR OWN WORKOUT ✓" link on the weekly page, and an "✓ I DID MY OWN WORKOUT" button on the workout page.
+  - Either one ticks the plan's workout (`checkPlanItem(id, own)` → `logActivity(…, own)`), and the Activity feed says "finished a workout of their own".
+- Checks (faked clock, Supabase aborted):
+  - Wednesday 10-14: steps, own workout and learning give 3/4 and 135 XP.
+  - Thursday 10-15: steps complete the week, +350, 535 XP, level 3, and the lv3 hunt is open.
+  - Friday 10-16: week 2, step 2, next hunt 10-22 at lv5.
+  - The own-workout button on the workout page works, and the build passes.
+
 ## Latest handoff — 2026-10-09 (evening) · Schedule moved a week later after the longer week 1 (Claude)
 
 The owner said: "move everything forward if you have to". Week 1 now runs Oct 1 – 14, so the schedule after it moves a week later.

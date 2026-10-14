@@ -23,8 +23,8 @@ function thursdayWeek(localDate: string) {
   const date = new Date(`${localDate}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 3) % 7);
   const week = date.toISOString().slice(0, 10);
-  // Week 1 runs two weeks, 2026-10-01 to 2026-10-14 (matches planWeekKey in the game's profile.js).
-  return week >= '2026-10-01' && week < '2026-10-15' ? '2026-10-01' : week;
+  // Week 1 runs 2026-10-01 to Thursday 2026-10-15 (matches planWeekKey in the game's profile.js).
+  return localDate >= '2026-10-01' && localDate < '2026-10-16' ? '2026-10-01' : week;
 }
 
 Deno.serve(async request => {
