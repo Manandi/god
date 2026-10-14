@@ -2,6 +2,12 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-14 (later) · Escape toggles the pause menu (Claude)
+
+- Escape now toggles the pause menu, as the owner asked. While the mouse is locked the browser keeps the first Escape for itself, so the `pointerlockchange` handler opens the menu as before. Escape again on the menu calls `resume()`, back into the game with the mouse re-locked.
+- If the game is running without the mouse locked, Escape opens the menu directly. Dialogue keeps its own Escape (close the conversation). See the keydown handler in `main.js`.
+- Checks: Playwright with Supabase aborted. Releasing the mouse opened the menu, Escape went back into the game (re-locked), no page errors, and the build passes.
+
 ## Note — 2026-10-14 · The site went down: the repo was renamed and made private (Claude)
 
 - About 04:07 UTC, `Manandi/god` was renamed to `Hollow-roots` and made private. GitHub Pages stops serving private repos on the free plan, and the site address follows the repo name, so https://manandi.github.io/god/ returned 404.

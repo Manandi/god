@@ -180,6 +180,12 @@ window.addEventListener('keydown',e=>{
   if(e.code===DEV_KEY&&!e.repeat){e.preventDefault();toggleDev();return;}
   if(e.code==='F4'&&!e.repeat){e.preventDefault();togglePerf();return;}
   if(e.code==='F3'){e.preventDefault();debug.toggle();return;}
+  // Escape toggles the pause menu (owner, 2026-10-14): press it again on the menu to go straight back in.
+  // (While the mouse is locked the browser keeps Escape to itself and pointerlockchange opens the menu.)
+  if(e.code==='Escape'&&!e.repeat&&started&&!done&&!journalOpen&&!dev.open&&!dialogue){
+    if(paused&&shell?.view==='menu'){e.preventDefault();resume();return;}
+    if(!paused&&shell?.view==='game'&&!document.pointerLockElement){e.preventDefault();paused=true;shell.show('menu');$('hud').classList.add('hidden');return;}
+  }
   if(e.code==='KeyJ'&&started){toggleJournal(!journalOpen);return;}
   if(e.repeat)return;
   if(e.code==='KeyM'&&started&&!journalOpen){paused=true;$('hud').classList.add('hidden');shell.show('map');if(document.pointerLockElement)document.exitPointerLock();return;}
