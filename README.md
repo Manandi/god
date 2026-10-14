@@ -7,6 +7,7 @@ This is the shared status file for work on the game from different devices or AI
 The owner started a **separate** game idea: an open-world Roblox spinning-top battler (working title Spinforge), with crates as the revenue plan. It lives in `roblox-beyblade/` and does not touch the Hollow Roots game or its saves. Read `roblox-beyblade/PROJECT.md` for the design, decisions and milestones.
 - Milestone 1 is written: original part and crate-odds config, a tilt-controlled bey (WASD, jump, mouse tilt, ramp launch, dive-slam, mobile/gamepad input) and a test stadium.
 - Checks: `luau-analyze` syntax pass and `roblox-beyblade/tools/run_tests.sh` (odds total 100%, Ultra Legendary +10%, simulated rolls). **Not run in Roblox Studio yet**, so the feel is untested.
+- Later 2026-10-14: every part now has an original in-engine design (`BeyDesigns.lua`, `BeyVisuals.lua`). The owner asked to copy the wiki's stats for rare parts; that was declined (only the trade-off archetypes are used). Not yet seen in Studio.
 - Parts and names are original on purpose; see the legal note in PROJECT.md. The work happened on branch `claude/gallant-cray-rx5f06`.
 
 ## Latest handoff — 2026-10-09 (evening) · Schedule moved a week later after the longer week 1 (Claude)

@@ -22,6 +22,7 @@ This project is **separate from The Hollow Roots** (`first-person-verdant/`). Do
 | Crates | Every outcome and its **exact odds** must be shown before purchase (Roblox paid-random-items policy), including indirect purchases (items bought with currency that Robux can buy). Anything that boosts odds must be explained and the displayed odds update live. Odds must total 100%. See [policy](https://create.roblox.com/docs/en-us/production/monetization/paid-random-items). Trading paid-random results has extra rules for ineligible users; design trading with that in mind. |
 | Pay-to-win | Owner's call: rare parts raise stats, the grind reaches the same cap, and only the Ultra Legendary tier is 10% above it. **Open question:** in PvP that tier is a straight purchase advantage. Options are to keep Ultra Legendary out of ranked/matchmade PvP, or give it its own bracket. |
 | Physics authority | Story fights vs AI villains use **client-owned physics** (cheap, no one is competing). **PvP must move to Server Authority** (Roblox's opt-in prediction system) because a client that owns a part has full say over its physics and exploiters can fake hits. Test fast spinning collisions early; mispredictions have been reported. |
+| Wiki stats (owner asked 2026-10-14 to copy them for rare parts) | **Not copied.** The wiki's part catalog (real names tied to real numbers) is someone else's work, and the owner has no licence. The wiki is used only to learn the *trade-offs* (attack types give up stamina, defense types are heavy, balance types sit between). Stat weights in `BeyConfig` follow those archetypes with original numbers. If a licence deal happens, real data can be added then. |
 | Rarity data | `src/shared/BeyConfig.lua` is the single source. The shop UI reads odds from `GetDisplayOdds()`, never a copy. |
 | Model | Sonnet 5.5 for step-by-step scripting and tuning. Opus 5.5 is worth switching to for the Server Authority move and netcode debugging. |
 
@@ -31,6 +32,8 @@ This project is **separate from The Hollow Roots** (`first-person-verdant/`). Do
 |---|---|
 | `default.project.json` | [Rojo](https://rojo.space) project: `rojo serve`, then connect from Studio. |
 | `src/shared/BeyConfig.lua` | 33 original parts (3 slots × 6 rarities), level scaling, movement tuning, two crate odds tables, `RollBox`, `GetDisplayOdds`. Validates at load: odds total exactly 10000 bp, stats match each rarity's budget, Ultra Legendary is +10% of the best Legendary. |
+| `src/shared/BeyDesigns.lua` | Looks of every part, as data: style, blade count, primary and accent colours. |
+| `src/shared/BeyVisuals.lua` | Builds the bey from those designs out of basic parts, welded to the spinning hub: 5 layer styles (Spike, Hook, Blade, Petal, Armor), 4 disc styles, 5 driver styles. Epic+ get a glowing trim ring, Legendary+ sparks, Ultra Legendary a light. |
 | `src/server/StadiumBuilder.server.lua` | Builds a test floor, a 25° ramp and three knockable target dummies if there is no `Stadium` in Workspace. Sets gravity to 140. |
 | `src/server/BeySpawner.server.lua` | Builds each player's bey (invisible ball body + hinged spinning disc), gives them network ownership, parks the avatar, and handles the slam hit with basic checks (distance, cooldown, value types). |
 | `src/client/BeyController.client.lua` | Camera-relative movement, jump, mouse/touch/stick tilt, ramp takeoff boost, glide and dive from tilt, dive-slam, scriptable third-person camera, debug HUD, touch SLAM button. |
@@ -57,6 +60,14 @@ Known first-guess weak spots to look at when playtesting:
 - The avatar is anchored off to the side, so default Roblox character controls do nothing. The open world will need an on-foot mode and a bey mode.
 - Body orientation (tilt) is set from the client's local `AlignOrientation`; other players see the body position and the spinning disc but not necessarily the tilt. This is solved properly by the Server Authority move.
 - The slam only affects dummies. Bey-vs-bey hits, damage and spin/stamina are milestone 2.
+
+### Designs: where they stand
+
+These are generated in-engine from simple shapes, so they are distinct and readable but not hand-sculpted.
+For truly polished beys the plan is Blender meshes (the owner's other game already has a Blender pipeline in
+`first-person-verdant/tools/blender/`) uploaded to Roblox, one mesh per layer/disc/driver, replacing the builder per part
+without changing `BeyDesigns` ids. Do that after the gameplay feel is settled. `tools/run_tests.sh` checks that every part has
+a valid, unique-looking design; it cannot judge how they look, so review them in Studio.
 
 ## Milestones
 

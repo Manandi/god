@@ -48,4 +48,22 @@ for _, slot in ipairs(BeyConfig.Slots) do
 	print(string.format("%-6s best legendary %d, ultra %d (+%.1f%%)", slot, best, ul, (ul / best - 1) * 100))
 end
 
+-- Every part must have a design with a style that its slot's builder knows.
+for id, part in pairs(BeyConfig.Parts) do
+	local d = BeyDesigns.Parts[id]
+	assert(d, "no design for " .. id)
+	assert(BeyDesigns.Styles[part.Slot][d.Style], id .. ": unknown " .. part.Slot .. " style " .. tostring(d.Style))
+	assert(d.Primary and d.Accent, id .. ": missing colours")
+	if part.Slot == "Layer" then assert(d.Count and d.Count >= 3 and d.Count <= 8, id .. ": bad blade count") end
+end
+for id in pairs(BeyDesigns.Parts) do assert(BeyConfig.Parts[id], "design for unknown part " .. id) end
+-- Two parts of one slot should not look identical (style + colours).
+local seen = {}
+for id, part in pairs(BeyConfig.Parts) do
+	local d = BeyDesigns.Parts[id]
+	local key = part.Slot .. d.Style .. tostring(d.Count) .. d.Primary[1] .. d.Accent[1]
+	assert(not seen[key], id .. " looks identical to " .. tostring(seen[key]))
+	seen[key] = id
+end
+print("designs OK for all parts")
 print("ALL OK")

@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 
 local BeyConfig = require(ReplicatedStorage:WaitForChild("BeyConfig"))
+local BeyVisuals = require(ReplicatedStorage:WaitForChild("BeyVisuals"))
 local M = BeyConfig.Movement
 
 local remotes = Instance.new("Folder")
@@ -31,6 +32,7 @@ local function buildBey(player)
 
 	local model = Instance.new("Model")
 	model.Name = tostring(player.UserId)
+	model.Parent = beysFolder -- parent early so welds capture the layout
 
 	-- Body: an invisible ball that does the physics. AlignOrientation stops it rolling.
 	local body = Instance.new("Part")
@@ -60,11 +62,11 @@ local function buildBey(player)
 	align.CFrame = CFrame.new()
 	align.Parent = model
 
-	-- Top: the visible spinning disc, hinged so its axis follows the body's up axis.
+	-- Hub: the small spinning core. BeyVisuals welds the whole designed bey to it.
 	local top = Instance.new("Part")
 	top.Name = "Top"
 	top.Shape = Enum.PartType.Cylinder
-	top.Size = Vector3.new(0.9, 4.4, 4.4) -- cylinder axis is X; rotated to stand upright below
+	top.Size = Vector3.new(0.8, 1.2, 1.2) -- cylinder axis is X; rotated to stand upright below
 	top.Color = BeyConfig.RarityColors[BeyConfig.Parts[partIds.Layer].Rarity]
 	top.Material = Enum.Material.Metal
 	top.CanCollide = false
@@ -92,6 +94,8 @@ local function buildBey(player)
 	hinge.AngularVelocity = 30 -- rad/s; stamina drain will drive this in milestone 2
 	hinge.Parent = model
 
+	BeyVisuals.Attach(top, body.CFrame, partIds, model)
+
 	return model, body
 end
 
@@ -115,7 +119,6 @@ local function onCharacter(player, character)
 	end
 	parkAvatar(character)
 	local model, body = buildBey(player)
-	model.Parent = beysFolder
 	body:SetNetworkOwner(player)
 	beyByPlayer[player] = model
 end

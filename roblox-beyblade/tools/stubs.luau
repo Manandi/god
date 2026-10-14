@@ -1,5 +1,8 @@
 -- Minimal Roblox stand-ins so BeyConfig can run under the plain `luau` CLI.
-Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
+Color3 = {
+	fromRGB = function(r, g, b) return { r, g, b } end,
+	fromHex = function(h) assert(h:match("^#%x%x%x%x%x%x$"), "bad hex colour " .. h) return { h } end,
+}
 Vector3 = { new = function(x, y, z) return { X = x, Y = y, Z = z } end }
 local seed = 12345
 Random = { new = function()
