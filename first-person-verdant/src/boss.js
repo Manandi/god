@@ -20,36 +20,38 @@ const ROAM = 17;                                        // it never leaves the p
 const ATTACKS = {
   bite:   { clip: 'Bite', dur: 2.8, windup: .7, kind: 'light', damage: 1, label: 'Warden bite', parry: true,
             hits: [[.72, .9], [1.66, 1.84]], lunge: [[.62, .85, 1.6], [1.55, 1.8, 1.1]], range: [0, 6.5], arc: .75 },
-  stomp:  { clip: 'Stomp', dur: 2.6, windup: 1.0, kind: 'heavy', damage: 2, label: 'root stomp', impact: [1.08, 1.2],
+  stomp:  { clip: 'Stomp', dur: 2.6, windup: 1.0, kind: 'heavy', damage: 3, label: 'root stomp', impact: [1.08, 1.2],
             wave: { from: 2.2, to: 7, duration: .65 }, range: [0, 7.5], arc: 1.0 },   // the one big ring: jump or dash it
   sweep:  { clip: 'Sweep', dur: 2.2, windup: .7, kind: 'heavy', damage: 2, label: 'tail sweep', hits: [[.72, 1.08]], range: [0, 9.5], arc: 9 },
-  charge: { clip: 'Charge', windup: .9, run: 2.3, speed: 9, recover: 1.3, kind: 'heavy', damage: 2, label: 'charge', range: [12, 40], arc: .6 },
+  charge: { clip: 'Charge', windup: .9, run: 2.3, speed: 10, recover: 1.3, kind: 'heavy', damage: 3, label: 'charge', range: [12, 40], arc: .6 },
   // A full turn with the tail held out flat: nowhere near it is safe, so dash through or back off.
   tailspin: { clip: 'TailSpin', dur: 2.6, windup: .8, kind: 'heavy', damage: 2, label: 'tail spin', hits: [[.86, 1.5]], range: [0, 9], arc: 9 },
   // Turns its back and hammers the tail down where you stood; the ground cracks around the tip.
   tailslam: { clip: 'TailSlam', dur: 2.8, windup: .95, kind: 'heavy', damage: 2, label: 'tail hammer', hits: [[1.04, 1.2]], impact: [1.08, 1.2],
               wave: { from: 1.9, to: 3.6, duration: .4 }, at: 'tail', range: [4.5, 10.5], arc: 9 },   // a small crack at the club only
   // Crouches, then leaps at you and lands shell-first. No shockwave: the landing itself is the danger.
-  pounce: { clip: 'Pounce', dur: 2.6, windup: .75, kind: 'heavy', damage: 2, label: 'pounce', impact: [1.18, 1.32], at: 'body',
+  pounce: { clip: 'Pounce', dur: 2.6, windup: .75, kind: 'heavy', damage: 3, label: 'pounce', impact: [1.18, 1.32], at: 'body',
             lunge: [[.75, 1.2, 9]], close: 3.2, range: [5.5, 17], arc: .9 },
   erupt:  { clip: 'Erupt', dur: 2.4, windup: .95, kind: 'heavy', damage: 1, label: 'root eruption', range: [3, 30], arc: 9, phase: 2 }
 };
 // Follow-ups: some attacks flow straight into another, Monster Hunter style,
 // with no recovery between them. [next attack, chance in phase 1, phase 2, max distance].
-const FOLLOW = { bite: ['tailspin', .2, .45, 6], stomp: ['bite', .25, .4, 6.5], tailslam: ['pounce', .15, .35, 16], pounce: ['bite', .3, .5, 6] };
+const FOLLOW = { bite: ['tailspin', .3, .55, 6], stomp: ['bite', .35, .5, 6.5], tailslam: ['pounce', .25, .45, 16], pounce: ['bite', .4, .6, 6], sweep: ['stomp', .2, .4, 7] };
 const CHARGE_REST = 12;                                 // seconds before it will charge again
 const PART = { head: 1.5, neck: 1.1, shell: .45, leg: 1, tail: .8, club: 1, belly: 2.2 };
 // The root club on its tail breaks after this much damage to it: its tail
 // attacks then lose the club's reach, weight and the tail hammer's shockwave.
 const CLUB_HEALTH = 150;
-const POISE = 70, FLINCH = 110, TOPPLE_DOWN = 4.6, REEL = 2.3;
+// Tougher (owner, 2026-10-16: "Orrun was too easy"): more health, harder to topple and back up sooner.
+// With more hunters, poise and flinch scale too (`team`), so two can't keep it permanently staggered.
+const BASE_HEALTH = 1600, POISE = 95, FLINCH = 150, TOPPLE_DOWN = 3.6, REEL = 2.3;
 const lerp = THREE.MathUtils.lerp, damp = THREE.MathUtils.damp;
 
 export class Warden {
   constructor(scene, gltf) {
     this.type = 'warden'; this.name = 'ORRUN, THE HOLLOW WARDEN';
     this.x = BED.x; this.z = BED.z; this.heading = 0; this.radius = 2.7; this.focusHeight = 2.3; this.markerHeight = 5.6;
-    this.maxHealth = 1000; this.health = this.maxHealth; this.poise = POISE; this.poiseDelay = 0; this.flinch = 0;
+    this.maxHealth = BASE_HEALTH; this.health = this.maxHealth; this.team = 1; this.poise = POISE; this.poiseDelay = 0; this.flinch = 0;
     this.alive = true; this.awake = false; this.phase = 1; this.enraged = false; this.state = 'dormant'; this.t = 0;
     this.attack = null; this.cooldown = 2; this.lastEvent = ''; this.hitDone = new Set(); this.pending = [];
     this.scene = scene; this.root = new THREE.Group(); scene.add(this.root);
@@ -92,7 +94,8 @@ export class Warden {
     if (time !== null) { next.timeScale = 0; next.time = Math.min(time, next.getClip().duration); }
     else next.timeScale = speed;
   }
-  get pace() { return this.enraged ? .78 : this.phase > 1 ? .88 : 1; }
+  get pace() { return this.enraged ? .72 : this.phase > 1 ? .84 : 1; }
+  get poiseMax() { return POISE * (this.team || 1); }
   forward() { return new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading)); }
   bone(name, out = new THREE.Vector3()) { return this.bones[name] ? this.bones[name].getWorldPosition(out) : out.set(this.x, ARENA_Y + 2, this.z); }
   place() {
@@ -187,10 +190,10 @@ export class Warden {
     if (this.toppled || this.state === 'topple' || this.state === 'getup') { this.lastEvent = 'struck while down'; return out; }
     this.poise -= poise * (part === 'leg' ? 1.8 : part === 'head' ? 1.2 : 1); this.poiseDelay = 4;
     if (this.poise <= 0 && !['roar', 'awaken'].includes(this.state)) {
-      this.poise = POISE; this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('topple'); this.lastEvent = 'TOPPLED'; out.toppled = true; return out;
+      this.poise = this.poiseMax; this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('topple'); this.lastEvent = 'TOPPLED'; out.toppled = true; return out;
     }
     this.flinch += dealt * (part === 'head' ? 1.6 : 1) * (stagger >= .8 ? 1.5 : 1);
-    if (this.flinch >= FLINCH && !['roar', 'awaken', 'reeling'].includes(this.state)) {
+    if (this.flinch >= FLINCH * this.team && !['roar', 'awaken', 'reeling'].includes(this.state)) {
       this.flinch = 0; this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('stagger'); this.lastEvent = 'staggered'; out.staggered = true;
     } else this.lastEvent = this.state === 'attack' ? 'hit (kept attacking)' : 'hit';
     return out;
@@ -216,10 +219,10 @@ export class Warden {
     if (this.state === 'charge' && !this.chargeRun) return this.attack;
     return null;
   }
-  wake() { if (this.awake || !this.alive) return; if (this.scaleHealth) { this.maxHealth = Math.round(1000 * this.scaleHealth()); this.health = this.maxHealth; } this.awake = true; this.setState('awaken'); this.pending.push({ type: 'awaken' }); }
+  wake() { if (this.awake || !this.alive) return; if (this.scaleHealth) { this.maxHealth = Math.round(BASE_HEALTH * this.scaleHealth()); this.health = this.maxHealth; this.baseMax = this.maxHealth; } this.awake = true; this.setState('awaken'); this.pending.push({ type: 'awaken' }); }
   /** Back to sleep in its bed, whole again (the explorer fell or fled). */
   reset() {
-    this.alive = true; this.awake = false; this.health = this.maxHealth; this.poise = POISE; this.phase = 1; this.enraged = false; this.pendingPhase = false;
+    this.alive = true; this.awake = false; this.health = this.maxHealth; this.poise = this.poiseMax; this.phase = 1; this.enraged = false; this.pendingPhase = false;
     this.x = BED.x; this.z = BED.z; this.heading = 0; this.attack = null; this.chargeRun = false; this.clearSpots(); this.setState('dormant'); this.play('Sleep', { fade: .1 });
     this.clubHealth = CLUB_HEALTH; this.clubBroken = false; if (this.club) this.club.visible = true;
     this.setGlow(1); this.place();
@@ -240,7 +243,7 @@ export class Warden {
     if (this.sealed) { this.t += dt; this.play('Sleep'); this.mixer.update(dt); return []; }
     const events = this.pending.splice(0), p = ctx.player;   // (in a team fight a guest's host pushes wind-ups here too)
     this.t += dt; this.clock = (this.clock || 0) + dt; this.flash = Math.max(0, (this.flash || 0) - dt);
-    this.poiseDelay -= dt; if (this.poiseDelay <= 0) this.poise = Math.min(POISE, this.poise + dt * 5);
+    this.poiseDelay -= dt; if (this.poiseDelay <= 0) this.poise = Math.min(this.poiseMax, this.poise + dt * 5);
     this.flinch = Math.max(0, this.flinch - dt * 6);
     const dx = p.x - this.x, dz = p.z - this.z, dist = Math.hypot(dx, dz), toPlayer = Math.atan2(dx, dz), rel = angleTo(this.heading, toPlayer);
     const turn = (want, rate) => { this.heading += THREE.MathUtils.clamp(angleTo(this.heading, want), -rate * dt, rate * dt); };
@@ -393,7 +396,7 @@ export class Warden {
       const f = FOLLOW[this.attack], d = Math.hypot(p.x - this.x, p.z - this.z);
       if (f && !this.remote && !this.followed && d <= f[3] && Math.random() < (this.phase > 1 ? f[2] : f[1])) { this.followed = true; this.begin(f[0], p, events); return; }
       this.followed = false;
-      this.recoverTime = .5 * this.pace; this.cooldown = (1.2 + Math.random() * 1.2) * (this.enraged ? .65 : 1); this.attack = null; this.setState('recover');
+      this.recoverTime = .5 * this.pace; this.cooldown = (.7 + Math.random() * .8) * (this.enraged ? .65 : 1); this.attack = null; this.setState('recover');
     }
   }
   runCharge(dt, p, ctx, events, toPlayer) {
@@ -414,7 +417,7 @@ export class Warden {
     }
     const past = (p.x - this.x) * f.x + (p.z - this.z) * f.z < -4;
     if (this.runT >= a.run || Math.hypot(this.x - ARENA.x, this.z - ARENA.z) > ROAM - .3 || (past && this.runT > .8)) {
-      this.chargeRun = false; this.attack = null; this.recoverTime = a.recover * this.pace; this.cooldown = 1 + Math.random(); this.setState('recover');
+      this.chargeRun = false; this.attack = null; this.recoverTime = a.recover * this.pace; this.cooldown = .6 + Math.random() * .6; this.setState('recover');
       events.push({ type: 'skid', x: this.x, z: this.z });
     }
   }

@@ -98,6 +98,12 @@ export function planWeekKey(date=new Date()){
 }
 /** Which week of the 90-day challenge it is (1 from launch day, 2 from 2026-10-15). */
 export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return k===CHALLENGE_START?1:Math.floor(daysBetween(WEEK2_KEY,k)/7)+2;};
+// Joining late (owner, 2026-10-16: "a system for new players to join"): the cohort level is where someone who
+// kept up is by now, the same as this week's Thursday hunt (weeklyWorld.js bossLevel). Anyone below it earns
+// double XP for what they log until they catch up, so a friend who starts in week 4 can still reach the hunts.
+export const cohortLevel=(date=new Date())=>1+2*Math.max(1,challengeWeek(date)-1);
+export const CATCH_UP=2;
+export const catchUp=()=>realLevel()<cohortLevel()?CATCH_UP:1;
 /** A Monday-week key from before 2026-10-07 as the Thursday week it falls in (never before launch). */
 const thursdayOf=key=>{const k=planWeekKey(new Date(`${key}T12:00:00`));return k<CHALLENGE_START?CHALLENGE_START:k;};
 const isThursday=key=>new Date(`${key}T12:00:00Z`).getUTCDay()===4;
@@ -355,7 +361,7 @@ export function logActivity(kind,amount,item='',own=false){
   const daily=['workout','steps'].includes(kind);
   if(daily&&profile.activities.some(a=>a.date===date&&a.kind===kind))return kind==='workout'?'A workout is already logged today.':'Steps are already logged today.';
   const capped=Math.min(amount,kind==='steps'?100000:kind==='run'?100:kind==='study'?600:1);
-  const xp=kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5);
+  const boost=catchUp(),xp=boost*(kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5));
   profile.activities.push({kind,date,amount:capped,xp,...(item?{item}:{})});profile.activities=profile.activities.slice(-240);profile.xp+=xp;
   const plan=weeklyPlan(),done=plan.justClaimed;
   saveProfile();
@@ -363,7 +369,7 @@ export function logActivity(kind,amount,item='',own=false){
     :kind==='run'?`walked or ran ${profile.units==='imperial'?`${(capped/1.609).toFixed(1)} mi`:`${capped.toFixed(1)} km`}`:`spent ${Math.round(capped)} minutes learning something new`);
   if(done)announce('plan','completed this week’s quest');
   if(realLevel()>levelBefore)announce('level',`reached level ${realLevel()}`);
-  return `+${xp} XP${done?` · WEEK COMPLETE +${plan.bonus} XP`:''}`;
+  return `+${xp} XP${boost>1?` (CATCH-UP ×${boost})`:''}${done?` · WEEK COMPLETE +${plan.bonus} XP`:''}`;
 }
 export function classScores(){
   const s=stats(),{role,instinct}=profile.personality,scores={

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE, GARROW_SEAL } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE, GARROW_SEAL, LANTERNHOLD, inLanternhold } from './world.js';
+import { createLanternhold, LANTERNHOLD_SPOTS } from './lanternhold.js';
 import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
@@ -302,7 +303,7 @@ function nearestInteractable(){
   if(d(HOLLOW_RIFT)<2.6)return{type:'riftHome'};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
-  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
+  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2||d(LANTERNHOLD_SPOTS.rest)<3.2)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
   return null;
 }
 function interact(){
@@ -333,7 +334,7 @@ function interact(){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=mech.flasks;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=mech.flasks;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':inLanternhold(player.x,player.z)?'LANTERNHOLD · THE BRAZIER':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
 }
 
 // ----------------------------------------------------------------- dialogue
@@ -584,7 +585,7 @@ function teleport(x,z,label){
 }
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
   ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],shadowmere:[SHADOWMERE.entry.x,SHADOWMERE.entry.z-1.5,'SHADOWMERE · ROOT ARCH'],
-  shadowTrail:[SHADOWMERE.x,SHADOWMERE.z+14,'SHADOWMERE · LANTERN TRAIL'],falls:[SEED_SHRINE.x+1.2,SEED_SHRINE.z+1.5,'SHADOWMERE · THE FALLS'],clearing:[SHADOWMERE.guardian.x,SHADOWMERE.guardian.z+9,"SHADOWMERE · GARROW'S CLEARING"],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW']};
+  shadowTrail:[SHADOWMERE.x,SHADOWMERE.z+14,'SHADOWMERE · LANTERN TRAIL'],falls:[SEED_SHRINE.x+1.2,SEED_SHRINE.z+1.5,'SHADOWMERE · THE FALLS'],clearing:[SHADOWMERE.guardian.x,SHADOWMERE.guardian.z+9,"SHADOWMERE · GARROW'S CLEARING"],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW'],lanternhold:[LANTERNHOLD_SPOTS.rest.x+1.5,LANTERNHOLD_SPOTS.rest.z,'SHADOWMERE · LANTERNHOLD']};
 // Real-life stat presets on the adult norms (profile.js): median adult, top ~5%, top 0.1%, and bottom ~5%.
 const DEV_REAL_INPUTS='hollow-roots-dev-real-inputs';
 const STAT_PRESETS={
@@ -679,10 +680,55 @@ devPanel.addEventListener('click',e=>{
 // --------------------------------------------------------------------- co-op
 // Everyone enters the same weekly world. Positions and fights are shared, but
 // memories, nests and dialogue remain personal quest progress.
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getStage:()=>story.stage,getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
+// Other explorers are drawn with the same avatar as yours: their outfit, their weapon in hand, and the move
+// they are doing (attacks, guard, jumps, emotes), from what their game sends with its position.
+function remoteFigure(key,info){
+  const av=createAvatar(scene);av.setAppearance(info.appearance||{});
+  let look=JSON.stringify(info.appearance||{}),weapon='',last=null,speed=0;
+  if(info.weapon){weapon=info.weapon;av.setWeapon?.(weapon);}
+  return {root:av.root,yawOffset:0,sync(r,dt){
+    const a=av.animator;
+    if(r.appearance){const j=JSON.stringify(r.appearance);if(j!==look){look=j;av.setAppearance(r.appearance);}}
+    if(r.weapon&&r.weapon!==weapon){weapon=r.weapon;av.setWeapon?.(weapon);}
+    const p=av.root.position;if(last&&dt>0){const v=Math.hypot(p.x-last.x,p.z-last.z)/dt;speed=THREE.MathUtils.damp(speed,Math.min(v,12),8,dt);}last={x:p.x,z:p.z};
+    const an=r.anim,age=(performance.now()-(r.animAt||0))/1000,m=an?.m;
+    if(m==='dead'&&a.has('death'))a.play('death',2,12);
+    else if(an?.c&&a.has(an.c)&&age<.6)a.play(an.c,(an.t||0)+age,14);else a.stop();
+    if(m==='air')a.setLocomotion({air:1},dt);
+    else if(m==='guard')a.setLocomotion({guard:1},dt/.76);
+    else if(m&&m!=='dead'&&a.has(m))a.setLocomotion({[m]:1},dt/a.duration(m));
+    else{const s=THREE.MathUtils.clamp(speed/6,0,1.2),walk=THREE.MathUtils.clamp(1-Math.abs(s-.45)/.35,0,1)*(s<.8?1:0);
+      a.setLocomotion({idle:Math.max(0,1-s*2.2),walk:s<.6?walk:0,run:Math.max(0,s-.3)*1.6},dt/(s<.6?1.1:.72)*Math.max(.3,s*1.25));}
+    av.setMood?.(an?.c&&/attack|heavy|strike/.test(an.c)?'strain':'calm');
+    av.setWeaponStance?.(!!an?.s);
+    av.update(dt,m==='air'?null:groundY);av.holdWeapon?.(dt,groundY);
+  }};
+}
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getStage:()=>story.stage,getLevel:()=>realLevel(),makeFigure:remoteFigure,getWeapon:()=>equippedWeapon(),
+  getAnim:()=>{const c=combat.clip();return {c:c?.name||null,t:c?Math.round(c.time*100)/100:0,s:combat.state==='attack'||combat.charging||combat.state==='guard'?1:0,
+    m:player.defeated?'dead':!player.grounded?'air':combat.state==='guard'?'guard':player.emote&&player.emote!=='idle'?player.emote:null};},getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
   defaultCode:weeklyLobbyCode()});
 
-// ---------------------------------------------------------------- encounters
+// Join a friend (owner, 2026-10-16: "a system for new players to join"): everyone shares the HROOTS world, and
+// FRIENDS lists who is online, where, and lets you travel to them (through the Rootway when they are in
+// another world, if your level opens it). The Hollow hunt is only entered through the rift.
+const friendsList=$('friendsList');
+function friendsOpen(on=friendsList.classList.contains('hidden')){
+  friendsList.classList.toggle('hidden',!on);if(!on)return;
+  const list=coop.others();
+  friendsList.innerHTML=`<h4>FRIENDS ONLINE · ${coop.code||'SOLO'}</h4>`+(list.length?list.map(o=>{const realm=realmAt(o.x,o.z),where=inHollow(o)?'IN THE HOLLOW HUNT':inLanternhold(o.x,o.z)?'LANTERNHOLD':realm==='shadow'?'SHADOWMERE':'THE VERDANT REACH';
+    return `<button type="button" data-friend="${o.key}"><b>${esc(o.name)}</b>${o.level?` · LV ${o.level}`:''}<small>${where}</small></button>`;}).join(''):'<p>Nobody else is in the world right now. Friends who open the link join you here automatically.</p>')+`<small>Share the link: ${esc(location.origin+location.pathname)}</small>`;
+}
+function joinFriend(key){
+  const o=coop.others().find(o=>o.key===key);friendsOpen(false);if(!o||travelling)return;
+  if(inHollow(o)){toast('THEY ARE IN THE HUNT','Step into the Hollow Rift in Mossgate to join them.');return;}
+  const realm=realmAt(o.x,o.z);
+  if(realm!==realmAt(player.x,player.z)&&realmLocked(realm)){toast('THE ROOTWAY WILL NOT OPEN',`${o.name} is in Shadowmere · it needs level ${REALM_LEVEL[realm]} · you are level ${level()}.`);return;}
+  const a=Math.random()*Math.PI*2;travel(o.x+Math.cos(a)*2,o.z+Math.sin(a)*2,`WITH ${o.name.toUpperCase()}`,'The roots carry you to your friend.');
+}
+$('friendsButton').addEventListener('click',e=>{e.stopPropagation();friendsOpen();});
+friendsList.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-friend]');if(b)joinFriend(b.dataset.friend);});
+
 // The hollowed gather only at the site of the chapter being played: they rise
 // out of the roots when its keeper sends you in, or when you walk into the
 // site first. A chapter's nest stays cleared once it is cleared; if you fall,
@@ -797,8 +843,10 @@ function respawn(){
   if(warden?.awake&&warden.alive&&!othersHunting&&!coop.guest)warden.reset();
   const inShadow=realmAt(player.x,player.z)==='shadow';
   {const g=creatures.find(c=>c.type==='gorilla');if(inShadow&&g?.alive&&story.stage==='shadow_guardian'&&!g.devAwake)g.respawn();}
-  player.defeated=0;player.health=maxHealth();player.x=inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  player.defeated=0;player.health=maxHealth();const town=inShadow&&story.reached('shadow_city'),wake=town?{x:LANTERNHOLD_SPOTS.rest.x+1.2,z:LANTERNHOLD_SPOTS.rest.z}:null;
+  player.x=town?wake.x:inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=town?wake.z:inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
+  if(town){toast('THE LANTERNS CATCH YOU','The lamplighters carried you back to Lanternhold. Nothing follows you past the wall.');return;}
   if(inShadow){toast('THE LANTERNS CATCH YOU','You wake under the root arch. The forest is still watching.');return;}
   toast('THE ROOTS RETURN YOU TO MOSSGATE',hunting&&othersHunting?'Your hunters fight on. Step back through the rift to rejoin them.':checkpoint?'You wake by the Hollow Rift.':'The memories you found remain with you.');
 }
@@ -1154,8 +1202,9 @@ function strikesLocal(c){
 }
 /** Bosses get tougher with more explorers: +50% health per extra member. */
 function scaleBosses(){
-  const k=1+.5*(coop.teamSize-1);
-  for(const c of [warden]){if(!c)continue;c.baseMax??=c.maxHealth;const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
+  // +70% health per extra hunter, on top of its level scaling (baseMax is set when it wakes), and its poise grows too.
+  const k=1+.7*(coop.teamSize-1);
+  for(const c of [warden,creatures.find(g=>g.type==='gorilla'&&g.alive&&g.remote===false&&coop.others().some(o=>nearTo(g,o)))]){if(!c)continue;c.baseMax||=c.maxHealth;c.team=1+.6*(coop.teamSize-1);const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
 }
 
 /** Orrun falls with you in the hollow (or you finish Book I): your class weapon is yours from now on. */
@@ -1241,7 +1290,7 @@ function updateHUD(){
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
   if(Math.hypot(player.x-world.home.x,player.z-world.home.z)<world.home.radius)region=world.home.name;
-  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';if(Math.hypot(SHADOWMERE.x-player.x,SHADOWMERE.z-player.z)<SHADOWMERE.r)region='SHADOWMERE';$('region').textContent=region;
+  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';if(Math.hypot(SHADOWMERE.x-player.x,SHADOWMERE.z-player.z)<SHADOWMERE.r)region='SHADOWMERE';if(inLanternhold(player.x,player.z))region='LANTERNHOLD · SAFE GROUND';$('region').textContent=region;
   const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
   $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
   if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
@@ -1254,7 +1303,7 @@ function updateHUD(){
   else if(nearby?.type==='shadowSeed')$('interaction').innerHTML='<b>E</b> · TOUCH THE LANTERN SEED <small>WHAT THE FALLS REMEMBER</small>';
   else if(nearby?.type==='sealLantern')$('interaction').innerHTML=thievesAt(nearby.value.i).length?'<b>E</b> · THE LANTERN <small>DRIVE OFF THE THIEVES FIRST</small>':`<b>E</b> · RELIGHT THE ${nearby.value.side} LANTERN <small>GARROW’S SEAL</small>`;
   else if(nearby?.type==='rootwayBack')$('interaction').innerHTML='<b>E</b> · RETURN TO THE VERDANT REACH <small>MOSSGATE</small>';
-  else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':'<b>E</b> · REST AT THE TRAIL STONE';
+  else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':(inLanternhold(player.x,player.z)?'<b>E</b> · REST AT THE BRAZIER <small>LANTERNHOLD</small>':'<b>E</b> · REST AT THE TRAIL STONE');
 }
 // The quest tracker (top left): the act, its steps as pips, the objective, which way
 // and how far, and a thin bar for the whole story. A new objective flashes in gold.
@@ -1556,6 +1605,7 @@ function update(rawDt){
   world.sun.position.set(player.x-45,groundY(player.x,player.z)+95,player.z-50);
   world.sun.target.position.set(player.x,groundY(player.x,player.z),player.z);
   world.sun.target.updateMatrixWorld();
+  updateLanternhold();
   shadowmere.update(rawDt,elapsed,player,camera,world.updateAtmosphere(player.x,player.z,rawDt));
   world.animated.forEach(({mesh,type,baseY,index})=>{
     if(type==='echo'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.y+=dt*.6;}
@@ -1579,6 +1629,16 @@ shell=createShell(entry,canvas,globe,{narrator,dressingRoom,saveNow:cloudSaveNow
 avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance);equipWeapon();shell.start();
 // The Blender memory sites and Mossgate's props (sites.js); their colliders join the grid as they arrive.
 const shadowmere=createShadowmere(scene,{groundY,addCollider:c=>collisionGrid.add(c),creatures});
+// Lanternhold (lanternhold.js): the safe town in Shadowmere. Its Great Lantern burns bright once Garrow is freed.
+const lanternhold=createLanternhold(scene,{groundY,addCollider:c=>collisionGrid.add(c)});
+let insideTown=false;
+function updateLanternhold(){
+  const here=realmAt(player.x,player.z)==='shadow';lanternhold.root.visible=here;if(!here){insideTown=false;return;}
+  lanternhold.setRelit(story.reached('shadow_report'));lanternhold.update(elapsed);
+  const inside=inLanternhold(player.x,player.z);
+  if(inside&&!insideTown){cue('LANTERNHOLD · SAFE GROUND · NOTHING FOLLOWS YOU PAST THE WALL',1.6);playTone(560,.4,.05,'sine');}
+  insideTown=inside;
+}
 loadSites(scene,{addCollider:c=>collisionGrid.add(c),crownGeometry:world.crownGeometry,leafMaterials:world.leafMaterials}).catch(e=>console.warn('Memory sites failed to load',e));
 loadWardenAndArena(scene).then(res=>{
   warden=res.warden;warden.netId='warden';warden.scaleHealth=()=>levelDamage();   // keeps pace with level, like the creatures
@@ -1625,7 +1685,7 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,crossRealm,realmAt,get travelling(){return travelling;},profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,lanternhold,crossRealm,realmAt,get travelling(){return travelling;},profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
 // A non-destructive encounter route for checking the new realm and its combat.
 // Unlike ?arena, this never completes the profile or writes player progression.

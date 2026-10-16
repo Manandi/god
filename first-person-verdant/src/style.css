@@ -115,3 +115,12 @@
 #entry .feed .kudos:hover:not(:disabled){background:#c6de9e;color:#142018}
 #entry .feed .kudos.on{background:#2f5a35;border-color:#9ec98a}
 #entry .feed .kudos:disabled{cursor:default;opacity:.85}
+.catch-up{margin:0 0 12px;padding:9px 12px;border:1px solid #d9b45a;background:#2a2410cc;color:#efe2b8;font:600 11px/1.5 "DM Mono",monospace;letter-spacing:.04em}.catch-up b{color:#ffd56a;margin-right:8px;letter-spacing:.12em}
+.lobby-hud{position:fixed}
+.friends-list{position:absolute;right:0;bottom:40px;width:270px;max-height:320px;overflow:auto;padding:12px;border:1px solid #9fbe91;background:#0c1d18f2;color:#e7ead5;font:600 10px/1.5 'DM Mono',monospace;letter-spacing:.06em}
+.friends-list h4{margin:0 0 8px;font-size:10px;letter-spacing:.14em;color:#bfe0a8}
+.friends-list button{display:block;width:100%;text-align:left;margin:0 0 6px;padding:7px 9px;border:1px solid #4d6b55;background:#14302aee;color:#e7ead5;font:600 10px 'DM Mono',monospace;cursor:pointer}
+.friends-list button:hover{border-color:#ffd56a}
+.friends-list button small{display:block;color:#9fbe91;margin-top:2px}
+.friends-list p{margin:0 0 8px;color:#c8d6bd}
+.friends-list>small{display:block;color:#9fbe91;word-break:break-all}

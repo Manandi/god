@@ -2,6 +2,45 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-16 · Lanternhold, harder bosses, co-op avatars, joining late (Claude)
+
+What the owner asked for after the first two-player Orrun hunt: "Orun was too easy to beat and bad when we were playing as 2 people", plus seven things for Shadowmere.
+
+- **Lanternhold, a safe town** (`src/lanternhold.js`, `LANTERNHOLD` and `inLanternhold` in `world.js`).
+  - It stands 26 m west and 18 m south of the Shadowmere centre, on levelled ground, off the lantern trail; a lane of lanterns leads to its east gate.
+  - It has a palisade of root-stakes, six moss-roofed huts with lit windows, a forge, a well, two market stalls, garlands of lanterns and the Great Lantern in the plaza.
+  - The Great Lantern burns low until Garrow is freed (`setRelit(story.reached('shadow_report'))`), then lights up the whole town.
+  - **No creature can enter.** `creatures.js` refuses any step inside the wall and won't notice a player who is inside. A chase gives up at the wall (`return`), and a monkey's swing can't land in town. Tested: four monkeys chasing for 10 s made 0 steps inside.
+  - The rest brazier heals you and refills flasks. Once you've reached `shadow_city`, dying in Shadowmere wakes you at the brazier.
+  - The region name shows "LANTERNHOLD · SAFE GROUND", and a cue appears when you enter.
+  - Dev teleport: SHADOWMERE › LANTERNHOLD.
+- **Story.** A new stage, `shadow_city`, comes between `shadow_meet` and `shadow_hunt`.
+  - Maren now sends you to Lanternhold, where Elder Ondine gives the hunt.
+  - New townsfolk with stage-aware lines: Bram the smith, Corra the trader (Ashmere riders and the crown-glass), and Lio, a child whose monkey Pim went wild.
+  - The journal has a LANTERNHOLD page.
+  - Saves store the stage by name, so anyone already past `shadow_meet` simply skips the new step.
+- **Orrun is harder** (`boss.js`).
+  - Health 1600 (was 1000), more poise, shorter cooldowns, longer combos, and damage 3 on stomp, charge and pounce.
+  - Co-op scaling now actually applies. `baseMax` used to capture the unscaled health; `wake()` now sets it.
+  - With a team: health ×(1+.7 per extra hunter), and poise and flinch ×(1+.6 per extra hunter).
+- **Garrow is harder** (`creatures.js` KINDS). Health 520, poise 42, quicker pace, damage 3 on chop, charge, leap and grab. It is scaled for the team like Orrun.
+- **Co-op avatars** (`coop.js` and `remoteFigure` in `main.js`). Other players are drawn with the real avatar: their outfit, hair, shirt, the weapon in hand, and the clip they're playing (attacks, guard, air, death). Before, they were a block figure that nodded forward.
+  - Position is sent every tick; appearance, weapon, stage and level once a second.
+- **Joining late.**
+  - **Catch-up XP** (`profile.js`). `cohortLevel()` equals this week's Thursday hunt level (week 2 is level 3, week 3 is level 5, and so on). Anyone below it earns ×2 XP on activities until they catch up. The weekly page shows a CATCH-UP banner. Week bonuses are not doubled, which keeps undo exact.
+  - **FRIENDS button** next to CO-OP LOBBY. It lists who's online in HROOTS with their level and where they are (Reach, Shadowmere, Lanternhold or the hunt). Click a friend to travel to them; a realm you're too low for is refused, and the hunt is only entered through the rift. It also shows the link to share.
+  - The first finished onboarding posts "joined the hunt · say hi" to the Social feed.
+- **Checks** (Playwright, live DB blocked, co-op on `net=local`):
+  - the city quest flow `shadow_meet → shadow_city → shadow_hunt`;
+  - NPC lines;
+  - the safe zone;
+  - rest and respawn in town;
+  - catch-up;
+  - the two-tab FRIENDS travel (locked, then joined at 2 m);
+  - the two-tab avatar sync;
+  - the Garrow seal-and-boss regression and the Orrun fight regression.
+  No page errors.
+
 ## Latest handoff — 2026-10-14 (night) · Co-op lag fixed: share only what you fight together (Claude)
 
 The owner said it felt awful with two people in the lobby: "end the lag, bosses and quests are still fought together".
@@ -462,6 +501,7 @@ How the story uses the ChatGPT NPCs:
 | `chronicles.js` | The three Mossgate Chronicles and each NPC's dialogue topics (the first topic is a tutorial) |
 | `training.js` | The weekly training plan (tasks per week, tiers), the home workouts with their easier versions, the lift-log exercise list, `e1rm()` and cosmetic `TITLES` |
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
+| `lanternhold.js` | Lanternhold, the safe town in Shadowmere: palisade, huts, forge, well, market, Great Lantern (`setRelit`), rest brazier. Creatures never step inside (`creatures.js`) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks, thornlings, green monkeys and Shadowmere's gorilla (AI, poise, attack tells and hit volumes) |

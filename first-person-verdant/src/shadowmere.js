@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SHADOWMERE as SM, SEED_SHRINE, GARROW_SEAL } from './world.js';
+import { SHADOWMERE as SM, SEED_SHRINE, GARROW_SEAL, LANTERNHOLD, inLanternhold } from './world.js';
 import { NPCS } from './story.js';
 
 // Shadowmere, built from the owner's concept image (public/concepts/shadowmere-forest-concept.png):
@@ -112,6 +112,7 @@ export function createShadowmere(scene, { groundY, addCollider, creatures }) {
   const placed = [];                // {x, z, r}: keeps props apart so no walker can be boxed in
   const clear = (x, z, r) => {
     if (Math.hypot(x - SM.x, z - SM.z) > SM.r - 1.5) return false;
+    if (inLanternhold(x, z, 3 + r) || segDist(x, z, [[LANTERNHOLD.x + LANTERNHOLD.r, LANTERNHOLD.z], [SM.x - 2, LANTERNHOLD.z]]) < 2.5 + r) return false;   // the town and its lane to the trail
     if (segDist(x, z, TRAIL) < 4.6 + r || segDist(x, z, STREAM) < 2 + r) return false;
     if (Math.hypot(x - SM.guardian.x, z - SM.guardian.z) < 13 + r || Math.hypot(x - SM.entry.x, z - SM.entry.z) < 6 + r) return false;
     if (Math.hypot(x - POOL.x, z - POOL.z) < POOL.r + 1.5 + r || (Math.abs(x - CLIFF.x) < 15 && z < CLIFF.z + 5.5)) return false;
