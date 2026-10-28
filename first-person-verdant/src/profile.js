@@ -85,16 +85,25 @@ export function weekKey(date=new Date()){
 // Challenge weeks run Thursday to Wednesday (owner, 2026-10-07): week 1 is launch day, Thursday
 // 2026-10-01, to Wednesday 2026-10-07, and each new week starts on boss day. The weekly quest, its
 // step up and its bonus follow these weeks; the weekly world and cloud saves keep weekKey above.
-// Week 1 runs two weeks, to Wednesday 2026-10-14 (owner, 2026-10-09: the heat wave kept people in);
-// week 2 starts Thursday 2026-10-15, and every week after is seven days again.
-export const CHALLENGE_START='2026-10-01',WEEK1_END='2026-10-15';
+// Week 1 runs two weeks and a day, to Thursday 2026-10-15 (owner, 2026-10-09: the heat wave kept people
+// in; 2026-10-14: through Thursday, so a step day on Wednesday and Thursday can still finish it in time
+// for that day's hunt). Week 2 is Friday 2026-10-16 to Wednesday 10-21 (keyed by Thursday 10-15, as
+// every week is by its Thursday); after that every week is Thursday to Wednesday again.
+export const CHALLENGE_START='2026-10-01',WEEK1_END='2026-10-16',WEEK2_KEY='2026-10-15';
 export function planWeekKey(date=new Date()){
   const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());d.setDate(d.getDate()-(d.getDay()+3)%7);
   const key=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
-  return key>=CHALLENGE_START&&key<WEEK1_END?CHALLENGE_START:key;
+  const day=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+  return day>=CHALLENGE_START&&day<WEEK1_END?CHALLENGE_START:key;
 }
 /** Which week of the 90-day challenge it is (1 from launch day, 2 from 2026-10-15). */
-export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return k<WEEK1_END?1:Math.floor(daysBetween(WEEK1_END,k)/7)+2;};
+export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return k===CHALLENGE_START?1:Math.floor(daysBetween(WEEK2_KEY,k)/7)+2;};
+// Joining late (owner, 2026-10-16: "a system for new players to join"): the cohort level is where someone who
+// kept up is by now, the same as this week's Thursday hunt (weeklyWorld.js bossLevel). Anyone below it earns
+// double XP for what they log until they catch up, so a friend who starts in week 4 can still reach the hunts.
+export const cohortLevel=(date=new Date())=>1+2*Math.max(1,challengeWeek(date)-1);
+export const CATCH_UP=2;
+export const catchUp=()=>realLevel()<cohortLevel()?CATCH_UP:1;
 /** A Monday-week key from before 2026-10-07 as the Thursday week it falls in (never before launch). */
 const thursdayOf=key=>{const k=planWeekKey(new Date(`${key}T12:00:00`));return k<CHALLENGE_START?CHALLENGE_START:k;};
 const isThursday=key=>new Date(`${key}T12:00:00Z`).getUTCDay()===4;
@@ -141,8 +150,8 @@ export function loadProfile(){
     }
     // Week 1 grew to two weeks (2026-10-09): a browser that already moved to the 2026-10-08 week goes
     // back to week 1, and the step up it took is undone (it comes back on 2026-10-15 if earned).
-    if(profile.program.key>CHALLENGE_START&&profile.program.key<WEEK1_END){if(profile.program.week>1)profile.program.week--;profile.program.key=CHALLENGE_START;}
-    profile.claimed=profile.claimed.map(v=>{const m=/^(\d{4}-\d{2}-\d{2}):plan$/.exec(v);return m&&!isThursday(m[1])?`${thursdayOf(m[1])}:plan`:m&&m[1]>CHALLENGE_START&&m[1]<WEEK1_END?`${CHALLENGE_START}:plan`:v;}).filter((v,i,a)=>a.indexOf(v)===i);
+    if(profile.program.key>CHALLENGE_START&&profile.program.key<WEEK2_KEY){if(profile.program.week>1)profile.program.week--;profile.program.key=CHALLENGE_START;}
+    profile.claimed=profile.claimed.map(v=>{const m=/^(\d{4}-\d{2}-\d{2}):plan$/.exec(v);return m&&!isThursday(m[1])?`${thursdayOf(m[1])}:plan`:m&&m[1]>CHALLENGE_START&&m[1]<WEEK2_KEY?`${CHALLENGE_START}:plan`:v;}).filter((v,i,a)=>a.indexOf(v)===i);
     const appearance=raw.appearance||{};
     profile.appearance.skinIndex=Number.isInteger(appearance.skinIndex)?Math.max(0,Math.min(5,appearance.skinIndex)):2;
     profile.appearance.face=['soft','sharp','round'].includes(appearance.face)?appearance.face:'soft';
@@ -298,11 +307,12 @@ export {rawStats};
 // next week; otherwise the step repeats.
 const addDays=(key,n)=>{const d=new Date(`${key}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const weekEnd=key=>key===CHALLENGE_START?WEEK1_END:addDays(key,7);
+const weekStart=key=>key===WEEK2_KEY?WEEK1_END:key;     // week 2 starts the day after week 1's last Thursday
 // Anything you log counts toward the plan item of its kind (owner, 2026-10-07: a workout logged
 // under OTHER ACTIVITY left the plan's workout unchecked): a plan check, or a free log at least as
 // big as one check. One a day per item.
 const counts=(a,i)=>a.item===i.id||(!a.item&&a.kind===i.kind&&a.amount>=Math.min(i.amount,i.amountUS||i.amount)-.01);
-function doneIn(key,item){const days=new Set();return profile.activities.filter(a=>counts(a,item)&&a.date>=key&&a.date<weekEnd(key)&&!days.has(a.date)&&days.add(a.date));}
+function doneIn(key,item){const days=new Set();return profile.activities.filter(a=>counts(a,item)&&a.date>=weekStart(key)&&a.date<weekEnd(key)&&!days.has(a.date)&&days.add(a.date));}
 /** The week's bonus: week 1 pays a little more so a full first week still reaches level 3 with one workout. */
 export const stepBonus=week=>planStep(week).bonus||PLAN_BONUS;
 function claimWeek(key,week){if(profile.claimed.includes(`${key}:plan`))return false;profile.claimed.push(`${key}:plan`);profile.claimed=profile.claimed.slice(-100);profile.xp+=stepBonus(week);return true;}
@@ -325,12 +335,12 @@ export function weeklyPlan(){
   return {week,challengeWeek:challengeWeek(),tier:step.tier,items,total,checked,bonus:stepBonus(week),claimed:profile.claimed.includes(`${key}:plan`),justClaimed};
 }
 /** Check off one day of a plan item: logs its activity. */
-export function checkPlanItem(id){
+export function checkPlanItem(id,own=false){
   const item=weeklyPlan().items.find(i=>i.id===id);
   if(!item)return 'Not in this week’s plan.';
   if(item.done.length>=item.count)return 'Already complete this week.';
   if(item.today)return 'One check per day for each task.';
-  return logActivity(item.kind,profile.units==='imperial'&&item.amountUS?item.amountUS:item.amount,item.id);
+  return logActivity(item.kind,profile.units==='imperial'&&item.amountUS?item.amountUS:item.amount,item.id,own);
 }
 /** Undo today's check (a mis-click). */
 export function uncheckPlanItem(id){
@@ -343,22 +353,23 @@ export function uncheckPlanItem(id){
 }
 /** Tell the Social feed what was logged (social.js posts it; only these short lines, never measurements). */
 export function announce(kind,text){try{window.dispatchEvent(new CustomEvent('hollow-roots-activity',{detail:{kind,text}}));}catch{/* no window in tests */}}
-export function logActivity(kind,amount,item=''){
+/** Log an activity. `own`: a workout of your own program instead of the plan's recommended one (it counts the same). */
+export function logActivity(kind,amount,item='',own=false){
   const date=localDay(),levelBefore=realLevel(),planItem=item?weeklyPlan().items.find(i=>i.id===item):null;
   if(!['workout','steps','run','study'].includes(kind)||!Number.isFinite(amount)||amount<=0)return 'Enter a valid activity amount.';
   if(kind==='steps'&&amount<5000)return 'Reach at least 5,000 steps to log a step day.';
   const daily=['workout','steps'].includes(kind);
   if(daily&&profile.activities.some(a=>a.date===date&&a.kind===kind))return kind==='workout'?'A workout is already logged today.':'Steps are already logged today.';
   const capped=Math.min(amount,kind==='steps'?100000:kind==='run'?100:kind==='study'?600:1);
-  const xp=kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5);
+  const boost=catchUp(),xp=boost*(kind==='workout'?75:kind==='steps'?50:kind==='run'?Math.round(capped*12):Math.round(capped*.5));
   profile.activities.push({kind,date,amount:capped,xp,...(item?{item}:{})});profile.activities=profile.activities.slice(-240);profile.xp+=xp;
   const plan=weeklyPlan(),done=plan.justClaimed;
   saveProfile();
-  announce(kind,kind==='workout'?`finished ${planItem?.workout?`home workout ${planItem.workout}`:'a workout'}`:kind==='steps'?`walked ${capped.toLocaleString('en-US')} steps`
+  announce(kind,kind==='workout'?`finished ${own?'a workout of their own':planItem?.workout?`home workout ${planItem.workout}`:'a workout'}`:kind==='steps'?`walked ${capped.toLocaleString('en-US')} steps`
     :kind==='run'?`walked or ran ${profile.units==='imperial'?`${(capped/1.609).toFixed(1)} mi`:`${capped.toFixed(1)} km`}`:`spent ${Math.round(capped)} minutes learning something new`);
   if(done)announce('plan','completed this week’s quest');
   if(realLevel()>levelBefore)announce('level',`reached level ${realLevel()}`);
-  return `+${xp} XP${done?` · WEEK COMPLETE +${plan.bonus} XP`:''}`;
+  return `+${xp} XP${boost>1?` (CATCH-UP ×${boost})`:''}${done?` · WEEK COMPLETE +${plan.bonus} XP`:''}`;
 }
 export function classScores(){
   const s=stats(),{role,instinct}=profile.personality,scores={

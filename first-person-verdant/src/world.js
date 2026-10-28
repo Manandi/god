@@ -34,6 +34,10 @@ export const SEED_SHRINE = { x:SHADOWMERE.x-5.4, z:SHADOWMERE.z-20.5 };
 // round the keeper, and three dark lanterns in the clearing; relighting all three breaks it.
 export const GARROW_SEAL = { x:SHADOWMERE.guardian.x, z:SHADOWMERE.guardian.z, r:6.5,
   lanterns:[[Math.PI/2,'EAST'],[-Math.PI/2,'WEST'],[0,'SOUTH']].map(([a,side],i)=>({ i, side, x:SHADOWMERE.guardian.x+Math.sin(a)*10.6, z:SHADOWMERE.guardian.z+Math.cos(a)*10.6, a })) };
+// Lanternhold (owner, 2026-10-16): the lamplighters' walled town in Shadowmere's western clearing, its gate
+// facing the lantern trail. No creature can come past its wall (creatures.js); lanternhold.js builds it.
+export const LANTERNHOLD = { x:SHADOWMERE.x-26, z:SHADOWMERE.z+18, r:12.5, gate:0 };
+export const inLanternhold = (x,z,pad=0) => Math.hypot(x-LANTERNHOLD.x,z-LANTERNHOLD.z) < LANTERNHOLD.r+pad;
 export const realmAt = (x,z) => Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z) < SHADOWMERE.r+40 ? 'shadow' : 'grove';
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
@@ -62,6 +66,7 @@ function shadowY(x,z){
   let h=(noise(x*.06,z*.06)-.5)*2.2+(noise(x*.17,z*.17)-.5)*.5;
   const level=1-THREE.MathUtils.smoothstep(Math.min(Math.abs(dx)-3,Math.hypot(dx,dz+7)-14),0,8);
   h*=1-Math.max(0,level);
+  h*=THREE.MathUtils.smoothstep(Math.hypot(x-LANTERNHOLD.x,z-LANTERNHOLD.z)-LANTERNHOLD.r,0,6);   // the town stands on level ground
   return h+Math.max(0,d-(SHADOWMERE.r-3))**2*.09;
 }
 function surfaceY(x,z) {
@@ -394,7 +399,7 @@ export function buildWorld(scene){
   const shadowFerns=new THREE.InstancedMesh(fernShape,shadowFernMat,420);let sf=0;
   for(let i=0;i<650&&sf<420;i++){
     const x=SHADOWMERE.x+(shadowRand()-.5)*88,z=SHADOWMERE.z+(shadowRand()-.5)*88;
-    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-SHADOWMERE.x)<7.5&&z>SHADOWMERE.z-14&&z<SHADOWMERE.z+50)continue;
+    if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)>SHADOWMERE.r-2||Math.abs(x-SHADOWMERE.x)<7.5&&z>SHADOWMERE.z-14&&z<SHADOWMERE.z+50||inLanternhold(x,z,1.5))continue;
     shadowDummy.position.set(x,groundY(x,z)+.1,z);shadowDummy.rotation.set(0,shadowRand()*6.28,0);shadowDummy.scale.setScalar(.55+shadowRand()*.75);shadowDummy.updateMatrix();shadowFerns.setMatrixAt(sf++,shadowDummy.matrix);
   }
   shadowFerns.count=sf;scene.add(shadowFerns);

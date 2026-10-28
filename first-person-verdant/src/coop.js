@@ -65,12 +65,12 @@ function localTransport(code, id, on) {
   };
 }
 
-export function createCoop(scene, { player, groundY, getName, getAppearance, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, onSupport, defaultCode='' }) {
+export function createCoop(scene, { player, groundY, getName, getAppearance, getStage=()=>'', getLevel=()=>0, getAnim=()=>null, getWeapon=()=>'', makeFigure=null, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, onSupport, defaultCode='' }) {
   const button = document.getElementById('lobbyButton'), status = document.getElementById('lobbyStatus');
   const params = new URLSearchParams(location.search), local = params.get('net') === 'local';
   // Each tab is its own player (sessionStorage), so two tabs can share a lobby.
   const id = sessionStorage.getItem('verdant-player-id') || crypto.randomUUID(); sessionStorage.setItem('verdant-player-id', id);
-  let net = null, code = '', sendTimer = 0, lastShared = '', connected = false, memberIds = [id];
+  let net = null, code = '', sendTimer = 0, posTick = 0, lastShared = '', connected = false, memberIds = [id];
   const remotes = new Map();
   const setStatus = t => { if (status) status.textContent = t; };
   const isHost = () => connected && memberIds[0] === id;
@@ -79,8 +79,11 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
   function remote(key, info = {}) {
     let r = remotes.get(key);
     if (!r) {
-      const figure = makeNpc(scene, key, { x: info.x ?? player.x, z: info.z ?? player.z, name: info.name || 'WAYFARER', look: lookFrom(info.appearance) });
-      figure.marker.visible = false; figure.root.add(nameTag(info.name || 'Wayfarer'));
+      // The game draws other explorers with its own avatar (their outfit, weapon and moves); the block
+      // figure is only a fallback.
+      const figure = makeFigure ? makeFigure(key, info) : makeNpc(scene, key, { x: info.x ?? player.x, z: info.z ?? player.z, name: info.name || 'WAYFARER', look: lookFrom(info.appearance) });
+      if (figure.marker) figure.marker.visible = false; figure.root.add(nameTag(info.name || 'Wayfarer'));
+      if (makeFigure) figure.root.position.set(info.x ?? player.x, 0, info.z ?? player.z);
       r = { figure, x: figure.x, z: figure.z, y: 0, yaw: 0, name: info.name, act: 0 }; remotes.set(key, r);
     }
     return r;
@@ -100,7 +103,10 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
       setStatus(count());
     },
     event(name, payload) {
-      if (name === 'pos' && payload.id !== id) Object.assign(remote(payload.id, payload), { x: payload.x, z: payload.z, y: payload.y || 0, yaw: payload.yaw });
+      if (name === 'pos' && payload.id !== id) {
+        const r = Object.assign(remote(payload.id, payload), { x: payload.x, z: payload.z, y: payload.y || 0, yaw: payload.yaw, anim: payload.anim || null, animAt: performance.now() });
+        for (const k of ['stage', 'appearance', 'weapon', 'name', 'level']) if (payload[k] !== undefined) r[k] = payload[k];
+      }
       else if (name === 'state') onShared(payload);
       else if (name === 'hello') sendShared(true);
       else if (name === 'world' && payload.from !== id && !isHost()) onWorld?.(payload);
@@ -153,8 +159,10 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     /** A guest in a team fight: creatures come from the host's snapshots. */
     get guest() { return connected && remotes.size > 0 && !isHost(); },
     get teamSize() { return connected ? remotes.size + 1 : 1; },
+    /** Where the lobby's host is (null when this game is the host or alone). */
+    hostPos() { if (!connected || isHost()) return null; const r = remotes.get(memberIds[0]); return r ? { x: r.x, z: r.z, stage: r.stage } : null; },
     /** Other explorers, for creatures to choose whom to chase (the host uses this). */
-    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y, name: r.name || 'Wayfarer' })); },
+    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y, name: r.name || 'Wayfarer', stage: r.stage, level: r.level || 0 })); },
     sendWorld: world => send('world', { ...world, from: id }),
     sendHit: hit => send('hit', { ...hit, from: id }),
     /** A guest reached a nest: ask the host to raise it. */
@@ -166,7 +174,9 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     update(dt, time) {
       if (connected && (sendTimer -= dt) <= 0) {
         sendTimer = .1;
-        send('pos', { id, name: getName(), appearance: getAppearance(), x: player.x, z: player.z, y: player.height, yaw: player.yaw });
+        // Position ten times a second; name, look and story stage once a second (smaller messages, less lag).
+        const full = (posTick = (posTick + 1) % 10) === 0;
+        send('pos', { id, x: player.x, z: player.z, y: player.height, yaw: player.yaw, anim: getAnim(), ...(full ? { name: getName(), appearance: getAppearance(), stage: getStage(), weapon: getWeapon(), level: getLevel() } : {}) });
         sendShared(false);
       }
       for (const r of remotes.values()) {
@@ -174,8 +184,11 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
         root.position.x = THREE.MathUtils.damp(root.position.x, r.x, 10, dt); root.position.z = THREE.MathUtils.damp(root.position.z, r.z, 10, dt);
         root.position.y = groundY(root.position.x, root.position.z) + r.y;
         // Block figures face +Z; the explorer's yaw faces -Z at 0.
-        root.rotation.y = THREE.MathUtils.damp(root.rotation.y, r.yaw + Math.PI, 10, dt);
+        // The short way round, so a figure turning across ±180° doesn't spin a full circle.
+        const want = r.yaw + (r.figure.yawOffset ?? Math.PI), turn = Math.atan2(Math.sin(want - root.rotation.y), Math.cos(want - root.rotation.y));
+        root.rotation.y += turn * (1 - Math.exp(-10 * dt));
         r.act = Math.max(0, r.act - dt);
+        if (r.figure.sync) { r.figure.sync(r, dt, time); continue; }
         r.figure.body.rotation.x = r.act > 0 ? Math.sin((1 - r.act / .35) * Math.PI) * .45 : 0;   // a lunge when they attack
         r.figure.body.position.y = moving ? Math.abs(Math.sin(time * 10)) * .08 : Math.sin(time * 1.7) * .012;
       }

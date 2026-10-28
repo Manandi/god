@@ -1,4 +1,5 @@
-import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE } from './world.js';
+import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE, LANTERNHOLD as LH } from './world.js';
+const lh = (a, d, extra = {}) => ({ x: LH.x + Math.cos(a) * d, z: LH.z + Math.sin(a) * d, ...extra });
 
 // The Verdant Reach story: one questline that runs through every site on the
 // lantern trail. Stages are strictly ordered; each chapter follows the same
@@ -100,6 +101,15 @@ export const NPCS = {
   // Book II: Shadowmere's keeper of lanterns, just inside the root arch.
   maren: { name: 'MAREN', title: 'LAMPLIGHTER OF SHADOWMERE', x: SM.x + 5.6, z: SM.z + 38.5, facing: -Math.PI / 2,
     look: { skin: 0x9a6b4f, hair: 0x2b2a35, iris: 0x7a5a22, cloth: 0x3d4f5f, trousers: 0x2c3340, braid: true, mouthTilt: .04 } },
+  // Lanternhold, the lamplighters' town in Shadowmere (owner, 2026-10-16).
+  ondine: { name: 'ONDINE', title: 'ELDER OF LANTERNHOLD', ...lh(1.2, 3.4), facing: Math.PI / 2,
+    look: { skin: 0x8a5d43, hair: 0xd6d2c8, iris: 0x6b5a2a, cloth: 0x2f4a5a, trousers: 0x2a2f38, braid: true, mouthTilt: .03 } },
+  bram: { name: 'BRAM', title: 'LANTERN-SMITH', ...lh(Math.PI * .95, 5.7), facing: Math.PI / 2, scale: 1.08,
+    look: { skin: 0x6e4a36, hair: 0x2a1d16, iris: 0x3b2a20, cloth: 0x5a3a26, beard: true, browTilt: .12, armTilt: .13 } },
+  corra: { name: 'CORRA', title: 'TRADER', ...lh(.42, 6.6), facing: -Math.PI / 2,
+    look: { skin: 0xd9a77c, hair: 0x7a2e1e, iris: 0x355468, cloth: 0x7a3b2e, trousers: 0x3a2a20, mouthTilt: .07 } },
+  lio: { name: 'LIO', title: 'LAMPLIGHTER’S CHILD', ...lh(-1.48, 4.05), facing: Math.PI / 2, scale: .72,
+    look: { skin: 0xb97959, hair: 0x2b2a35, iris: 0x4d382d, cloth: 0x8a6a2a, mouthTilt: .08 } },
   pip: { name: 'PIP', title: 'APPRENTICE SCOUT', x: 3, z: -140.5, facing: .61, scale: .85,
     look: { skin: 0xc48f68, hair: 0x9a5638, iris: 0x385342, cloth: 0x476f59, mouthTilt: .06 } }
 };
@@ -143,6 +153,7 @@ export const STAGES = [
   // ---- Book II · Shadowmere (level 3)
   { id: 'shadow_cross', book: 2, objective: 'Cross into Shadowmere through the Rootway in Mossgate (level 3)', target: { ...ROOTWAY, title: 'THE ROOTWAY' } },
   { id: 'shadow_meet', book: 2, objective: 'Find Maren the Lamplighter under the root arch', target: 'maren' },
+  { id: 'shadow_city', book: 2, objective: 'Follow the lantern lane to Lanternhold and speak with Elder Ondine', target: 'ondine' },
   { id: 'shadow_hunt', book: 2, objective: 'Drive off the green monkeys stealing the lantern seeds', target: { x: SM.x, z: SM.z + 14, title: 'THE LANTERN TRAIL' }, count: ['monkeys', 3] },
   { id: 'shadow_memory', book: 2, objective: 'Find what the falls remember', target: { ...SEED_SHRINE, title: 'THE FALLS' } },
   // Garrow is sealed in crown-glass until the three lanterns round its clearing are lit again (owner,
@@ -294,11 +305,11 @@ const DIALOGUE = {
   },
   maren: {
     main: {
-      shadow_meet: { then: 'shadow_hunt', lines: [
+      shadow_meet: { then: 'shadow_city', lines: [
         'Stay in the light. Further in. There. You came through the Rootway? Then the Reach finally heard us.',
         'I am Maren. I keep Shadowmere’s lanterns. Every lantern holds a seed of light, and every night the green monkeys steal more of them.',
         'They were lantern-keepers once, like me. Gentle, clever things. Since Garrow in the clearing changed, they hoard light like it is the last food in the world.',
-        'Drive off three of them and they will leave the trail alone for a while. Mind their claws: they never strike just once, and they leap farther than you think.'
+        'Go to Lanternhold first, just west of the trail: follow the lane of lanterns. It is the last lit town in Shadowmere, and nothing from the dark can cross its wall. Elder Ondine will tell you what we need.'
       ] },
       shadow_report: { then: 'frost_wait', lines: [
         'You brought it back. Garrow is sleeping. Truly sleeping, for the first time since I was small.',
@@ -315,6 +326,50 @@ const DIALOGUE = {
       ['<shadow_guardian', 'Crown-glass drinks light, but it cannot hold it. Those three lanterns by the clearing went dark the night Garrow was sealed. Light them again, and mind the thieves who nest there.'],
       ['<shadow_report', 'Garrow carried the light from tree to tree when I was young. Whatever is holding that sword is not Garrow. Free it, please.'],
       ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Two lights of five, {name}. Come back stronger. I will keep a lantern lit for you.']
+    ]
+  },
+  ondine: {
+    main: {
+      shadow_city: { then: 'shadow_hunt', lines: [
+        'Welcome to Lanternhold, {name}. Mind the wall: it is lantern-wood, cut from the old light-trees. Nothing that hunts in the dark will step over it.',
+        'We are what is left of the lamplighters. Our grandparents carried light through Shadowmere with Garrow, tree to tree, and the green monkeys carried it with us. They were our neighbours.',
+        'Then the riders came through the falls, and Garrow changed. The lanterns went out one by one, the monkeys started stealing seeds, and we pulled back behind this wall.',
+        'That is the Great Lantern. The last seed in Shadowmere still burning on its own. It is failing.',
+        'Drive off the monkeys raiding the lantern trail, three of them, so Maren can keep the trail lit. Rest at the brazier whenever you need to. If you fall out there, you will wake here.'
+      ] }
+    },
+    idle: [
+      ['<shadow_city', 'A traveller from the Reach? Come in, quickly, before the dark notices you.'],
+      ['<shadow_memory', 'Three monkeys, {name}. Driven off, not killed. They were ours once, and they might be again.'],
+      ['<shadow_seal', 'Maren says the falls remember what happened to Garrow. Go and listen to the water.'],
+      ['<shadow_guardian', 'A seal of crown-glass around Garrow? That is not forest work. Someone came here on purpose, and wanted it to last.'],
+      ['<shadow_report', 'Whatever happens in that clearing, remember that Garrow carried our light for a hundred years. Bring it home if you can.'],
+      ['>=shadow_report', 'Look up, {name}. The Great Lantern is burning the way it did when I was a girl. Lanternhold will not forget who did that.']
+    ]
+  },
+  bram: {
+    main: {},
+    idle: [
+      ['<shadow_memory', 'Monkeys? Watch the one that looks up at the canopy: it is going for a vine, and it will kick you from the side. Turn and face it, or roll.'],
+      ['<shadow_guardian', 'Crown-glass. I tried to cut a shard once and ruined three chisels. Light cracks it. Nothing else I own does.'],
+      ['<shadow_report', 'If you fight Garrow: when the glass grows out of its back, get behind it and break it, or it will throw it at you. Its grab can’t be blocked, so roll. And never stand still when the ground glows violet.'],
+      ['>=shadow_report', 'You broke crown-glass and came back with all your fingers. North is colder than anything I have forged for. Come back before you go; I will make you something warm.']
+    ]
+  },
+  corra: {
+    main: {},
+    idle: [
+      ['<shadow_seal', 'The year the lights died, riders came through the falls. Grey cloaks, faces hidden. They paid in Ashmere coin. Nobody here would take it.'],
+      ['<shadow_report', 'Lanterns, oil, wick: I sell everything but light. That, you have to bring back yourself.'],
+      ['<frost_wait', 'Prices are halved for the one who freed Garrow. Halved, mind. Not free.'],
+      ['>=frost_wait', 'North, to the Frostbound Crown? Buy a scarf. Buy three.']
+    ]
+  },
+  lio: {
+    main: {},
+    idle: [
+      ['<shadow_report', 'I had a monkey called Pim. He used to sit on our roof and hold the lantern for me. Now he only comes at night, and he takes things. I think he is sad.'],
+      ['>=shadow_report', 'Pim came back! He brought a seed and put it in our lantern. You did that, didn’t you?']
     ]
   },
   pip: {
@@ -524,6 +579,7 @@ export function createStory(saved, memories) {
       pages.push({ title: 'WHAT YOU DECIDED', text: said.length ? said.map(t => `“${t}”`).join(' · ') : 'Nothing yet. The keepers will ask.', open: said.length > 0 });
       pages.push({ title: 'BOOK I · THE FOREST REMEMBERS', text: 'Orrun is remembered, its watch is over, and the Heartseed has taken root in the Canopy Gate. But the roots still pull: the Heartseed is one of five seeds, one for every world the great root holds up, and one of them is going dark.', open: story.reached('end') });
       pages.push({ title: 'BOOK II · SHADOWMERE', text: 'West of the Reach lies Shadowmere, where every lantern holds a seed of light. Maren the Lamplighter keeps them, but the green monkeys, once lantern-keepers themselves, now steal and hoard the light, and Garrow, the realm’s keeper, guards the dark with a sword it never chose.', open: story.reached('shadow_meet') });
+      pages.push({ title: 'LANTERNHOLD', text: 'The last lit town in Shadowmere, walled with lantern-wood that nothing from the dark will cross. The lamplighters once carried light through the forest with Garrow and the green monkeys. Now they guard the Great Lantern, the last seed still burning on its own, and it is failing.', open: story.reached('shadow_city') });
       pages.push({ title: 'THE FOURTH MEMORY · THE LAMPLIGHTERS', text: 'Garrow carried the Lantern Seed’s light from tree to tree, and the monkeys followed it like moths. Then riders in Ashmere grey came through the falls with a blade of black crown-glass. They did not drink. They fused the blade to Garrow’s hand, so the keeper’s own strength would keep the lights out for them.', open: story.reached('shadow_seal') });
       pages.push({ title: 'THE SEAL', text: 'They sealed Garrow inside a ring of crown-glass and put out the three lanterns round its clearing. Crown-glass drinks light but cannot hold it: relight the lanterns and the seal breaks. Then Garrow will fight, and the glass will fight harder once it is losing.', open: story.reached('shadow_seal') });
       pages.push({ title: 'THE SHARD POINTS NORTH', text: 'Garrow sleeps, and the crown-glass broke. Every cut face points north, to the Frostbound Crown, where whatever is left of Ashmere waits, frozen and patient. The Rootway north opens at level 5.', open: story.reached('frost_wait') });

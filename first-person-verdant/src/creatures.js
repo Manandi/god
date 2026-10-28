@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { groundY, SHADOWMERE, GARROW_SEAL } from './world.js';
+import { groundY, SHADOWMERE, GARROW_SEAL, inLanternhold } from './world.js';
 import { canOccupy } from './collision.js';
 import { angleTo } from './angles.js';
 import { level } from './profile.js';
@@ -25,7 +25,7 @@ const KINDS = {
   thornling: { size: .57, pace: .8, health: 32, poise: 9, walk: 1.2, chase: 3.0, turn: 4.2, notice: 12, spacing: 2.2, cooldown: [.8, 1.6], biteRadius: .38 },
   monkey: { size: .82, pace: .78, health: 50, poise: 12, walk: 1.9, chase: 4.3, turn: 6, notice: 16, spacing: 2.1, cooldown: [.55, 1.15], biteRadius: .5 },
   // Garrow, Shadowmere's boss (owner, 2026-10-07: "a boss quest again, an entire massive moveset plus a phase 2").
-  gorilla: { size: 1.22, pace: 1.06, health: 360, poise: 34, walk: .9, chase: 3.0, turn: 2.8, notice: 24, spacing: 3.1, cooldown: [.95, 1.7], biteRadius: .8 },
+  gorilla: { size: 1.22, pace: .98, health: 520, poise: 42, walk: .9, chase: 3.3, turn: 3.0, notice: 24, spacing: 3.1, cooldown: [.7, 1.3], biteRadius: .8 },   // harder (owner, 2026-10-16)
   // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
   // from the game on the owner's request; its isBoss / quake code paths below are unused.
 };
@@ -53,11 +53,11 @@ const ATTACKS = {
   swing: { windup: .62, track: .62, active: 1.0, recover: .85, range: [2.2, 7.5], damage: 1, kind: 'heavy', label: 'vine swing', monkey: true },
   // Garrow only. `phase: 2` moves open once the crown-glass takes hold (below half health).
   // Cleaver chop: the blade comes down in a line in front of it. Step aside.
-  chop: { windup: .95, track: .62, active: .42, recover: 1.1, range: [0, 4.2], damage: 2, kind: 'heavy', label: 'cleaver chop', gorilla: true, line: [.5, 4.1, .6] },
+  chop: { windup: .95, track: .62, active: .42, recover: 1.1, range: [0, 4.2], damage: 3, kind: 'heavy', label: 'cleaver chop', gorilla: true, line: [.5, 4.1, .6] },
   // Backhand: a fast sweep of the free fist across its front. Back off or guard.
   backhand: { windup: .55, track: .45, active: .32, recover: .8, range: [0, 3.3], damage: 1, kind: 'light', label: 'backhand sweep', gorilla: true, phase1: true },
   // Knuckle charge: down on all fours across the clearing. Sidestep late; into a tree it dazes itself.
-  charge: { windup: .85, track: .8, active: 1.45, recover: 1.0, range: [5, 16], damage: 2, kind: 'heavy', label: 'knuckle charge', gorilla: true, line: [0, 13, 1.1] },
+  charge: { windup: .85, track: .8, active: 1.45, recover: 1.0, range: [5, 16], damage: 3, kind: 'heavy', label: 'knuckle charge', gorilla: true, line: [0, 13, 1.1] },
   // Double ground pound: two shockwaves, one after the other. Jump or dash through each.
   pound: { windup: 1.0, track: .5, active: 1.05, recover: 1.15, range: [0, 4.6], damage: 1, kind: 'heavy', label: 'double ground pound', gorilla: true, rings: [.02, .57], ring: [.8, 4.6, .45] },
   // Boulder hurl: rips up a mossy stone and lobs it where you stand (main.js flies it).
@@ -67,7 +67,7 @@ const ATTACKS = {
   // Crown-glass combo: chop, backhand, rising cut, stepping in between. Guard all three or get out.
   combo: { windup: .7, track: .55, active: 1.5, recover: 1.15, range: [0, 3.6], damage: 1, kind: 'light', label: 'crown-glass combo', gorilla: true, phase: 2, swipes: [.12, .6, 1.08] },
   // Leaping cleave: lands on you, and crystal spikes burst out in a line ahead. Dodge sideways.
-  leap: { windup: .9, track: .85, active: 1.0, recover: 1.25, range: [4, 15], damage: 2, kind: 'heavy', label: 'leaping cleave', gorilla: true, phase: 2 },
+  leap: { windup: .9, track: .85, active: 1.0, recover: 1.25, range: [4, 15], damage: 3, kind: 'heavy', label: 'leaping cleave', gorilla: true, phase: 2 },
   // Rootglass eruption: the cleaver goes into the ground and crystal bursts up where you stand,
   // three times. Keep moving.
   erupt: { windup: .8, track: .8, active: 1.75, recover: .95, range: [0, 16], damage: 1, kind: 'heavy', label: 'crown-glass eruption', gorilla: true, phase: 2, marks: [0, .5, 1.0], fuse: .7 },
@@ -77,8 +77,10 @@ const ATTACKS = {
   whirl: { windup: .7, track: .7, active: 1.4, recover: 1.2, range: [0, 4.6], damage: 1, kind: 'light', label: 'crown-glass whirl', gorilla: true, phase: 2, reach: 3.2 },
   // Crushing grab: unblockable. It lunges with its open hand; caught, you are slammed into the ground.
   // Dodge it, and a miss leaves it wide open.
-  grab: { windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 3.8], damage: 2, kind: 'heavy', label: 'crushing grab', gorilla: true, phase: 2 }
+  grab: { windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 3.8], damage: 3, kind: 'heavy', label: 'crushing grab', gorilla: true, phase: 2 }
 };
+import { LANTERNHOLD as _LH } from './world.js';
+const LH_X = _LH.x, LH_Z = _LH.z;
 const GORILLA_PHASE_AT = .5, PHASE_TIME = 2.8, DAZE_TIME = 1.8;
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .8, belly: 2, crystal: 1.2 };
@@ -345,6 +347,8 @@ export class Creature {
   travel(dx, dz, grid) {
     const r = this.radius * .8, step = Math.hypot(dx, dz);
     if (step < 1e-5) return true;
+    // Lanternhold's wall: no creature steps inside (one that somehow is inside may only walk out).
+    if (inLanternhold(this.x + dx, this.z + dz, r + .3) && !(inLanternhold(this.x, this.z, r + .3) && Math.hypot(this.x + dx - LH_X, this.z + dz - LH_Z) > Math.hypot(this.x - LH_X, this.z - LH_Z))) return false;
     const ok = (x, z) => canOccupy(x, z, groundY(x, z), grid, groundY, r) && Math.abs(groundY(x, z) - groundY(this.x, this.z)) < .9 * step + .12;
     // Already overlapping something (shoved into a rock): let it walk back out rather than freeze.
     if (!canOccupy(this.x, this.z, groundY(this.x, this.z), grid, groundY, r)) { this.x += dx; this.z += dz; return true; }
@@ -450,6 +454,8 @@ export class Creature {
     let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
     if (!this.remote && ['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
+    // You are safe inside Lanternhold: anything chasing you gives up at the wall.
+    if (!this.remote && ['alert', 'approach', 'circle'].includes(this.state) && inLanternhold(p.x, p.z, 1)) { this.setState('return'); events.push({ type: 'leash' }); }
     this.roarRest = Math.max(0, (this.roarRest || 0) - dt);
     // Below half health Garrow stops, roars, and the crown-glass blade ignites (phase 2).
     if (this.pendingPhase && !this.remote && !['attack', 'toppled', 'rising', 'phase', 'defeated'].includes(this.state)) {
@@ -462,7 +468,7 @@ export class Creature {
         if (this.wanderTurn <= 0) { this.wanderTurn = 2 + Math.random() * 2.5; this.wanderHeading = this.heading + (Math.random() - .5) * 2.4; }
         if (Math.hypot(this.x - this.home.x, this.z - this.home.z) > 8) this.wanderHeading = Math.atan2(this.home.x - this.x, this.home.z - this.z);
         wantHeading = this.steer(this.wanderHeading ?? this.heading, ctx.grid); wantSpeed = k.walk; turn = 1.4;
-        if (dist < k.notice && !this.remote) { this.setState('alert'); events.push({ type: 'alert' }); }
+        if (dist < k.notice && !this.remote && !inLanternhold(p.x, p.z, 1)) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
       case 'emerge':
         // Clawing up out of the roots: no threat until it is fully out.
@@ -700,7 +706,7 @@ export class Creature {
     const cx = p.x, cz = p.z, th0 = Math.atan2(this.x - cx, this.z - cz), r0 = Math.max(dist, 2), r1 = 2.2, sweep = Math.PI * .92;
     for (const side of Math.random() < .5 ? [1, -1] : [-1, 1]) {
       const th1 = th0 + side * sweep, x1 = cx + Math.sin(th1) * r1, z1 = cz + Math.cos(th1) * r1;
-      if (!canOccupy(x1, z1, groundY(x1, z1), grid, groundY, this.radius * .8)) continue;
+      if (!canOccupy(x1, z1, groundY(x1, z1), grid, groundY, this.radius * .8) || inLanternhold(x1, z1, 1)) continue;
       return { cx, cz, th0, side, sweep, r0, r1, dip: Math.max(0, (r0 + r1) / 2 - 1.05), ay: groundY(cx, cz) + 7.5, landed: false };
     }
     return null;
@@ -1157,7 +1163,7 @@ export class Creature {
     this.respawn(); this.setState('emerge'); this.body.position.y = -2.6; this.heading = Math.random() * Math.PI * 2;
   }
   respawn() {
-    this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false; this.phase = 1; this.pendingPhase = false; this.crystalDamage = 0; this.crystalsBroken = false;
+    this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false; this.phase = 1; this.pendingPhase = false; this.crystalDamage = 0; this.crystalsBroken = false; this.baseMax = 0;
     if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
     this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); if (this.sword) this.sword.visible = true;

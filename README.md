@@ -2,6 +2,95 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-16 · Lanternhold, harder bosses, co-op avatars, joining late (Claude)
+
+What the owner asked for after the first two-player Orrun hunt: "Orun was too easy to beat and bad when we were playing as 2 people", plus seven things for Shadowmere.
+
+- **Lanternhold, a safe town** (`src/lanternhold.js`, `LANTERNHOLD` and `inLanternhold` in `world.js`).
+  - It stands 26 m west and 18 m south of the Shadowmere centre, on levelled ground, off the lantern trail; a lane of lanterns leads to its east gate.
+  - It has a palisade of root-stakes, six moss-roofed huts with lit windows, a forge, a well, two market stalls, garlands of lanterns and the Great Lantern in the plaza.
+  - The Great Lantern burns low until Garrow is freed (`setRelit(story.reached('shadow_report'))`), then lights up the whole town.
+  - **No creature can enter.** `creatures.js` refuses any step inside the wall and won't notice a player who is inside. A chase gives up at the wall (`return`), and a monkey's swing can't land in town. Tested: four monkeys chasing for 10 s made 0 steps inside.
+  - The rest brazier heals you and refills flasks. Once you've reached `shadow_city`, dying in Shadowmere wakes you at the brazier.
+  - The region name shows "LANTERNHOLD · SAFE GROUND", and a cue appears when you enter.
+  - Dev teleport: SHADOWMERE › LANTERNHOLD.
+- **Story.** A new stage, `shadow_city`, comes between `shadow_meet` and `shadow_hunt`.
+  - Maren now sends you to Lanternhold, where Elder Ondine gives the hunt.
+  - New townsfolk with stage-aware lines: Bram the smith, Corra the trader (Ashmere riders and the crown-glass), and Lio, a child whose monkey Pim went wild.
+  - The journal has a LANTERNHOLD page.
+  - Saves store the stage by name, so anyone already past `shadow_meet` simply skips the new step.
+- **Orrun is harder** (`boss.js`).
+  - Health 1600 (was 1000), more poise, shorter cooldowns, longer combos, and damage 3 on stomp, charge and pounce.
+  - Co-op scaling now actually applies. `baseMax` used to capture the unscaled health; `wake()` now sets it.
+  - With a team: health ×(1+.7 per extra hunter), and poise and flinch ×(1+.6 per extra hunter).
+- **Garrow is harder** (`creatures.js` KINDS). Health 520, poise 42, quicker pace, damage 3 on chop, charge, leap and grab. It is scaled for the team like Orrun.
+- **Co-op avatars** (`coop.js` and `remoteFigure` in `main.js`). Other players are drawn with the real avatar: their outfit, hair, shirt, the weapon in hand, and the clip they're playing (attacks, guard, air, death). Before, they were a block figure that nodded forward.
+  - Position is sent every tick; appearance, weapon, stage and level once a second.
+- **Joining late.**
+  - **Catch-up XP** (`profile.js`). `cohortLevel()` equals this week's Thursday hunt level (week 2 is level 3, week 3 is level 5, and so on). Anyone below it earns ×2 XP on activities until they catch up. The weekly page shows a CATCH-UP banner. Week bonuses are not doubled, which keeps undo exact.
+  - **FRIENDS button** next to CO-OP LOBBY. It lists who's online in HROOTS with their level and where they are (Reach, Shadowmere, Lanternhold or the hunt). Click a friend to travel to them; a realm you're too low for is refused, and the hunt is only entered through the rift. It also shows the link to share.
+  - The first finished onboarding posts "joined the hunt · say hi" to the Social feed.
+- **Checks** (Playwright, live DB blocked, co-op on `net=local`):
+  - the city quest flow `shadow_meet → shadow_city → shadow_hunt`;
+  - NPC lines;
+  - the safe zone;
+  - rest and respawn in town;
+  - catch-up;
+  - the two-tab FRIENDS travel (locked, then joined at 2 m);
+  - the two-tab avatar sync;
+  - the Garrow seal-and-boss regression and the Orrun fight regression.
+  No page errors.
+
+## Latest handoff — 2026-10-14 (night) · Co-op lag fixed: share only what you fight together (Claude)
+
+The owner said it felt awful with two people in the lobby: "end the lag, bosses and quests are still fought together".
+
+**Cause:** with two players in the permanent lobby, the guest's game handed over **every** creature in its world to the host's snapshots (`c.remote = coop.guest`), wherever either player was. Away from the host, the guest's enemies froze, slid or ignored them. The host also sent the whole world at 10 Hz, and Garrow, the thieves and chapter states were overwritten by the host's story.
+
+**Fix (`main.js`, `coop.js`):**
+- A creature is shared (run by the host) only while the host **and** the guest are both within `SHARE_R` = 36 m of it (`sharedHere()`). Everywhere else each game runs its own creatures.
+- Team fights are unchanged when you are together: Orrun's hunt, nests and Shadowmere fights.
+- **Garrow and the lantern thieves** (story creatures) are shared only when both players are at the same point of the Book II quest: before the seal, at the seal, at Garrow, or after. Otherwise each keeps its own.
+  - Each game now sends its story stage in `pos`, once a second (`getStage`, `coop.others()[].stage`, `coop.hostPos().stage`).
+- The host's snapshot carries only creatures it shares with someone. Targeting (`assignTargets`, `teamTarget`) only goes after explorers who share that creature.
+- Hits go to the host only for shared creatures (`c.remote`).
+- A guest whose host is far away raises its own nest instead of waiting on the host.
+- `pos` messages are smaller: position 10×/s, but name, look and stage only once a second.
+- Remote figures turn the short way round.
+
+**Checks:** two players in one browser on a local test lobby (`?lobby=TESTCO&net=local`, Supabase aborted).
+- Apart, the guest's monkey is local and attacks the guest.
+- Together, it is the host's, matching the host to within 0.2 m and in the same state.
+- Garrow is shared at the same stage and stays local when the host is at a different stage.
+- The solo fight test passes, with no page errors.
+
+## Latest handoff — 2026-10-14 (later) · Escape toggles the pause menu (Claude)
+
+- Escape now toggles the pause menu, as the owner asked. While the mouse is locked the browser keeps the first Escape for itself, so the `pointerlockchange` handler opens the menu as before. Escape again on the menu calls `resume()`, back into the game with the mouse re-locked.
+- If the game is running without the mouse locked, Escape opens the menu directly. Dialogue keeps its own Escape (close the conversation). See the keydown handler in `main.js`.
+- Checks: Playwright with Supabase aborted. Releasing the mouse opened the menu, Escape went back into the game (re-locked), no page errors, and the build passes.
+
+## Note — 2026-10-14 · The site went down: the repo was renamed and made private (Claude)
+
+- About 04:07 UTC, `Manandi/god` was renamed to `Hollow-roots` and made private. GitHub Pages stops serving private repos on the free plan, and the site address follows the repo name, so https://manandi.github.io/god/ returned 404.
+- The owner made it public again, renamed it back to `god`, and set Pages → Source to GitHub Actions. The last deploy was re-run (2ad8853, success).
+- Verified: the page returns 200, and the bundle, CSS, `sw.js` and every GLB load. The default lobby is still HROOTS.
+- **Keep the repo public and named `god`.** The link and the lobby depend on it.
+
+## Latest handoff — 2026-10-14 · Week 1 through Thursday Oct 15; log your own workout (Claude)
+
+- **Week 1 now ends Thursday 2026-10-15**, the first hunt day. A friend starting on Wednesday night can log a step day Wednesday and Thursday, plus the workout and learning. That finishes week 1 with its bonus (535 XP, level 3) in time for Thursday's hunt.
+  - Week 2 is Fri 10-16 to Wed 10-21. It's still keyed by Thursday `WEEK2_KEY` = 10-15, as the server RPCs require, and starts at `weekStart()`. After that, weeks are Thursday to Wednesday again.
+  - `planWeekKey()` now decides week 1 by date (`WEEK1_END` = 10-16, exclusive). `weekly-ping` uses the same rule (still not deployed).
+- **Log your own workout:**
+  - The plan's home workout has an "OR LOG YOUR OWN WORKOUT ✓" link on the weekly page, and an "✓ I DID MY OWN WORKOUT" button on the workout page.
+  - Either one ticks the plan's workout (`checkPlanItem(id, own)` → `logActivity(…, own)`), and the Activity feed says "finished a workout of their own".
+- Checks (faked clock, Supabase aborted):
+  - Wednesday 10-14: steps, own workout and learning give 3/4 and 135 XP.
+  - Thursday 10-15: steps complete the week, +350, 535 XP, level 3, and the lv3 hunt is open.
+  - Friday 10-16: week 2, step 2, next hunt 10-22 at lv5.
+  - The own-workout button on the workout page works, and the build passes.
+
 ## Latest handoff — 2026-10-14 · Roblox game moved to its own repo (Claude)
 
 The owner's separate Roblox spinning-top game was briefly started in this repo and then moved to the private repo `Manandi/beyblade-game`. It is no longer in this tree and has nothing to do with The Hollow Roots; its early commits remain in git history only. No game code or saves here were touched.
@@ -416,6 +505,7 @@ How the story uses the ChatGPT NPCs:
 | `chronicles.js` | The three Mossgate Chronicles and each NPC's dialogue topics (the first topic is a tutorial) |
 | `training.js` | The weekly training plan (tasks per week, tiers), the home workouts with their easier versions, the lift-log exercise list, `e1rm()` and cosmetic `TITLES` |
 | `coop.js` | Co-op lobby over Supabase Realtime: presence, positions, shared progress, and host-authoritative team fights (`world` snapshots, `hit` events) |
+| `lanternhold.js` | Lanternhold, the safe town in Shadowmere: palisade, huts, forge, well, market, Great Lantern (`setRelit`), rest brazier. Creatures never step inside (`creatures.js`) |
 | `combat/moves.js`, `combat/player.js` | Move timings and the player combat state machine |
 | `combat/hits.js`, `combat/feedback.js` | Hit detection, and combat sound and effects |
 | `creatures.js` | Shellbacks, thornlings, green monkeys and Shadowmere's gorilla (AI, poise, attack tells and hit volumes) |
