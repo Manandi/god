@@ -2,6 +2,27 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-29 · Back online, week 2 runs to Tue Nov 3, hunts move to Wednesday (Claude)
+
+The owner and their friend were both out sick for about 10 days. They asked to "make the game online again", to make it "week 2 now for the second world till next Tuesday", and for a sick feature and the snow world (those follow in later handoffs).
+
+- **The game was offline because Supabase had paused the `hollow-roots` project** (free projects pause after a week with no activity). The website stayed up, but co-op, the cloud saves, the leaderboard, Social and the hunt didn't work. It was restored on 2026-10-28 and is ACTIVE_HEALTHY.
+  - **If it happens again:** in the Supabase dashboard, open the project and click Restore, or ask an assistant with the Supabase connector to restore `hollow-roots`.
+- **Week 2 now runs Fri 10-16 to Tue 11-03** (`WEEK2_END` = 11-04 in `profile.js`). It's still keyed `2026-10-15`.
+  - From **Wed 11-04, every week runs Wednesday to Tuesday**, keyed by its Wednesday (`WEEK3_KEY`). `challengeWeek`: week 3 = 11-04, week 4 = 11-11 … Dec 31 falls in week 11.
+  - **Save migration:** a browser that already moved on to the old 10-22 or 10-29 week goes back to week 2. Only the step ups it really took are undone, worked out from what was logged in each old window. Its `…:plan` bonus claims fold into `2026-10-15:plan`, and XP is never taken away.
+  - Checked with three saves: stepped up on 10-22 goes back to 2; never stepped stays 2; already on week 2 is unchanged.
+- **The hunt is on Wednesdays from 2026-10-28** (Central).
+  - Client: `huntDow`, `huntDayName` and `bossWindow` in `weeklyWorld.js`. The level is that week's `cohortLevel`: week 2 is lv 3 and week 3 (11-04) is lv 5, then +2 a week.
+  - Server: migration `boss_wednesday_from_oct28` (also in `schema.sql`). `boss_day_open()` is Thursday before 10-28 and Wednesday from then.
+  - The NPC lines, journal, objective, rift prompt and weekly page say Wednesday. The weekly page header says "WEEK 2 RUNS TO TUE NOV 3", then "NEW WEEK EVERY WEDNESDAY".
+- **Push reminders (still not deployed):** `weekly-ping` uses the same week rule. The push RPCs accept Wednesday or Thursday week starts. They don't exist on the live database yet, so nothing changed there.
+- **Saga dates move with the weeks:** Book III (Frostbound Crown, lv 5) opens with week 3 on Wed 11-04. The later gates (lv 9, 15, 21) land a few days later than the table below says. The finale stays Thursday 31 December.
+- **Checks:**
+  - Node check of `planWeekKey`, `challengeWeek` and `cohortLevel` from 10-14 to 12-31, plus the three save migrations above.
+  - Production build.
+  - Headless Chromium load with Supabase aborted: no page errors.
+
 ## Latest handoff — 2026-10-16 · Lanternhold, harder bosses, co-op avatars, joining late (Claude)
 
 What the owner asked for after the first two-player Orrun hunt: "Orun was too easy to beat and bad when we were playing as 2 people", plus seven things for Shadowmere.

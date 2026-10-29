@@ -148,7 +148,7 @@ export const STAGES = [
     { id: `${c.id}_memory`, chapter: c.id, step: 'memory', objective: c.memory, target: c.id },
     { id: `${c.id}_report`, chapter: c.id, step: 'report', objective: c.report, target: c.npc }
   ]),
-  { id: 'gate', objective: 'Free Orrun: on Thursday, step through the Hollow Rift in Mossgate', target: { x: 0, z: 61.6, title: 'THE HOLLOW RIFT' } },
+  { id: 'gate', objective: 'Free Orrun: on hunt day (Wednesday), step through the Hollow Rift in Mossgate', target: { x: 0, z: 61.6, title: 'THE HOLLOW RIFT' } },
   { id: 'end', objective: 'Orrun rests. Ask Halden what the roots are saying', target: 'mycel' },
   // ---- Book II · Shadowmere (level 3)
   { id: 'shadow_cross', book: 2, objective: 'Cross into Shadowmere through the Rootway in Mossgate (level 3)', target: { ...ROOTWAY, title: 'THE ROOTWAY' } },
@@ -187,7 +187,7 @@ const DIALOGUE = {
       ['<ruins', 'Two lanterns went dark past the Rootwell last night. I relit them. They took longer to catch than they used to.'],
       ['<shrine', 'A hatchling that carried stone. My grandmother’s lullaby had a shellback in it who “built the door and kept the key”. I can’t remember the last verse any more. I used to sing it every night.'],
       ['<gate', 'Pip went up to the Shrine? Of course they did. That child has been hunting the Warden’s name since… since… Pip. Yes. Since Pip could climb.'],
-      ['<end', 'Three memories, and the lanterns burn steadier. On Thursday the rift in the square opens. Go through with your hunters, and say its name like you mean it.'],
+      ['<end', 'Three memories, and the lanterns burn steadier. On Wednesday the rift in the square opens. Go through with your hunters, and say its name like you mean it.'],
       ['<shadow_meet', 'A Rootway in my square, glowing like a lantern. Halden says it goes west to Shadowmere. Of course it does. Nothing stays simple once you arrive, {name}.'],
       ['>=end', 'The lanterns haven’t burned this bright since I was an apprentice. If Shadowmere’s lamplighter needs oil, tell her Mossgate sends it.']
     ]
@@ -209,7 +209,7 @@ const DIALOGUE = {
       ['<ruins', 'The ward posts glow brighter already. Whatever you woke in that spring, the roots felt it.'],
       ['<shrine', 'Mosswatch. My wardens still wear its leaf on their shoulders. If Ysolde tells you what I think she will, I will be taking mine off.'],
       ['<gate', 'I told you to learn what it was before you killed it. I didn’t expect the answer to be “the only thing holding the line.” Ashmere’s crown bought that rot, and my order carried out the purchase.'],
-      ['<end', 'The rift opens Thursdays. Don’t go through alone; I have buried enough wardens who thought they could. Beat it down, then let it rest.'],
+      ['<end', 'The rift opens Wednesdays. Don’t go through alone; I have buried enough wardens who thought they could. Beat it down, then let it rest.'],
       ['>=end', 'The wards are quiet. First time in my command. Don’t tell anyone I said thank you.']
     ]
   },
@@ -388,7 +388,7 @@ const DIALOGUE = {
         'Orrun. “The one who carries.” It had a name the whole time and we just called it the Warden.',
         'It carried the gate stones. It carried the oath. Now it carries all the rot Mosswatch made, so the gate doesn’t fall. That’s why it can’t let go.',
         'So we don’t kill it. We beat it down until it can hear us, then we say its name and let it rest. Somebody already wrote that under the carving. Somebody knew.',
-        'The Hollow Rift in Mossgate’s square opens on Thursdays, when the roots run thinnest. Bring hunters. It won’t go quietly, even if part of it wants to.'
+        'The Hollow Rift in Mossgate’s square opens on Wednesdays, when the roots run thinnest. Bring hunters. It won’t go quietly, even if part of it wants to.'
       ] }
     },
     idle: [
@@ -396,7 +396,7 @@ const DIALOGUE = {
       ['<shrine_memory', 'When something big rears up, jump or dash through the ring. Through! I learned that the hard way. My ribs learned it.'],
       ['<shrine_report', 'The carving is just above the light. Go on, touch it. I would, but I’m supervising.'],
       ['<end', 'I’ll be right behind you. Well, behind that rock. Which is behind you. Same thing.', d => d.shrine === 'bring'],
-      ['<end', 'Orrun. Say it like you mean it. Thursday, through the rift. Don’t let it be forgotten again.'],
+      ['<end', 'Orrun. Say it like you mean it. Wednesday, through the rift. Don’t let it be forgotten again.'],
       ['>=end', 'You did it! Sela says I can be a real scout now. On probation. Heavy probation.']
     ]
   }
@@ -571,7 +571,7 @@ export function createStory(saved, memories) {
       pages.push({ title: 'THE WARDEN', text: 'Something holds the Canopy Gate at the end of the road, and the Hollowing follows its roots. Orin says kill it, or understand it first. The forest kept three memories of it: at the Rootwell, at Mosswatch, and in the Canopy Shrine.', open: story.reached('rootwell') });
       for (const c of CHAPTERS) pages.push({ title: c.memoryTitle, text: c.memoryText, open: memories.has(c.id) });
       pages.push({ title: 'WHAT THE HOLLOWING IS', text: 'The Crown of Ashmere wanted the Reach’s strength without the labour. Mosswatch’s wardens cut the Heartseed’s roots in the Scorched Hollow and drank. Borrowed strength never holds: it hollowed them out, and its rot is the Hollowing. The Warden isn’t the rot: it is the last thing holding it back, rooting into the gate to stay remembered. Kill it and the rot runs free.', open: story.reached('shrine') });
-      pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Beat it down until it can hear you, then speak its name and let it rest. The Hollow Rift in Mossgate opens on Thursdays.', open: story.reached('gate') });
+      pages.push({ title: 'ORRUN', text: 'The Warden has a name: Orrun, the one who carries. Beat it down until it can hear you, then speak its name and let it rest. The Hollow Rift in Mossgate opens on Wednesdays.', open: story.reached('gate') });
       // The saga plan beyond Shadowmere (SAGA above) stays behind the scenes: worlds appear in the
       // journal as they are built, one weekly update at a time.
       pages.push({ title: `THE FIVE LIGHTS · ${lightsFrom(story)} OF 5`, text: 'Each world rests on a Seed, tended by a keeper. Free a keeper and its light goes with you. The songs say whoever carries all five can walk into Ashmere itself.', open: story.reached('frost_wait') });

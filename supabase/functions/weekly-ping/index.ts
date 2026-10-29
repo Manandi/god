@@ -20,11 +20,13 @@ function dateParts(timeZone: string) {
 }
 
 function thursdayWeek(localDate: string) {
+  // Matches planWeekKey in the game's profile.js: week 1 runs 2026-10-01 to Thursday 2026-10-15, week 2 to
+  // Tuesday 2026-11-03 (keyed 2026-10-15), then Wednesday-to-Tuesday weeks keyed by their Wednesday.
+  if (localDate >= '2026-10-01' && localDate < '2026-10-16') return '2026-10-01';
+  if (localDate >= '2026-10-16' && localDate < '2026-11-04') return '2026-10-15';
   const date = new Date(`${localDate}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 3) % 7);
-  const week = date.toISOString().slice(0, 10);
-  // Week 1 runs 2026-10-01 to Thursday 2026-10-15 (matches planWeekKey in the game's profile.js).
-  return localDate >= '2026-10-01' && localDate < '2026-10-16' ? '2026-10-01' : week;
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + (localDate >= '2026-11-04' ? 4 : 3)) % 7);
+  return date.toISOString().slice(0, 10);
 }
 
 Deno.serve(async request => {

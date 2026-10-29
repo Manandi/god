@@ -26,7 +26,7 @@ import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myCla
 import { social } from './social.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
-import {weeklyLobbyCode,bossWindow,bossWindowLabel,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
+import {weeklyLobbyCode,bossWindow,bossWindowLabel,huntDayName,loadWeeklySave,saveWeeklyHunter,loadWeeklyWorld,markWeeklyBossDefeated} from './weeklyWorld.js';
 import {createBossEvent,RIFT,HOLLOW_ARRIVE,HOLLOW_RIFT,inHollow} from './bossEvent.js';
 import { PlayerCombat } from './combat/player.js';
 import { MOVES, WEAPONS, STAMINA, GUARD, SPRINT, FLASK, COUNTER, chargeCap } from './combat/moves.js';
@@ -439,7 +439,7 @@ function finishStory(){
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
 }
 // --------------------------------------------------------- the weekly hunt
-// bossEvent.js: Thursdays (Central), level-gated, through the Hollow Rift, with a
+// bossEvent.js: hunt day (Wednesdays from 2026-10-28, Central), level-gated, through the Hollow Rift, with a
 // shared five-minute gathering before Orrun wakes (two or more hunters needed).
 const huntersInHollow=()=>(inHollow(player)?1:0)+coop.others().filter(o=>inHollow(o)).length;
 function huntLive(){
@@ -471,8 +471,8 @@ function travel(x,z,title,detail=''){
 async function enterRift(){
   if(travelling)return;
   const w=bossWindow(),lv=level();
-  if(cloudWorld.boss_defeated&&!dev.bossUnlocked){toast('ORRUN IS RELEASED','The hunt is won for this week. The rift opens again next Thursday.');return;}
-  if(!w.open&&!dev.bossUnlocked){const h=Math.ceil(w.remaining/3600000);toast('THE RIFT IS SEALED',`It opens on Thursday, Central time, for explorers of level ${w.level} and up: in ${h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h`}.`);return;}
+  if(cloudWorld.boss_defeated&&!dev.bossUnlocked){toast('ORRUN IS RELEASED','The hunt is won for this week. The rift opens again next Wednesday.');return;}
+  if(!w.open&&!dev.bossUnlocked){const h=Math.ceil(w.remaining/3600000);toast('THE RIFT IS SEALED',`It opens on Wednesday, Central time, for explorers of level ${w.level} and up: in ${h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h`}.`);return;}
   if(lv<w.level&&!dev.bossUnlocked){toast(`LEVEL ${w.level} NEEDED`,`This week’s hunt needs level ${w.level}; you are level ${lv}. Log your training in WEEKLY QUEST.`);return;}
   if(bossEvent.phase()==='fight'&&warden?.awake&&!bossEvent.state.joined&&!dev.bossUnlocked){toast('THE HUNT HAS BEGUN','The rift reopens if this attempt fails.');return;}
   try{if(w.open)await bossEvent.enter();}
@@ -642,7 +642,7 @@ devPanel.addEventListener('click',e=>{
     case 'prev':{const i=STAGES.findIndex(s=>s.id===story.stage);if(i>0)devJumpTo(STAGES[i-1].id);break;}
     case 'lv-up':case 'lv-down':devLevel.value=Math.max(1,level()+(b.dataset.dev==='lv-up'?1:-1));mech=mechanics();equipWeapon();toast('DEV · LEVEL',`PLAYING AT LEVEL ${devLevel.value}`);break;
     case 'realms':dev.realms=!dev.realms;window.__devRealms=dev.realms;toast('DEV · LEVEL LOCKS',dev.realms?'Every world opens for you.':'Worlds respect levels again.');break;
-    case 'hunt':dev.bossUnlocked=!dev.bossUnlocked;toast('DEV · THE HUNT',dev.bossUnlocked?'Orrun can wake any day, with any number of hunters.':'Back to Thursdays.');break;
+    case 'hunt':dev.bossUnlocked=!dev.bossUnlocked;toast('DEV · THE HUNT',dev.bossUnlocked?'Orrun can wake any day, with any number of hunters.':'Back to hunt day only.');break;
     case 'freeze':dev.freeze=!dev.freeze;toast('DEV · ENEMIES',dev.freeze?'FROZEN':'MOVING');break;
     case 'revive':{let n=0;for(const c of creatures)if(c!==warden&&!c.alive&&!c.chapter){c.respawn();n++;}toast('DEV · REVIVED',`${n} creatures back on their feet.`);break;}
     case 'summon-monkey':{const m=creatures.filter(c=>c.type==='monkey').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · GREEN MONKEY','In front of you.');}break;}
@@ -1297,7 +1297,7 @@ function updateHUD(){
   else if(crit)$('interaction').innerHTML='<b>CLICK</b> · ROOT STRIKE';
   else if(nearby?.type==='orrun')$('interaction').innerHTML='<b>E</b> · SPEAK ITS NAME <small>ORRUN</small>';
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
-  else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:'SEALED UNTIL THURSDAY'}</small>`;
+  else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:`SEALED UNTIL ${huntDayName()}`}</small>`;
   else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
   else if(nearby?.type==='rootway')$('interaction').innerHTML=`<b>E</b> · CROSS INTO SHADOWMERE <small>${realmLocked('shadow')?`NEEDS LEVEL ${REALM_LEVEL.shadow} · YOU ARE ${level()}`:'THE ROOTWAY IS OPEN'}</small>`;
   else if(nearby?.type==='shadowSeed')$('interaction').innerHTML='<b>E</b> · TOUCH THE LANTERN SEED <small>WHAT THE FALLS REMEMBER</small>';

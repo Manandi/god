@@ -1,5 +1,5 @@
 import {hunterIdentity} from './identity.js';
-import {weekKey} from './profile.js';
+import {weekKey,cohortLevel} from './profile.js';
 import {supabase,rpc} from './supabase.js';
 
 export const worldWeek=()=>weekKey();
@@ -11,7 +11,9 @@ export const weeklyLobbyCode=()=>'HROOTS';
 // 2026-10-08, a week after launch. The server checks the same day
 // (boss_day_open in supabase/schema.sql). Entry needs a level that rises with
 // the weeks: 3 for the first boss, then 2 more each week (the pace of the plan).
-export const BOSS_TZ='America/Chicago',FIRST_BOSS='2026-10-08';
+// From Wednesday 2026-10-28 the hunt is on Wednesdays (owner, 2026-10-28: weeks run Wednesday to Tuesday after
+// the long week 2). The server's boss_day_open() uses the same rule.
+export const BOSS_TZ='America/Chicago',FIRST_BOSS='2026-10-08',WEDNESDAY_HUNTS='2026-10-28';
 const DAY=86400000;
 /** The date (YYYY-MM-DD), weekday (0 = Sunday) and time of day in Central time. */
 export function centralNow(now=new Date()){
@@ -24,19 +26,25 @@ export const bossNumber=date=>Math.floor((Date.parse(`${date}T00:00:00Z`)-Date.p
 // Week 1 ran two weeks (owner, 2026-10-09), so the 2026-10-15 hunt asks level 3 again and the climb
 // (+2 a week) starts a week later: 3, 3, 5, 7, 9…
 export const bossLevel=n=>1+2*Math.max(1,n-1);
+/** The hunt weekday for a date: Thursday (4) before 2026-10-28, Wednesday (3) from then. */
+const huntDow=date=>date>=WEDNESDAY_HUNTS?3:4;
+export const huntDayName=(date=centralNow().date)=>huntDow(date)===3?'WEDNESDAY':'THURSDAY';
 export function bossWindow(now=new Date()){
-  const c=centralNow(now),open=c.dow===4&&c.date>=FIRST_BOSS;
-  // The next (or current) boss Thursday, and the time until it opens or closes.
-  let day=open?c.date:addDays(c.date,((4-c.dow)+7)%7||7);
+  const c=centralNow(now),open=c.dow===huntDow(c.date)&&c.date>=FIRST_BOSS;
+  // The next (or current) hunt day, and the time until it opens or closes.
+  let day=open?c.date:addDays(c.date,((huntDow(c.date)-c.dow)+7)%7||7);
   if(day<FIRST_BOSS)day=FIRST_BOSS;
   const untilMidnight=DAY/1000-c.secs,daysAhead=Math.round((Date.parse(`${day}T00:00:00Z`)-Date.parse(`${c.date}T00:00:00Z`))/DAY);
   const remaining=open?untilMidnight*1000:((daysAhead-1)*DAY/1000+untilMidnight)*1000;
   const number=bossNumber(day);
-  return {open,day,number,level:bossLevel(number),remaining:Math.max(0,remaining),next:new Date(now.getTime()+remaining)};
+  // The level is that week's cohort level (week 2: 3, week 3: 5, then +2 a week), from the challenge weeks.
+  const level=day>=WEDNESDAY_HUNTS?cohortLevel(new Date(`${day}T12:00:00`)):bossLevel(number);
+  return {open,day,number,level,remaining:Math.max(0,remaining),next:new Date(now.getTime()+remaining)};
 }
 export function bossWindowLabel(){
   const w=bossWindow(),hours=Math.ceil(w.remaining/3600000),days=Math.floor(hours/24),tail=hours%24;
-  return w.open?`ORRUN · THURSDAY · LV ${w.level}+ · ${days?`${days}D `:''}${tail}H LEFT`:`ORRUN SEALED · THURSDAY (CENTRAL) · LV ${w.level}+ · IN ${days?`${days}D `:''}${tail}H`;
+  const name=huntDayName(w.day);
+  return w.open?`ORRUN · ${name} · LV ${w.level}+ · ${days?`${days}D `:''}${tail}H LEFT`:`ORRUN SEALED · ${name} (CENTRAL) · LV ${w.level}+ · IN ${days?`${days}D `:''}${tail}H`;
 }
 /** Join (or start) today's gathering: {at, now} as Dates; at is null after a restart. */
 export async function bossGather(restart=null){
