@@ -109,6 +109,36 @@ export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return 
 // double XP for what they log until they catch up, so a friend who starts in week 4 can still reach the hunts.
 export const cohortLevel=(date=new Date())=>1+2*Math.max(1,challengeWeek(date)-1);
 export const CATCH_UP=2;
+// Sick days (owner, 2026-10-28, after both players were out sick for 10 days: "sick should allow you to catch up,
+// nah actually still hurt your in game stuff"). Marking yourself sick changes nothing about the weekly quest (a
+// missed day is still missed), and while you're sick your hunter is weaker too (SICK, applied in mechanics.js).
+// What helps afterwards is the catch-up XP above, which you earn once you're logging again.
+export const SICK={damage:.88,regen:.75,runSpeed:.92,vitality:1,maxBackdate:21};
+export const sickNow=()=>!!profile.sick.from;
+const dayCount=(a,b)=>daysBetween(a,b)+1;
+/** Mark yourself sick from `from` (today, or back-dated up to SICK.maxBackdate days). */
+export function markSick(from=localDay()){
+  const today=localDay();
+  if(!DATE.test(from)||from>today)from=today;
+  if(daysBetween(from,today)>SICK.maxBackdate)from=addDays(today,-SICK.maxBackdate);
+  profile.sick.from=from;saveProfile();
+  announce('sick',`is out sick${from<today?` since ${from.slice(5)}`:''} · get well soon`);
+  return from;
+}
+/** Feeling better: closes the sick spell (it stays on record). */
+export function markBetter(){
+  if(!profile.sick.from)return 0;
+  const today=localDay(),spell={from:profile.sick.from,to:today};
+  profile.sick.spells=[...profile.sick.spells,spell].slice(-20);profile.sick.from='';saveProfile();
+  const n=dayCount(spell.from,spell.to);
+  announce('sick',`is back after ${n} day${n===1?'':'s'} out sick`);
+  return n;
+}
+/** Days spent sick in total (closed spells plus the current one). */
+export function sickDays(){
+  const today=localDay();
+  return profile.sick.spells.reduce((n,x)=>n+dayCount(x.from,x.to),0)+(profile.sick.from?dayCount(profile.sick.from,today):0);
+}
 export const catchUp=()=>realLevel()<cohortLevel()?CATCH_UP:1;
 /** A Monday-week key from before 2026-10-07 as the Thursday week it falls in (never before launch). */
 const thursdayOf=key=>{const k=planWeekKey(new Date(`${key}T12:00:00`));return k<CHALLENGE_START?CHALLENGE_START:k;};
@@ -121,7 +151,7 @@ export const CLASS_INFO={
   mage:{label:'MAGE',description:'Reasoning and recovery empower charged Rootbreaker strikes.',bonus:'Charge power + memory reach'},
   support:{label:'SUPPORT',description:'Discipline and conditioning accelerate breath recovery.',bonus:'Fast stamina recovery + parry reward'}
 };
-export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],lifts:[],title:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:'',wardenFelled:false};
+export const profile={complete:false,introSeen:false,customized:false,units:'imperial',unitsChosen:false,personality:{role:'',instinct:''},inputs:defaults(),reasoning:100,reasoningTaken:'',reasoningVersion:0,reasoningSeen:[],lifts:[],title:'',xp:0,activities:[],claimed:[],tests:[],program:{week:1,key:''},goal:{type:'',targetKg:0,since:''},weighIns:[],appearance:{skinIndex:2,face:'soft',hairStyle:'short',hairColor:'raven',shirt:'moss',pants:'charcoal',outfit:'ranger',weapon:'rootbound',discipline:'fighter'},lastWeek:'',name:'',wardenFelled:false,sick:{from:'',spells:[]}};
 export function saveProfile(){try{localStorage.setItem(STORAGE,JSON.stringify(profile));window.dispatchEvent(new Event('hollow-roots-profile-saved'));}catch{/* Private browsing can disable storage. */}}
 export function loadProfile(){
   try{
@@ -147,6 +177,7 @@ export function loadProfile(){
     const g=raw.goal||{};profile.goal={type:['lose','gain','recomp'].includes(g.type)?g.type:'',targetKg:Number.isFinite(g.targetKg)?g.targetKg:0,since:typeof g.since==='string'?g.since:''};
     profile.weighIns=Array.isArray(raw.weighIns)?raw.weighIns.filter(w=>w&&DATE.test(w.date)&&Number.isFinite(w.kg)).map(w=>({date:w.date,kg:w.kg,marks:Number.isFinite(w.marks)?w.marks:0})).slice(-104):[];
     profile.claimed=Array.isArray(raw.claimed)?raw.claimed.filter(v=>typeof v==='string').slice(-100):[];
+    const sk=raw.sick||{};profile.sick={from:DATE.test(sk.from)?sk.from:'',spells:Array.isArray(sk.spells)?sk.spells.filter(x=>x&&DATE.test(x.from)&&DATE.test(x.to)&&x.from<=x.to).map(x=>({from:x.from,to:x.to})).slice(-20):[]};
     // Plan weeks used to start on Monday, which moved everyone to week 2 on Monday 2026-10-05 and
     // hid week 1's checks. Old keys move to their Thursday week, and a step up taken on a Monday
     // after launch is undone (it comes back on Thursday if half or more of week 1 was done).

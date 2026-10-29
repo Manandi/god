@@ -245,3 +245,9 @@
 #entry .class-dd button.dd-item.shake{animation:clsShake .35s}
 .class-dd .class-detail{margin:0;align-self:start;position:sticky;top:0}
 @media(max-width:650px){.class-dd.open .dd-panel{grid-template-columns:1fr}.dd-list{max-height:240px}}
+/* Sick days (2026-10-28) */
+.sick-panel{margin-top:12px}
+.sick-panel.is-sick{background:#2a1c14;border-color:#8a5a36}
+.sick-panel.is-sick h3{color:#ffb27a}
+.sick-from{display:flex;flex-direction:column;gap:4px;font-size:10px;color:#a9c2aa}
+.sick-from input{font:inherit;background:#0b1a15;color:#e8f2e6;border:1px solid #47644d;padding:5px 6px}

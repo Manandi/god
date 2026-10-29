@@ -22,7 +22,7 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses,CLASS_WEAPON,weaponEligibility,announce } from './profile.js';
+import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses,CLASS_WEAPON,weaponEligibility,announce,sickNow } from './profile.js';
 import { social } from './social.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
@@ -160,7 +160,7 @@ function crossRealm(id,fade=true){
   travel(door.x,door.z,title,detail);setTimeout(()=>{player.yaw=player.cameraYaw=combat.facing=door.yaw;},700);return true;
 }
 function resume(realm){if(realm&&realm!==realmAt(player.x,player.z))crossRealm(realm,false);
-if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela'&&realmAt(player.x,player.z)==='grove')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
+if(!started){player.health=maxHealth();setTimeout(()=>{if(story.stage==='meet_sela'&&realmAt(player.x,player.z)==='grove')tip('start','WELCOME TO MOSSGATE','W A S D to walk · hold right click to look · follow the marker to Sela and press E to talk. Anyone in town will teach you if you ask.');},1200);if(sickNow())setTimeout(()=>toast('YOU ARE SICK','Your hunter feels it too: softer hits, slower Breath, one less heart. Mark yourself better on the WEEKLY QUEST page.'),2600);}started=true;paused=false;dev.open=false;devPanel.classList.add('hidden');shell.hide();$('hud').classList.remove('hidden');journal.classList.add('hidden');journalOpen=false;initAudio();canvas.requestPointerLock?.()?.catch?.(()=>{});}
 $('closeJournal').onclick=()=>toggleJournal(false);
 $('continueExploring').onclick=()=>{ending.classList.add('hidden');done=false;resume();};
 document.addEventListener('pointerlockchange',()=>{
@@ -704,7 +704,7 @@ function remoteFigure(key,info){
     av.update(dt,m==='air'?null:groundY);av.holdWeapon?.(dt,groundY);
   }};
 }
-const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getStage:()=>story.stage,getLevel:()=>realLevel(),makeFigure:remoteFigure,getWeapon:()=>equippedWeapon(),
+const coop=createCoop(scene,{player,groundY,getName:()=>profile.name||'Wayfarer',getStage:()=>story.stage,getLevel:()=>realLevel(),getSick:()=>sickNow(),makeFigure:remoteFigure,getWeapon:()=>equippedWeapon(),
   getAnim:()=>{const c=combat.clip();return {c:c?.name||null,t:c?Math.round(c.time*100)/100:0,s:combat.state==='attack'||combat.charging||combat.state==='guard'?1:0,
     m:player.defeated?'dead':!player.grounded?'air':combat.state==='guard'?'guard':player.emote&&player.emote!=='idle'?player.emote:null};},getAppearance:()=>profile.appearance,onWorld:applyWorld,onHit:applyTeamHit,onSpawn:id=>{if(CHAPTERS.some(c=>c.id===id))spawnEncounter(id);},onSupport:p=>applySupport(p),
   defaultCode:weeklyLobbyCode()});
@@ -717,7 +717,7 @@ function friendsOpen(on=friendsList.classList.contains('hidden')){
   friendsList.classList.toggle('hidden',!on);if(!on)return;
   const list=coop.others();
   friendsList.innerHTML=`<h4>FRIENDS ONLINE · ${coop.code||'SOLO'}</h4>`+(list.length?list.map(o=>{const realm=realmAt(o.x,o.z),where=inHollow(o)?'IN THE HOLLOW HUNT':inLanternhold(o.x,o.z)?'LANTERNHOLD':realm==='shadow'?'SHADOWMERE':'THE VERDANT REACH';
-    return `<button type="button" data-friend="${o.key}"><b>${esc(o.name)}</b>${o.level?` · LV ${o.level}`:''}<small>${where}</small></button>`;}).join(''):'<p>Nobody else is in the world right now. Friends who open the link join you here automatically.</p>')+`<small>Share the link: ${esc(location.origin+location.pathname)}</small>`;
+    return `<button type="button" data-friend="${o.key}"><b>${esc(o.name)}</b>${o.level?` · LV ${o.level}`:''}${o.sick?' · 🤒 SICK':''}<small>${where}</small></button>`;}).join(''):'<p>Nobody else is in the world right now. Friends who open the link join you here automatically.</p>')+`<small>Share the link: ${esc(location.origin+location.pathname)}</small>`;
 }
 function joinFriend(key){
   const o=coop.others().find(o=>o.key===key);friendsOpen(false);if(!o||travelling)return;

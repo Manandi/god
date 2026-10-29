@@ -1,4 +1,4 @@
-import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked, HYBRID_MASTERY, myClasses, CLASS_WEAPON } from './profile.js';
+import { profile, stats, weaponEligibility, frame, FRAMES, level, units, classWeights, pathInfo, pathLocked, HYBRID_MASTERY, myClasses, CLASS_WEAPON, sickNow, SICK } from './profile.js';
 import { MOVESETS, WEAPONS, FLASK } from './combat/moves.js';
 
 // What real-life measurements do in the game. Every system reads its numbers
@@ -72,6 +72,8 @@ export function mechanics() {
   m.level = level(); m.damage *= levelDamage(m.level); m.maxHealth += levelVitality(m.level);
   for (const a of unlockedAbilities(s)) { a.apply(m); m.abilities.push(a.id); }
   m.maxHealth = Math.min(12, m.maxHealth);
+  // Sick (profile.js SICK): weaker hits, slower Breath and running, one less heart, until you mark yourself better.
+  if (sickNow()) { m.damage *= SICK.damage; m.regen *= SICK.regen; m.runSpeed *= SICK.runSpeed; m.maxHealth = Math.max(2, m.maxHealth - SICK.vitality); m.sick = true; }
   return m;
 }
 
@@ -100,6 +102,7 @@ export function mechanicsTable() {
     ['FRAME', `${FRAMES[m.frame].label} · ${FRAMES[m.frame].bonus}`],
     ['WEAPON', `${WEAPONS[equippedWeapon()].label} · ${WEAPONS[equippedWeapon()].note}`],
     ['LEVEL', `LV ${m.level} · strikes ${pct(levelDamage(m.level))} to keep pace with enemies (+15% health per level)${levelVitality(m.level) ? ` · +${levelVitality(m.level)} vitality` : ' · +1 vitality at LV 4'}`],
+    ...(m.sick ? [['SICK', `Strikes ${pct(SICK.damage)} · Breath recovery ${pct(SICK.regen)} · run ${pct(SICK.runSpeed)} · −${SICK.vitality} vitality · until you mark yourself better`]] : []),
     ['ABILITIES', m.abilities.length ? ABILITIES.filter(a => m.abilities.includes(a.id)).map(a => a.name).join(' · ') : 'None yet · a stat of 12 unlocks the first']
   ];
 }

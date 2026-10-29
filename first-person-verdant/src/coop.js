@@ -65,7 +65,7 @@ function localTransport(code, id, on) {
   };
 }
 
-export function createCoop(scene, { player, groundY, getName, getAppearance, getStage=()=>'', getLevel=()=>0, getAnim=()=>null, getWeapon=()=>'', makeFigure=null, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, onSupport, defaultCode='' }) {
+export function createCoop(scene, { player, groundY, getName, getAppearance, getStage=()=>'', getLevel=()=>0, getSick=()=>false, getAnim=()=>null, getWeapon=()=>'', makeFigure=null, getShared=()=>({}), onShared=()=>{}, onWorld, onHit, onSpawn, onSupport, defaultCode='' }) {
   const button = document.getElementById('lobbyButton'), status = document.getElementById('lobbyStatus');
   const params = new URLSearchParams(location.search), local = params.get('net') === 'local';
   // Each tab is its own player (sessionStorage), so two tabs can share a lobby.
@@ -105,7 +105,7 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     event(name, payload) {
       if (name === 'pos' && payload.id !== id) {
         const r = Object.assign(remote(payload.id, payload), { x: payload.x, z: payload.z, y: payload.y || 0, yaw: payload.yaw, anim: payload.anim || null, animAt: performance.now() });
-        for (const k of ['stage', 'appearance', 'weapon', 'name', 'level']) if (payload[k] !== undefined) r[k] = payload[k];
+        for (const k of ['stage', 'appearance', 'weapon', 'name', 'level', 'sick']) if (payload[k] !== undefined) r[k] = payload[k];
       }
       else if (name === 'state') onShared(payload);
       else if (name === 'hello') sendShared(true);
@@ -162,7 +162,7 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
     /** Where the lobby's host is (null when this game is the host or alone). */
     hostPos() { if (!connected || isHost()) return null; const r = remotes.get(memberIds[0]); return r ? { x: r.x, z: r.z, stage: r.stage } : null; },
     /** Other explorers, for creatures to choose whom to chase (the host uses this). */
-    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y, name: r.name || 'Wayfarer', stage: r.stage, level: r.level || 0 })); },
+    others() { return [...remotes].map(([key, r]) => ({ key, x: r.x, z: r.z, y: groundY(r.x, r.z) + r.y, name: r.name || 'Wayfarer', stage: r.stage, level: r.level || 0, sick: r.sick === true })); },
     sendWorld: world => send('world', { ...world, from: id }),
     sendHit: hit => send('hit', { ...hit, from: id }),
     /** A guest reached a nest: ask the host to raise it. */
@@ -176,7 +176,7 @@ export function createCoop(scene, { player, groundY, getName, getAppearance, get
         sendTimer = .1;
         // Position ten times a second; name, look and story stage once a second (smaller messages, less lag).
         const full = (posTick = (posTick + 1) % 10) === 0;
-        send('pos', { id, x: player.x, z: player.z, y: player.height, yaw: player.yaw, anim: getAnim(), ...(full ? { name: getName(), appearance: getAppearance(), stage: getStage(), weapon: getWeapon(), level: getLevel() } : {}) });
+        send('pos', { id, x: player.x, z: player.z, y: player.height, yaw: player.yaw, anim: getAnim(), ...(full ? { name: getName(), appearance: getAppearance(), stage: getStage(), weapon: getWeapon(), level: getLevel(), sick: getSick() } : {}) });
         sendShared(false);
       }
       for (const r of remotes.values()) {

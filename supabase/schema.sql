@@ -326,7 +326,7 @@ returns bigint language plpgsql security definer set search_path = public, exten
 declare new_id bigint;
 begin
   if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
-  if p_kind not in ('workout','steps','run','study','plan','lift','test','level','hunt','story') then raise exception 'bad kind'; end if;
+  if p_kind not in ('workout','steps','run','study','plan','lift','test','level','hunt','story','sick') then raise exception 'bad kind'; end if;
   if (select count(*) from public.activity_feed where hunter_id = p_id and created_at > now() - interval '1 day') >= 40 then return null; end if;
   insert into public.activity_feed (hunter_id, name, kind, text)
   values (p_id, left(coalesce(nullif(btrim(p_name), ''), 'Wayfarer'), 24), p_kind, left(btrim(p_text), 120))

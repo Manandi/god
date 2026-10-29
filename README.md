@@ -2,6 +2,30 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-29 (later) · Sick days (Claude)
+
+The owner asked for "a sick feature" after 10 days out sick: "sick should allow u to catch up, nah actually still hurt your in game stuff". So being sick is honest, not a free pass.
+- **On the WEEKLY QUEST page:**
+  - **SICK?** has a "sick since" date (back-dated up to 21 days) and an **I'M SICK** button.
+  - While you're sick the panel turns amber, and **I'M BETTER** closes the spell. Every spell stays on record (`profile.sick` = `{from, spells:[{from,to}]}`).
+  - Old saves get an empty record.
+- **It doesn't pause anything.** Missed days stay missed and the week bonus still needs the full week.
+- **While you're sick, your hunter is weaker** (`SICK` in `profile.js`, applied at the end of `mechanics()`):
+  - strikes ×0.88
+  - Breath recovery ×0.75
+  - run speed ×0.92
+  - −1 vitality (never below 2)
+
+  The stats screen shows a SICK row. Entering the game while sick shows a "YOU ARE SICK" toast.
+- **Catching up afterwards** is the existing catch-up XP (×2 while you're below the cohort level).
+- **Friends see it:**
+  - The FRIENDS list shows "🤒 SICK" (a `sick` flag in co-op `pos`, once a second).
+  - The Social feed gets "is out sick since 10-19 · get well soon" and "is back after 11 days out sick".
+  - The live `post_activity` now accepts the `sick` kind (migration `activity_kind_sick`; `schema.sql` updated).
+- **Checks:**
+  - Node: back-date 10 days → 11 sick days. Weaker numbers (damage 1.03 → 0.91, regen 1.15 → 0.86, run 5.10 → 4.69, hearts 4 → 3). A 2026-01-01 date is capped at 21 days back. I'M BETTER restores the numbers. The record survives a reload.
+  - Chromium (Supabase aborted): the weekly page shows the panel; back-dated I'M SICK switches it to the sick state. No page errors.
+
 ## Latest handoff — 2026-10-29 · Back online, week 2 runs to Tue Nov 3, hunts move to Wednesday (Claude)
 
 The owner and their friend were both out sick for about 10 days. They asked to "make the game online again", to make it "week 2 now for the second world till next Tuesday", and for a sick feature and the snow world (those follow in later handoffs).
