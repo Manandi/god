@@ -89,21 +89,23 @@ export function weekKey(date=new Date()){
 // in; 2026-10-14: through Thursday, so a step day on Wednesday and Thursday can still finish it in time
 // for that day's hunt). Week 2 is Friday 2026-10-16 to Wednesday 10-21 (keyed by Thursday 10-15, as
 // every week is by its Thursday).
-// Week 2 runs to Tuesday 2026-11-03 (owner, 2026-10-28: "make it week 2 now for the second world till next
-// Tuesday since it's just me and my friend"; they were both out sick). From Wednesday 2026-11-04 every week is
-// Wednesday to Tuesday, keyed by its Wednesday, and the hunt is on Wednesdays (weeklyWorld.js).
-export const CHALLENGE_START='2026-10-01',WEEK1_END='2026-10-16',WEEK2_KEY='2026-10-15',WEEK2_END='2026-11-04',WEEK3_KEY='2026-11-04';
+// After both players were out sick (owner, 2026-10-28/30): the old week 2 runs on to Saturday 2026-10-31, and
+// the challenge RESTARTS at week 1 on Sunday 2026-11-01 ("make the schedule Nov 1 for a restart of week 1").
+// From then every week is Sunday to Saturday, keyed by its Sunday, and the hunt is on Saturdays, the last day of
+// each week (weeklyWorld.js). Everyone's weekly quest goes back to step 1 at the restart (programWeek);
+// levels, XP, weapons and the story stay.
+export const CHALLENGE_START='2026-10-01',WEEK1_END='2026-10-16',WEEK2_KEY='2026-10-15',WEEK2_END='2026-11-01',RESTART='2026-11-01';
 const ymd=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
 export function planWeekKey(date=new Date()){
   const day=ymd(date),d=new Date(date.getFullYear(),date.getMonth(),date.getDate());
   if(day>=CHALLENGE_START&&day<WEEK1_END)return CHALLENGE_START;
   if(day>=WEEK1_END&&day<WEEK2_END)return WEEK2_KEY;
-  // Wednesday weeks from week 3; before launch, the old Thursday weeks.
-  d.setDate(d.getDate()-(day>=WEEK2_END?(d.getDay()+4)%7:(d.getDay()+3)%7));
+  // Sunday weeks from the restart; before launch, the old Thursday weeks.
+  d.setDate(d.getDate()-(day>=RESTART?d.getDay():(d.getDay()+3)%7));
   return ymd(d);
 }
-/** Which week of the 90-day challenge it is (1 from launch day, 2 from 2026-10-16, 3 from 2026-11-04). */
-export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);return k===CHALLENGE_START?1:k===WEEK2_KEY?2:Math.floor(daysBetween(WEEK3_KEY,k)/7)+3;};
+/** Which week of the challenge it is: week 1 again from the restart on 2026-11-01 (before it: 1 from launch, 2 from 10-16). */
+export const challengeWeek=(date=new Date())=>{const k=planWeekKey(date);if(k>=RESTART)return Math.floor(daysBetween(RESTART,k)/7)+1;return k===CHALLENGE_START?1:2;};
 // Joining late (owner, 2026-10-16: "a system for new players to join"): the cohort level is where someone who
 // kept up is by now, the same as this week's Thursday hunt (weeklyWorld.js bossLevel). Anyone below it earns
 // double XP for what they log until they catch up, so a friend who starts in week 4 can still reach the hunts.
@@ -188,7 +190,7 @@ export function loadProfile(){
     // Week 1 grew to two weeks (2026-10-09): a browser that already moved to the 2026-10-08 week goes
     // back to week 1, and the step up it took is undone (it comes back on 2026-10-15 if earned).
     if(profile.program.key>CHALLENGE_START&&profile.program.key<WEEK2_KEY){if(profile.program.week>1)profile.program.week--;profile.program.key=CHALLENGE_START;}
-    // Week 2 grew to Tuesday 2026-11-03 (2026-10-28): a browser that already moved on to the old 2026-10-22 or
+    // Week 2 grew to Saturday 2026-10-31 (2026-10-28, then the restart): a browser that already moved on to the old 2026-10-22 or
     // 2026-10-29 week goes back to week 2, with the step ups it took undone (worked out from what was logged, so
     // only real step ups are undone). Their bonuses fold into week 2's; XP is never taken away.
     if(profile.program.key>WEEK2_KEY&&profile.program.key<WEEK2_END){
@@ -367,6 +369,7 @@ function claimWeek(key,week){if(profile.claimed.includes(`${key}:plan`))return f
 export function programWeek(){
   const now=planWeekKey(),p=profile.program;
   if(p.key!==now){
+    if(now>=RESTART&&(!p.key||p.key<RESTART)){p.week=1;p.key=now;saveProfile();return p.week;}   // the restart: back to step 1
     if(p.key){const step=planStep(p.week),want=step.items.reduce((n,i)=>n+i.count,0),got=step.items.reduce((n,i)=>n+Math.min(i.count,doneIn(p.key,i).length),0);
       if(got>=want)claimWeek(p.key,p.week);   // finished, but the bonus was never paid (logged elsewhere)
       if(got/want>=.5)p.week=Math.min(PLAN.length,p.week+1);}

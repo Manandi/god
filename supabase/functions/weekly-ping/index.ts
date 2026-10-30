@@ -20,12 +20,12 @@ function dateParts(timeZone: string) {
 }
 
 function thursdayWeek(localDate: string) {
-  // Matches planWeekKey in the game's profile.js: week 1 runs 2026-10-01 to Thursday 2026-10-15, week 2 to
-  // Tuesday 2026-11-03 (keyed 2026-10-15), then Wednesday-to-Tuesday weeks keyed by their Wednesday.
+  // Matches planWeekKey in the game's profile.js: week 1 ran 2026-10-01 to Thursday 10-15, week 2 to Saturday
+  // 10-31 (keyed 10-15), then the challenge restarted on Sunday 2026-11-01 with Sunday-to-Saturday weeks.
   if (localDate >= '2026-10-01' && localDate < '2026-10-16') return '2026-10-01';
-  if (localDate >= '2026-10-16' && localDate < '2026-11-04') return '2026-10-15';
+  if (localDate >= '2026-10-16' && localDate < '2026-11-01') return '2026-10-15';
   const date = new Date(`${localDate}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + (localDate >= '2026-11-04' ? 4 : 3)) % 7);
+  date.setUTCDate(date.getUTCDate() - (localDate >= '2026-11-01' ? date.getUTCDay() : (date.getUTCDay() + 3) % 7));
   return date.toISOString().slice(0, 10);
 }
 

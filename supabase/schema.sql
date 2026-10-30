@@ -248,15 +248,18 @@ grant execute on function public.submit_hunter(uuid, text, text, int, int, text,
 alter table public.weekly_worlds add column if not exists gathering_at timestamptz;
 grant select (gathering_at) on public.weekly_worlds to anon, authenticated;
 
--- From 2026-10-28 the hunt is on Wednesdays (migration boss_wednesday_from_oct28, applied 2026-10-29).
+-- Hunt days: Thursdays from 2026-10-08, Wednesday 2026-10-28, then Saturdays from 2026-11-07 after the restart of
+-- week 1 on Sunday 2026-11-01 (migrations boss_wednesday_from_oct28, boss_saturday_from_nov7).
 create or replace function public.boss_day_open()
 returns boolean language sql stable set search_path = public as $$
+  with c as (select (now() at time zone 'America/Chicago')::date as d,
+                    extract(dow from now() at time zone 'America/Chicago') as dow)
   select case
-    when (now() at time zone 'America/Chicago')::date >= date '2026-10-28'
-      then extract(dow from now() at time zone 'America/Chicago') = 3
-    else extract(dow from now() at time zone 'America/Chicago') = 4
-     and (now() at time zone 'America/Chicago')::date >= date '2026-10-08'
-  end;
+    when d >= date '2026-11-07' then dow = 6
+    when d = date '2026-10-28' then true
+    when d > date '2026-10-28' then false
+    else dow = 4 and d >= date '2026-10-08'
+  end from c;
 $$;
 create or replace function public.check_boss_week(p_week text)
 returns void language plpgsql stable set search_path = public as $$
@@ -269,7 +272,7 @@ end;$$;
 create or replace function public.defeat_weekly_boss(p_week text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.boss_day_open() then raise exception 'boss is sealed until hunt day (Wednesday, Central)'; end if;
+  if not public.boss_day_open() then raise exception 'boss is sealed until hunt day (Saturday, Central)'; end if;
   perform public.check_boss_week(p_week);
   insert into public.weekly_worlds(week_id,boss_defeated,defeated_at) values(left(p_week,16),true,now())
   on conflict(week_id) do update set boss_defeated=true,defeated_at=coalesce(public.weekly_worlds.defeated_at,now());
@@ -278,7 +281,7 @@ create or replace function public.boss_gather(p_week text, p_restart timestamptz
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare g timestamptz;
 begin
-  if not public.boss_day_open() then raise exception 'boss is sealed until hunt day (Wednesday, Central)'; end if;
+  if not public.boss_day_open() then raise exception 'boss is sealed until hunt day (Saturday, Central)'; end if;
   perform public.check_boss_week(p_week);
   insert into public.weekly_worlds(week_id) values(left(p_week,16)) on conflict(week_id) do nothing;
   if p_restart is not null then
@@ -321,6 +324,20 @@ returns boolean language sql stable security definer set search_path = public, e
     exists (select 1 from public.weekly_hunters where hunter_id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex'))
     or exists (select 1 from public.hunters where id = p_id and secret_hash = encode(extensions.digest(p_secret, 'sha256'), 'hex')));
 $$;
+-- Heartbeat for the keep-awake workflow (migration keepalive_heartbeat, 2026-10-30): a daily write, because a
+-- read every three days did not stop the free project from pausing.
+create table if not exists public.keepalive (id int primary key default 1 check (id = 1), pinged_at timestamptz not null default now(), pings bigint not null default 0);
+alter table public.keepalive enable row level security;
+revoke all on public.keepalive from anon, authenticated;
+create or replace function public.keepalive_ping()
+returns timestamptz language sql security definer set search_path = public as $$
+  insert into public.keepalive (id, pinged_at, pings) values (1, now(), 1)
+  on conflict (id) do update set pinged_at = now(), pings = public.keepalive.pings + 1
+  returning pinged_at;
+$$;
+revoke all on function public.keepalive_ping() from public;
+grant execute on function public.keepalive_ping() to anon, authenticated;
+
 create or replace function public.post_activity(p_id uuid, p_secret text, p_name text, p_kind text, p_text text)
 returns bigint language plpgsql security definer set search_path = public, extensions as $$
 declare new_id bigint;
@@ -403,7 +420,7 @@ begin
   if p_endpoint is null or p_endpoint !~ '^https://' or char_length(p_endpoint) > 2048
      or p_p256dh is null or char_length(p_p256dh) > 200
      or p_auth is null or char_length(p_auth) > 100 then raise exception 'bad push subscription'; end if;
-  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4) then raise exception 'bad challenge week'; end if;
+  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4, 7) then raise exception 'bad challenge week'; end if;
   if not exists (select 1 from pg_timezone_names where name = p_timezone) then raise exception 'bad timezone'; end if;
   select hunter_id into old_owner from public.weekly_push_subscriptions where endpoint = p_endpoint;
   insert into public.weekly_push_subscriptions(endpoint,hunter_id,p256dh,auth,timezone,week_start,weekly_complete,last_sent_local_date,updated_at)
@@ -421,7 +438,7 @@ create or replace function public.update_weekly_push_state(
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
-  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4) then raise exception 'bad challenge week'; end if;
+  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4, 7) then raise exception 'bad challenge week'; end if;
   if not exists (select 1 from pg_timezone_names where name = p_timezone) then raise exception 'bad timezone'; end if;
   update public.weekly_push_subscriptions
     set week_start=p_week_start,weekly_complete=coalesce(p_complete,false),timezone=p_timezone,updated_at=now()

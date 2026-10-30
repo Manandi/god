@@ -439,7 +439,7 @@ function finishStory(){
   setTimeout(()=>{if(story.stage!=='end')return;done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();},3500);
 }
 // --------------------------------------------------------- the weekly hunt
-// bossEvent.js: hunt day (Wednesdays from 2026-10-28, Central), level-gated, through the Hollow Rift, with a
+// bossEvent.js: hunt day (Saturdays from 2026-11-07, Central), level-gated, through the Hollow Rift, with a
 // shared five-minute gathering before Orrun wakes (two or more hunters needed).
 const huntersInHollow=()=>(inHollow(player)?1:0)+coop.others().filter(o=>inHollow(o)).length;
 function huntLive(){
@@ -471,8 +471,8 @@ function travel(x,z,title,detail=''){
 async function enterRift(){
   if(travelling)return;
   const w=bossWindow(),lv=level();
-  if(cloudWorld.boss_defeated&&!dev.bossUnlocked){toast('ORRUN IS RELEASED','The hunt is won for this week. The rift opens again next Wednesday.');return;}
-  if(!w.open&&!dev.bossUnlocked){const h=Math.ceil(w.remaining/3600000);toast('THE RIFT IS SEALED',`It opens on Wednesday, Central time, for explorers of level ${w.level} and up: in ${h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h`}.`);return;}
+  if(cloudWorld.boss_defeated&&!dev.bossUnlocked){toast('ORRUN IS RELEASED','The hunt is won for this week. The rift opens again next Saturday.');return;}
+  if(!w.open&&!dev.bossUnlocked){const h=Math.ceil(w.remaining/3600000);toast('THE RIFT IS SEALED',`It opens on Saturday, Central time, for explorers of level ${w.level} and up: in ${h>=24?`${Math.floor(h/24)}d ${h%24}h`:`${h}h`}.`);return;}
   if(lv<w.level&&!dev.bossUnlocked){toast(`LEVEL ${w.level} NEEDED`,`This week’s hunt needs level ${w.level}; you are level ${lv}. Log your training in WEEKLY QUEST.`);return;}
   if(bossEvent.phase()==='fight'&&warden?.awake&&!bossEvent.state.joined&&!dev.bossUnlocked){toast('THE HUNT HAS BEGUN','The rift reopens if this attempt fails.');return;}
   try{if(w.open)await bossEvent.enter();}

@@ -25,7 +25,7 @@ begin
   if p_endpoint is null or p_endpoint !~ '^https://' or char_length(p_endpoint) > 2048
      or p_p256dh is null or char_length(p_p256dh) > 200
      or p_auth is null or char_length(p_auth) > 100 then raise exception 'bad push subscription'; end if;
-  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4) then raise exception 'bad challenge week'; end if;
+  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4, 7) then raise exception 'bad challenge week'; end if;
   if not exists (select 1 from pg_timezone_names where name = p_timezone) then raise exception 'bad timezone'; end if;
   select hunter_id into old_owner from public.weekly_push_subscriptions where endpoint = p_endpoint;
   insert into public.weekly_push_subscriptions(endpoint,hunter_id,p256dh,auth,timezone,week_start,weekly_complete,last_sent_local_date,updated_at)
@@ -43,7 +43,7 @@ create or replace function public.update_weekly_push_state(
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.hunter_secret_ok(p_id, p_secret) then raise exception 'not your hunter'; end if;
-  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4) then raise exception 'bad challenge week'; end if;
+  if p_week_start is null or extract(isodow from p_week_start) not in (3, 4, 7) then raise exception 'bad challenge week'; end if;
   if not exists (select 1 from pg_timezone_names where name = p_timezone) then raise exception 'bad timezone'; end if;
   update public.weekly_push_subscriptions
     set week_start=p_week_start,weekly_complete=coalesce(p_complete,false),timezone=p_timezone,updated_at=now()

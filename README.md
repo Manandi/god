@@ -2,6 +2,32 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-30 · The challenge restarts at week 1 on Sunday Nov 1; hunts on Saturdays; keep-awake fixed (Claude)
+
+The owner, a day after the Wednesday schedule below: "make the schedule Nov 1 for a restart of week 1". They chose Sunday-to-Saturday weeks with the hunt on Saturday, and resetting only the schedule and the quest step. **This replaces the Wednesday weeks and Wednesday hunts in the 2026-10-29 entry.**
+- **Weeks** (`profile.js`):
+  - The old week 2 (key `2026-10-15`) runs on to **Sat 10-31** (`WEEK2_END` = 11-01).
+  - From **`RESTART` = Sun 2026-11-01**, weeks run Sunday to Saturday, keyed by their Sunday.
+  - `challengeWeek` counts from 1 again: week 1 = 11-01, week 2 = 11-08, week 3 = 11-15 … Dec 31 is in week 9.
+- **What resets:** the first time a browser sees a restart week, `programWeek()` puts the weekly quest back to **step 1** (the 350-bonus starter week) without the usual step-up check.
+  - Levels, XP, weapons, the story and everything else stay.
+  - Checked with a faked clock: step 3 with 1500 XP on 10-31 becomes step 1 with 1500 XP on 11-01, and step 1 again on 11-08 when nothing was logged.
+- **Hunts** (`weeklyWorld.js`; server migration `boss_saturday_from_nov7`, also in `schema.sql`):
+  - There's no hunt from 10-29 to 11-06.
+  - From **Sat 11-07**, every Saturday, the last day of each week, at that week's `cohortLevel`: 11-07 lv 3, 11-14 lv 3, 11-21 lv 5, 11-28 lv 7 …
+  - Every message says Saturday.
+- **Book III** (Frostbound Crown, lv 5) opens with restart week 3, **Sun 11-15**. The `SAGA` weeks and the `frost_wait` objective say so, and Book II now runs to 11-14.
+- **Not decided yet:** at this pace the finale's lv 21 gate isn't reached by Thu Dec 31 (week 9 is lv 17). The `SAGA` rows for Books IV, V and the finale are unchanged until the owner decides.
+- **Keep-awake fixed:**
+  - `keepalive.yml` pinged with a read every three days and succeeded through 10-22, yet the project paused anyway; the 10-25 run failed against the paused project.
+  - It now runs **daily** and **writes** a heartbeat: `public.keepalive_ping()`, migration `keepalive_heartbeat`, also in `schema.sql`. It prints a "click Restore" error if Supabase doesn't answer.
+  - Checked: the RPC answers with the publishable key.
+- **Reminders (not deployed):** `weekly-ping` and the push RPCs follow the Sunday weeks (week starts with isodow 3, 4 or 7 are accepted).
+- **Checks:**
+  - Node: week keys, weeks, cohort levels and hunt windows from 10-30 to 12-31, plus the reset above.
+  - Production build.
+  - Chromium: the weekly page and the sick panel, with no page errors.
+
 ## Latest handoff — 2026-10-29 (later) · Sick days (Claude)
 
 The owner asked for "a sick feature" after 10 days out sick: "sick should allow u to catch up, nah actually still hurt your in game stuff". So being sick is honest, not a free pass.

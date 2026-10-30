@@ -11,9 +11,10 @@ export const weeklyLobbyCode=()=>'HROOTS';
 // 2026-10-08, a week after launch. The server checks the same day
 // (boss_day_open in supabase/schema.sql). Entry needs a level that rises with
 // the weeks: 3 for the first boss, then 2 more each week (the pace of the plan).
-// From Wednesday 2026-10-28 the hunt is on Wednesdays (owner, 2026-10-28: weeks run Wednesday to Tuesday after
-// the long week 2). The server's boss_day_open() uses the same rule.
-export const BOSS_TZ='America/Chicago',FIRST_BOSS='2026-10-08',WEDNESDAY_HUNTS='2026-10-28';
+// Hunt days: Thursdays from 2026-10-08, one Wednesday hunt on 2026-10-28, and from the restart of week 1
+// (owner, 2026-10-30: weeks run Sunday to Saturday from 2026-11-01) every Saturday from 2026-11-07, the last day
+// of each week. The server's boss_day_open() uses the same rule.
+export const BOSS_TZ='America/Chicago',FIRST_BOSS='2026-10-08',WEDNESDAY_HUNTS='2026-10-28',SATURDAY_HUNTS='2026-11-07';
 const DAY=86400000;
 /** The date (YYYY-MM-DD), weekday (0 = Sunday) and time of day in Central time. */
 export function centralNow(now=new Date()){
@@ -26,19 +27,20 @@ export const bossNumber=date=>Math.floor((Date.parse(`${date}T00:00:00Z`)-Date.p
 // Week 1 ran two weeks (owner, 2026-10-09), so the 2026-10-15 hunt asks level 3 again and the climb
 // (+2 a week) starts a week later: 3, 3, 5, 7, 9…
 export const bossLevel=n=>1+2*Math.max(1,n-1);
-/** The hunt weekday for a date: Thursday (4) before 2026-10-28, Wednesday (3) from then. */
-const huntDow=date=>date>=WEDNESDAY_HUNTS?3:4;
-export const huntDayName=(date=centralNow().date)=>huntDow(date)===3?'WEDNESDAY':'THURSDAY';
+/** The hunt weekday for a date: Thursday (4) before 2026-10-28, Wednesday (3) that day, Saturday (6) after. */
+const huntDow=date=>date>WEDNESDAY_HUNTS?6:date===WEDNESDAY_HUNTS?3:4;
+export const huntDayName=(date=centralNow().date)=>['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'][huntDow(date)];
 export function bossWindow(now=new Date()){
-  const c=centralNow(now),open=c.dow===huntDow(c.date)&&c.date>=FIRST_BOSS;
+  const c=centralNow(now),gap=c.date>WEDNESDAY_HUNTS&&c.date<SATURDAY_HUNTS;   // no hunt between 10-28 and the first Saturday
+  const open=!gap&&c.dow===huntDow(c.date)&&c.date>=FIRST_BOSS;
   // The next (or current) hunt day, and the time until it opens or closes.
-  let day=open?c.date:addDays(c.date,((huntDow(c.date)-c.dow)+7)%7||7);
+  let day=gap?SATURDAY_HUNTS:open?c.date:addDays(c.date,((huntDow(c.date)-c.dow)+7)%7||7);
   if(day<FIRST_BOSS)day=FIRST_BOSS;
   const untilMidnight=DAY/1000-c.secs,daysAhead=Math.round((Date.parse(`${day}T00:00:00Z`)-Date.parse(`${c.date}T00:00:00Z`))/DAY);
   const remaining=open?untilMidnight*1000:((daysAhead-1)*DAY/1000+untilMidnight)*1000;
   const number=bossNumber(day);
-  // The level is that week's cohort level (week 2: 3, week 3: 5, then +2 a week), from the challenge weeks.
-  const level=day>=WEDNESDAY_HUNTS?cohortLevel(new Date(`${day}T12:00:00`)):bossLevel(number);
+  // From the restart the level is that week's cohort level (weeks 1 and 2: 3, week 3: 5, then +2 a week).
+  const level=day>=SATURDAY_HUNTS?cohortLevel(new Date(`${day}T12:00:00`)):day>=WEDNESDAY_HUNTS?3:bossLevel(number);
   return {open,day,number,level,remaining:Math.max(0,remaining),next:new Date(now.getTime()+remaining)};
 }
 export function bossWindowLabel(){
