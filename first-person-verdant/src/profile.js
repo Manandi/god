@@ -3,10 +3,15 @@ import {PLAN,PLAN_BONUS,planStep,e1rm,TITLES} from './training.js';
 export const BIOMES=[
   {id:'grove',name:'VERDANT REACH',short:'VERDANT',longitude:.115,latitude:.20,level:1,color:'#a8db91',description:'Ancient roots, drowned temples, and the Shellbacks. The first realm is open.',creatures:'Shellbacks · Thornlings',guardian:'Verdant Guardian'},
   {id:'shadow',name:'SHADOWMERE',short:'SHADOW',longitude:.225,latitude:.62,level:3,color:'#7fd08f',description:'A moonlit forest in the green west where the lanterns are going out. Green monkeys hunt from the roots; a sword-bearing gorilla keeps its heart.',creatures:'Green Monkeys',guardian:'The Rootbound Gorilla'},
-  {id:'frost',name:'FROSTBOUND CROWN',short:'FROST',longitude:.37,latitude:.43,level:5,color:'#a3dafa',description:'Glacial lakes beneath crystal peaks, where the Crown of Ashmere fled. The next realm: it opens at level 5.',creatures:'Rime Hares · Icebound Sentinels',guardian:'The White Maw'},
+  {id:'frost',name:'FROSTBOUND CROWN',short:'FROST',longitude:.37,latitude:.43,level:5,opens:'2026-11-15',color:'#a3dafa',description:'Deep snow beneath crystal peaks, where the court of Ashmere froze itself waiting for its ruler. Opens Sunday 15 November, at level 5.',creatures:'Rime Wolves · Frost Imps',guardian:'The White Maw'},
   {id:'ember',name:'EMBER WASTES',short:'EMBER',longitude:.62,latitude:.23,level:9,color:'#ffa278',description:'Black citadels divided by living fire.',creatures:'Cinder Hounds · Ash Knights',guardian:'Pyreback Colossus'},
   {id:'wraith',name:'WRAITHMOOR',short:'WRAITH',longitude:.865,latitude:.20,level:15,color:'#d5a9fa',description:'Violet ruins where the dead still wander.',creatures:'Lantern Wraiths · Hollow Knights',guardian:'The Veiled Queen'}
 ];
+/** A realm with an opening day (Book III opens with restart week 3, Sun 2026-11-15) stays shut before it, at any level. */
+export const realmOpensOn=id=>BIOMES.find(b=>b.id===id)?.opens||null;
+export const realmDateOpen=id=>{const on=realmOpensOn(id);return !on||localDay()>=on;};
+/** 'SUN NOV 15' for a realm's opening day. */
+export const realmOpensLabel=id=>{const on=realmOpensOn(id);if(!on)return '';const d=new Date(`${on}T12:00:00`);return `${['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()]} ${['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]} ${d.getDate()}`;};
 // What Mycel measures. Body weight and height set your frame (FRAMES), not a stat.
 // Each test is scored against all adults (both sexes, roughly 18–65): `norms` are
 // [result, percentile of adults at or below it] points, and SCORE_SCALE turns the

@@ -49,19 +49,20 @@ function rippleTexture() {
 /** The meshes of a GLB node (a node with several materials is a group of meshes). */
 function meshesOf(node) { const out = []; node.traverse(o => { if (o.isMesh) out.push(o); }); return out; }
 
-/** A Rootway: a ring of braided root around a green-gold veil, the way between worlds. */
-export function rootwayMesh(scene, x, y, z, rotY = 0) {
+/** A Rootway: a ring of braided root around a green-gold veil, the way between worlds. `tint` recolours the veil,
+ *  swirl and light (the Rootways to and from the Frostbound Crown are frost-blue). */
+export function rootwayMesh(scene, x, y, z, rotY = 0, tint = {}) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; scene.add(g);
   const bark = new THREE.MeshStandardMaterial({ color: 0x3a2c1e, roughness: .95, flatShading: true });
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, .2, 8, 36), bark); ring.position.y = 1.7; g.add(ring);
   const vine = new THREE.Mesh(new THREE.TorusGeometry(1.35, .07, 6, 36, Math.PI * 1.6), new THREE.MeshStandardMaterial({ color: 0x4f8a3a, emissive: 0x1d4a1a, emissiveIntensity: .6, roughness: .8 }));
   vine.position.set(0, 1.7, .12); vine.rotation.z = .4; g.add(vine);
-  const veil = new THREE.Mesh(new THREE.CircleGeometry(1.2, 40), new THREE.MeshBasicMaterial({ color: 0x7fe0a6, transparent: true, opacity: .42, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const veil = new THREE.Mesh(new THREE.CircleGeometry(1.2, 40), new THREE.MeshBasicMaterial({ color: tint.veil ?? 0x7fe0a6, transparent: true, opacity: .42, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
   veil.position.y = 1.7; g.add(veil);
-  const swirl = new THREE.Mesh(new THREE.RingGeometry(.25, 1.1, 32, 1, 0, Math.PI * 1.4), new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: .3, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const swirl = new THREE.Mesh(new THREE.RingGeometry(.25, 1.1, 32, 1, 0, Math.PI * 1.4), new THREE.MeshBasicMaterial({ color: tint.swirl ?? 0xffe2a0, transparent: true, opacity: .3, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
   swirl.position.set(0, 1.7, .01); g.add(swirl);
   for (const s of [-1, 1]) { const root = new THREE.Mesh(new THREE.ConeGeometry(.42, 1.4, 6), bark); root.position.set(s * 1.1, .55, 0); root.rotation.z = s * .5; g.add(root); }
-  const light = new THREE.PointLight(0x9be8b0, 1.4, 8, 2); light.position.y = 1.7; g.add(light);
+  const light = new THREE.PointLight(tint.light ?? 0x9be8b0, 1.4, 8, 2); light.position.y = 1.7; g.add(light);
   return { group: g, update(t) { swirl.rotation.z = -t * 1.3; veil.material.opacity = .36 + Math.sin(t * 2) * .07; } };
 }
 

@@ -21,11 +21,6 @@ export const HUNT = { name: 'THE SCORCHED HOLLOW', x: 60, z: -18, r: 14 };
 // level 3, it lies far outside the Reach (beyond the camera's 540 m draw distance), with its
 // own ground, sky and walkable edge. Everything in it is placed relative to this centre.
 export const SHADOWMERE = { name:'SHADOWMERE', x:900, z:-55, r:48, entry:{x:900,z:-9}, guardian:{x:900,z:-62} };
-/** The worlds you can stand in: id, centre and walkable radius (collision.js keeps you inside one). */
-export const REALMS = [
-  { id:'grove', name:'THE VERDANT REACH', x:0, z:-55, r:205 },
-  { id:'shadow', name:'SHADOWMERE', x:SHADOWMERE.x, z:SHADOWMERE.z, r:SHADOWMERE.r-1.2 }
-];
 /** The Rootway in Mossgate's square: the door to Shadowmere (level 3). */
 export const ROOTWAY = { x:2.6, z:49.2 };
 /** Where Shadowmere's memory waits: a lantern seed on a root pedestal by the falls' pool. */
@@ -38,7 +33,41 @@ export const GARROW_SEAL = { x:SHADOWMERE.guardian.x, z:SHADOWMERE.guardian.z, r
 // facing the lantern trail. No creature can come past its wall (creatures.js); lanternhold.js builds it.
 export const LANTERNHOLD = { x:SHADOWMERE.x-26, z:SHADOWMERE.z+18, r:12.5, gate:0 };
 export const inLanternhold = (x,z,pad=0) => Math.hypot(x-LANTERNHOLD.x,z-LANTERNHOLD.z) < LANTERNHOLD.r+pad;
-export const realmAt = (x,z) => Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z) < SHADOWMERE.r+40 ? 'shadow' : 'grove';
+// Book III, the Frostbound Crown (owner, 2026-10-30: "third world building the snow world"): its own world far west
+// of the Reach (beyond the 540 m draw distance), reached through a Rootway in Lanternhold's plaza or the atlas at
+// level 5, from Sun Nov 15. Local layout, as offsets from its centre (z negative is north, ahead as you arrive):
+// the entry and the Rootway home in the south, the white road running north, Hearthfast (the warm camp, safe ground)
+// to the east of it, the still lake to the west, the ruined court of Ashmere north-west (the kneeling courtiers and
+// the empty throne, the memory) and the White Maw's den north-east, sealed behind three frozen braziers.
+export const FROSTBOUND = { name:'THE FROSTBOUND CROWN', x:-900, z:-55, r:54, entry:{x:-900,z:-9}, maw:{x:-890,z:-83} };
+const fb = (dx,dz) => ({ x:FROSTBOUND.x+dx, z:FROSTBOUND.z+dz });
+/** The white road, as offsets: from the entry north past Hearthfast's lane to the den, with a branch west to the court. */
+export const FROST_ROAD = [[0,47],[2,36],[7,24],[3,11],[-2,-2],[1,-14],[6,-22]];
+export const FROST_COURT_ROAD = [[-2,-2],[-9,-8],[-14,-14]];
+/** Hearthfast: Veyra's ring of hearthwood round the last fire in the realm. No creature crosses its wall. */
+export const HEARTHFAST = { ...fb(25,19), r:8.5, gate:Math.PI };
+export const inHearthfast = (x,z,pad=0) => Math.hypot(x-HEARTHFAST.x,z-HEARTHFAST.z) < HEARTHFAST.r+pad;
+/** Lanternhold or Hearthfast: the safe towns creatures never step into (creatures.js). */
+export const SAFE_GROUND = [LANTERNHOLD, HEARTHFAST];
+export const safeZoneAt = (x,z,pad=0) => SAFE_GROUND.find(t=>Math.hypot(x-t.x,z-t.z)<t.r+pad)||null;
+export const inSafeGround = (x,z,pad=0) => !!safeZoneAt(x,z,pad);
+export const FROST_LAKE = { ...fb(-23,17), r:10.5 };
+/** The court of Ashmere: a broken ice palace; its courtiers kneel in rows toward the empty throne (Book III's memory). */
+export const FROST_COURT = { ...fb(-22,-20), r:12.5 };
+export const RIME_THRONE = { ...fb(-22,-30.5) };
+/** The White Maw's seal: a ring of ice and crown-glass round its den, and three braziers the court let freeze. */
+export const MAW_SEAL = { x:FROSTBOUND.maw.x, z:FROSTBOUND.maw.z, r:6.5,
+  braziers:[[Math.PI/2,'EAST'],[-Math.PI/2,'WEST'],[0,'SOUTH']].map(([a,side],i)=>({ i, side, x:FROSTBOUND.maw.x+Math.sin(a)*10.6, z:FROSTBOUND.maw.z+Math.cos(a)*10.6, a })) };
+/** The Rootway north, in Lanternhold's plaza by the well, and its twin by the Frostbound entry (home to Lanternhold). */
+export const FROST_ROOTWAY = { x:LANTERNHOLD.x+Math.cos(-1.3)*9.2, z:LANTERNHOLD.z+Math.sin(-1.3)*9.2 };
+export const FROST_ROOTWAY_BACK = { ...fb(-6,47) };
+export const realmAt = (x,z) => Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z) < SHADOWMERE.r+40 ? 'shadow' : Math.hypot(x-FROSTBOUND.x,z-FROSTBOUND.z) < FROSTBOUND.r+40 ? 'frost' : 'grove';
+/** The worlds you can stand in: id, centre and walkable radius (collision.js keeps you inside one). */
+export const REALMS = [
+  { id:'grove', name:'THE VERDANT REACH', x:0, z:-55, r:205 },
+  { id:'shadow', name:'SHADOWMERE', x:SHADOWMERE.x, z:SHADOWMERE.z, r:SHADOWMERE.r-1.2 },
+  { id:'frost', name:'THE FROSTBOUND CROWN', x:FROSTBOUND.x, z:FROSTBOUND.z, r:FROSTBOUND.r-1.2 }
+];
 const START = { x: 0, z: 39 };
 const clamp = THREE.MathUtils.clamp;
 function fract(n) { return n - Math.floor(n); }
@@ -69,8 +98,28 @@ function shadowY(x,z){
   h*=THREE.MathUtils.smoothstep(Math.hypot(x-LANTERNHOLD.x,z-LANTERNHOLD.z)-LANTERNHOLD.r,0,6);   // the town stands on level ground
   return h+Math.max(0,d-(SHADOWMERE.r-3))**2*.09;
 }
+// The Frostbound Crown's floor: deep snow in drifts, level along the white road and round the camp, the court and the
+// den, a flat basin of ice for the lake, and banks of snow rising to a plateau past the edge.
+function segDist(px,pz,line){
+  let best=Infinity;
+  for(let i=0;i<line.length-1;i++){const [ax,az]=line[i],[bx,bz]=line[i+1],dx=bx-ax,dz=bz-az,t=Math.max(0,Math.min(1,((px-ax)*dx+(pz-az)*dz)/(dx*dx+dz*dz)));best=Math.min(best,Math.hypot(px-ax-dx*t,pz-az-dz*t));}
+  return best;
+}
+const FROST_FLAT=[[HEARTHFAST.x,HEARTHFAST.z,HEARTHFAST.r+1,5],[FROST_COURT.x,FROST_COURT.z,FROST_COURT.r+1,5],[MAW_SEAL.x,MAW_SEAL.z,14,6],[FROSTBOUND.entry.x,FROSTBOUND.entry.z+1,6,5],[FROST_LAKE.x,FROST_LAKE.z,FROST_LAKE.r+1.5,4]];
+export function frostRoadDist(x,z){const dx=x-FROSTBOUND.x,dz=z-FROSTBOUND.z;return Math.min(segDist(dx,dz,FROST_ROAD),segDist(dx,dz,FROST_COURT_ROAD),segDist(dx,dz,[[7,24],[16.5,19.5]]));}
+function frostY(x,z){
+  const dx=x-FROSTBOUND.x,dz=z-FROSTBOUND.z,d=Math.hypot(dx,dz);
+  let h=(noise(x*.045+11,z*.045)-.5)*3.4+(noise(x*.12,z*.12+4)-.5)*.9+Math.max(0,noise(x*.09+2,z*.21)-.62)*3;   // long wind-cut drifts
+  let level=1-THREE.MathUtils.smoothstep(frostRoadDist(x,z)-2.6,0,5);
+  for(const [cx,cz,r,f] of FROST_FLAT)level=Math.max(level,1-THREE.MathUtils.smoothstep(Math.hypot(x-cx,z-cz)-r,0,f));
+  h*=1-level;
+  const lake=1-THREE.MathUtils.smoothstep(Math.hypot(x-FROST_LAKE.x,z-FROST_LAKE.z)-FROST_LAKE.r,0,2.5);
+  h=THREE.MathUtils.lerp(h,-.42,lake);
+  return h+Math.min(20,Math.max(0,d-(FROSTBOUND.r-3))**2*.12);
+}
 function surfaceY(x,z) {
   if(Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+160)return shadowY(x,z);
+  if(Math.hypot(x-FROSTBOUND.x,z-FROSTBOUND.z)<FROSTBOUND.r+200)return frostY(x,z);
   // The town square, the homestead and the arena are level gameplay spaces;
   // the land eases into each of them.
   let height=terrainY(x,z);
@@ -130,6 +179,16 @@ function forestDetail(){
     ctx.strokeStyle=random()>.46?'rgba(102,87,49,.21)':'rgba(95,127,65,.19)';
     ctx.lineWidth=.4+random()*1.4;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+random()*7-3,y+random()*11-5);ctx.stroke();
   }
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+  texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=8;return texture;
+}
+function snowDetail(){
+  if(typeof document==='undefined')return null;
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
+  const ctx=canvas.getContext('2d'),random=rng(51207);
+  ctx.fillStyle='#f4f7fb';ctx.fillRect(0,0,128,128);
+  for(let i=0;i<2600;i++){const v=Math.floor(205+random()*50);ctx.fillStyle=`rgba(${v-12},${v-4},${v},${.05+random()*.2})`;ctx.fillRect(random()*128,random()*128,1+random()*2.5,1+random()*2);}
+  for(let i=0;i<120;i++){ctx.fillStyle=`rgba(255,255,255,${.4+random()*.6})`;ctx.fillRect(random()*128,random()*128,1,1);}   // glints
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=8;return texture;
 }
@@ -245,7 +304,7 @@ export function buildWorld(scene){
   scene.background=color('#779d92');scene.fog=new THREE.FogExp2(0x83a79a,.0057);
   const ambient=new THREE.HemisphereLight(0xc6e9e4,0x33462b,1.8);scene.add(ambient);
   const sun=new THREE.DirectionalLight(0xf6dda0,2.45);sun.position.set(-45,95,-50);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-48;sun.shadow.camera.right=48;sun.shadow.camera.top=48;sun.shadow.camera.bottom=-48;sun.shadow.camera.near=.5;sun.shadow.camera.far=230;sun.shadow.normalBias=.035;sun.shadow.bias=-.00012;scene.add(sun,sun.target);
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{shade:{value:0}},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'uniform float shade; varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);vec3 day=mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h));gl_FragColor=vec4(mix(day,vec3(.045,.105,.09),shade),1.);}' }));scene.add(sky);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(510,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{shade:{value:0},frost:{value:0}},vertexShader:'varying vec3 v; void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'uniform float shade; uniform float frost; varying vec3 v; void main(){float h=clamp(normalize(v).y*.5+.5,0.,1.);vec3 day=mix(vec3(.63,.73,.59),vec3(.25,.50,.58),smoothstep(.1,.9,h));vec3 cold=mix(vec3(.86,.91,.95),vec3(.52,.68,.85),smoothstep(.45,.95,h));gl_FragColor=vec4(mix(mix(day,vec3(.045,.105,.09),shade),cold,frost),1.);}' }));scene.add(sky);
   const s=TERRAIN.size,steps=TERRAIN.steps,positions=[],colors=[],indices=[],uvs=[];
   const cLow=color('#365333'),cMid=color('#567b46'),cHigh=color('#87966a');
   for(let z=0;z<=steps;z++)for(let x=0;x<=steps;x++){
@@ -405,6 +464,24 @@ export function buildWorld(scene){
   shadowFerns.count=sf;scene.add(shadowFerns);
   const altarMat=new THREE.MeshStandardMaterial({color:0x39463c,roughness:1,flatShading:true});
   for(const side of [-1,1]){const x=SHADOWMERE.guardian.x+side*8,z=SHADOWMERE.guardian.z-2,y=groundY(x,z);const monolith=new THREE.Mesh(new THREE.DodecahedronGeometry(1,0),altarMat);monolith.position.set(x,y+2,z);monolith.scale.set(1.2,2.5,1.1);monolith.castShadow=true;scene.add(monolith);colliders.push({x,z,r:1.1,top:y+4.5});}
+  // The Frostbound Crown's ground: a fine grid of deep snow (blue in the hollows of the drifts, packed grey-blue
+  // along the white road, thawed earth inside Hearthfast), and a skirt of snowfield out to the fog.
+  const FB=FROSTBOUND,frostBase=groundY(FB.x,FB.z),fs=(FB.r+9)*2,frostGeo=new THREE.PlaneGeometry(fs,fs,120,120);frostGeo.rotateX(-Math.PI/2);
+  {const p=frostGeo.getAttribute('position'),cols=[],snow=new THREE.Color('#e3eaf1'),blue=new THREE.Color('#b9cadb'),road=new THREE.Color('#aebccb'),earth=new THREE.Color('#6a5a4a'),ice=new THREE.Color('#9fb9cc'),t=new THREE.Color();
+   for(let i=0;i<p.count;i++){const x=FB.x+p.getX(i),z=FB.z+p.getZ(i),y=groundY(x,z);p.setY(i,y-frostBase);
+     const n=noise(x*.16+3,z*.16),hollow=THREE.MathUtils.clamp(.5-(y-groundY(x+1.5,z+1.5))*.9,0,1);
+     t.copy(snow).lerp(blue,hollow*.55+n*.18);
+     const rd=1-THREE.MathUtils.smoothstep(frostRoadDist(x,z),1.4,3.1);if(rd>0)t.lerp(road,rd*(.7+n*.3));
+     const hf=1-THREE.MathUtils.smoothstep(Math.hypot(x-HEARTHFAST.x,z-HEARTHFAST.z),HEARTHFAST.r-2.5,HEARTHFAST.r+.5);if(hf>0)t.lerp(earth,hf*(.75+n*.25));
+     const lk=1-THREE.MathUtils.smoothstep(Math.hypot(x-FROST_LAKE.x,z-FROST_LAKE.z),FROST_LAKE.r,FROST_LAKE.r+2);if(lk>0)t.lerp(ice,lk*.6);
+     cols.push(t.r,t.g,t.b);}
+   frostGeo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));frostGeo.computeVertexNormals();}
+  const snowTex=snowDetail();if(snowTex)snowTex.repeat.set(fs/6,fs/6);
+  const frostGround=new THREE.Mesh(frostGeo,new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.86,map:snowTex,bumpMap:snowTex,bumpScale:.05}));
+  frostGround.position.set(FB.x,frostBase,FB.z);frostGround.receiveShadow=true;scene.add(frostGround);cameraObstacles.push(frostGround);
+  const frostSkirt=new THREE.Mesh(new THREE.RingGeometry(FB.r+6,FB.r+190,64,6),new THREE.MeshStandardMaterial({color:0xd9e3ec,roughness:1}));
+  {const sp=frostSkirt.geometry.getAttribute('position');for(let i=0;i<sp.count;i++){const x=sp.getX(i),z=sp.getY(i);sp.setZ(i,groundY(FB.x+x,FB.z-z)-frostBase-.05);}frostSkirt.geometry.computeVertexNormals();}
+  frostSkirt.rotation.x=-Math.PI/2;frostSkirt.position.set(FB.x,frostBase,FB.z);frostSkirt.receiveShadow=true;scene.add(frostSkirt);
   const motesGeom=new THREE.BufferGeometry(),motes=[];
   for(let i=0;i<480;i++){const x=(random()-.5)*280,z=(random()-.5)*280;motes.push(x,groundY(x,z)+1+random()*9,z);}
   motesGeom.setAttribute('position',new THREE.Float32BufferAttribute(motes,3));const motesMesh=new THREE.Points(motesGeom,new THREE.PointsMaterial({color:0xbfe5ba,size:.085,transparent:true,opacity:.5,depthWrite:false}));scene.add(motesMesh);particles.push(motesMesh);
@@ -412,15 +489,19 @@ export function buildWorld(scene){
   // the warm light comes from the lanterns and mushrooms (src/shadowmere.js).
   let shade=0;const dayFog=color('#83a79a'),darkFog=color('#0b1622'),daySky=color('#779d92'),darkSky=color('#050b13'),
     daySun=color('#f6dda0'),moonCol=color('#9fb6ff'),dayAmb=color('#c6e9e4'),nightAmb=color('#4f6a9c'),dayGround=color('#33462b'),nightGround=color('#1a2216');
+  // The Frostbound Crown: a cold, bright blue-white day under a low sun, with pale snow haze (fog) close in.
+  let frost=0;const frostFog=color('#d2dfea'),frostSky=color('#c8d9e8'),frostSun=color('#fff0da'),frostAmb=color('#dfeaf6'),frostGroundCol=color('#93a3b5');
   function updateAtmosphere(x,z,dt){
     sky.position.set(x,0,z);           // the sky travels with you, so it surrounds you in every world
     const target=Math.hypot(x-SHADOWMERE.x,z-SHADOWMERE.z)<SHADOWMERE.r+60?1:0;   // its own world: night all through
-    shade=THREE.MathUtils.damp(shade,target,2.6,dt);scene.fog.color.copy(dayFog).lerp(darkFog,shade);scene.fog.density=.0057+shade*.024;
-    scene.background.copy(daySky).lerp(darkSky,shade);sky.material.uniforms.shade.value=shade*.92;
-    sun.intensity=2.45-shade*1.95;sun.color.copy(daySun).lerp(moonCol,shade);
-    ambient.intensity=1.8-shade*1.28;ambient.color.copy(dayAmb).lerp(nightAmb,shade);ambient.groundColor.copy(dayGround).lerp(nightGround,shade);
+    const cold=Math.hypot(x-FROSTBOUND.x,z-FROSTBOUND.z)<FROSTBOUND.r+60?1:0;
+    shade=THREE.MathUtils.damp(shade,target,2.6,dt);frost=THREE.MathUtils.damp(frost,cold,2.6,dt);
+    scene.fog.color.copy(dayFog).lerp(darkFog,shade).lerp(frostFog,frost);scene.fog.density=.0057+shade*.024+frost*.0048;
+    scene.background.copy(daySky).lerp(darkSky,shade).lerp(frostSky,frost);sky.material.uniforms.shade.value=shade*.92;sky.material.uniforms.frost.value=frost;
+    sun.intensity=2.45-shade*1.95-frost*.35;sun.color.copy(daySun).lerp(moonCol,shade).lerp(frostSun,frost);
+    ambient.intensity=1.8-shade*1.28-frost*.3;ambient.color.copy(dayAmb).lerp(nightAmb,shade).lerp(frostAmb,frost);ambient.groundColor.copy(dayGround).lerp(nightGround,shade).lerp(frostGroundCol,frost);
     return shade;
   }
-  return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,nearTrail,cameraObstacles,sun,updateLanternLights,updateAtmosphere,crownGeometry,leafMaterials,
+  return {colliders,echoes,animated,particles,gateGlow,city,home,shadowmere:SHADOWMERE,frostbound:FROSTBOUND,get frost(){return frost;},nearTrail,cameraObstacles,sun,updateLanternLights,updateAtmosphere,crownGeometry,leafMaterials,
     setFoliageShadows(enabled){ crowns.forEach(c=>{c.castShadow=enabled;}); }};
 }

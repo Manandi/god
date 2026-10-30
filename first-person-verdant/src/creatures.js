@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { groundY, SHADOWMERE, GARROW_SEAL, inLanternhold } from './world.js';
+import { groundY, SHADOWMERE, GARROW_SEAL, FROSTBOUND, MAW_SEAL, safeZoneAt, inSafeGround } from './world.js';
 import { canOccupy } from './collision.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { angleTo } from './angles.js';
 import { level } from './profile.js';
 
@@ -26,6 +27,11 @@ const KINDS = {
   monkey: { size: .82, pace: .78, health: 50, poise: 12, walk: 1.9, chase: 4.3, turn: 6, notice: 16, spacing: 2.1, cooldown: [.55, 1.15], biteRadius: .5 },
   // Garrow, Shadowmere's boss (owner, 2026-10-07: "a boss quest again, an entire massive moveset plus a phase 2").
   gorilla: { size: 1.22, pace: .98, health: 520, poise: 42, walk: .9, chase: 3.3, turn: 3.0, notice: 24, spacing: 3.1, cooldown: [.7, 1.3], biteRadius: .8 },   // harder (owner, 2026-10-16)
+  // Book III, the Frostbound Crown (level 5; owner, 2026-10-30). Rime wolves hunt the white road in pairs; frost imps
+  // float after them throwing icicles; the White Maw is the realm's keeper and its boss, two phases like Garrow.
+  wolf: { size: .9, pace: .8, health: 58, poise: 13, walk: 1.8, chase: 4.7, turn: 5.6, notice: 17, spacing: 2.3, cooldown: [.65, 1.25], biteRadius: .5 },
+  imp: { size: .62, pace: .78, health: 36, poise: 9, walk: 1.6, chase: 3.9, turn: 6.5, notice: 16, spacing: 2.0, cooldown: [.7, 1.3], biteRadius: .42 },
+  maw: { size: 1.45, pace: .96, health: 600, poise: 48, walk: .9, chase: 3.6, turn: 2.6, notice: 26, spacing: 3.4, cooldown: [.7, 1.3], biteRadius: 1 },
   // The Old Shell (a big armoured variant from the ChatGPT Sites version) was removed
   // from the game on the owner's request; its isBoss / quake code paths below are unused.
 };
@@ -45,7 +51,7 @@ const ATTACKS = {
   // to break the chain, or back out of reach.
   flurry: { windup: .5, track: .5, active: 1.08, recover: .95, range: [0, 2.6], damage: 1, kind: 'light', label: 'claw flurry', monkey: true, swipes: [.1, .44, .78] },
   // Leaping pounce: crouches, then leaps to where you stood and lands claws-first. Dodge sideways.
-  pounce: { windup: .72, track: .64, active: .62, recover: 1.05, range: [3.6, 8.5], damage: 1, kind: 'heavy', label: 'leaping pounce', monkey: true },
+  pounce: { windup: .72, track: .64, active: .62, recover: 1.05, range: [3.6, 8.5], damage: 1, kind: 'heavy', label: 'leaping pounce', for: ['monkey', 'wolf'] },
   // Seed pellet: hurls a hard seed from range (main.js flies it). Dash through, guard, or parry it away.
   seed: { windup: .62, track: .62, active: .22, recover: .8, range: [5.5, 13], damage: 1, kind: 'light', label: 'seed pellet', monkey: true },
   // Vine swing: grabs a vine from the canopy, swings round you and kicks you from the side, landing
@@ -77,15 +83,48 @@ const ATTACKS = {
   whirl: { windup: .7, track: .7, active: 1.4, recover: 1.2, range: [0, 4.6], damage: 1, kind: 'light', label: 'crown-glass whirl', gorilla: true, phase: 2, reach: 3.2 },
   // Crushing grab: unblockable. It lunges with its open hand; caught, you are slammed into the ground.
   // Dodge it, and a miss leaves it wide open.
-  grab: { windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 3.8], damage: 3, kind: 'heavy', label: 'crushing grab', gorilla: true, phase: 2 }
+  grab: { windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 3.8], damage: 3, kind: 'heavy', label: 'crushing grab', gorilla: true, phase: 2 },
+  // ---- Book III. `mech` names the move whose code runs it (the wolves' snap runs as a lunge, the Maw's bite as
+  // Garrow's chop); each keeps its own numbers, cue and label.
+  // Rime wolves: a quick snap, a two-bite maul, and the pounce (shared with the monkeys). Wolves hop back when struck.
+  snap: { mech: 'lunge', windup: .62, track: .42, active: .3, recover: .95, range: [1.4, 3.8], damage: 1, kind: 'light', label: 'rime snap', for: ['wolf'] },
+  maul: { mech: 'flurry', windup: .5, track: .46, active: .76, recover: .95, range: [0, 2.5], damage: 1, kind: 'light', label: 'frost maul', for: ['wolf'], swipes: [.1, .46] },
+  // Frost imps: icicles from range (dash, guard or parry them), and a three-claw scratch up close.
+  icicle: { mech: 'seed', windup: .58, track: .58, active: .22, recover: .85, range: [4.5, 13], damage: 1, kind: 'light', label: 'icicle', for: ['imp'] },
+  scratch: { mech: 'flurry', windup: .46, track: .46, active: 1.0, recover: .9, range: [0, 2.2], damage: 1, kind: 'light', label: 'rime scratch', for: ['imp'], swipes: [.08, .4, .72] },
+  // The White Maw. Phase 1 (and 2 where marked): its bite comes down in a line ahead (step aside); a paw rake
+  // across its front; the avalanche rush (sidestep; pines stop it dead); a rearing stomp (two waves: jump them);
+  // a block of ice torn up and lobbed where you stand; the whiteout howl (dash through it); and frost breath in a
+  // cone ahead (get beside or behind it).
+  crunch: { mech: 'chop', windup: .92, track: .6, active: .42, recover: 1.1, range: [0, 4.8], damage: 3, kind: 'heavy', label: 'glacier bite', for: ['maw'], line: [.6, 4.6, .8] },
+  rake: { mech: 'backhand', windup: .55, track: .45, active: .32, recover: .85, range: [0, 3.6], damage: 2, kind: 'light', label: 'rime rake', for: ['maw'], phase1: true },
+  rush: { mech: 'charge', windup: .9, track: .8, active: 1.5, recover: 1.0, range: [5, 17], damage: 3, kind: 'heavy', label: 'avalanche rush', for: ['maw'], line: [0, 13, 1.3] },
+  stomp: { mech: 'pound', windup: 1.0, track: .5, active: 1.05, recover: 1.15, range: [0, 5], damage: 2, kind: 'heavy', label: 'rearing stomp', for: ['maw'], rings: [.02, .57], ring: [.9, 5.2, .45] },
+  hurl: { mech: 'boulder', windup: 1.0, track: 1.0, active: .3, recover: .95, range: [6, 20], damage: 2, kind: 'heavy', label: 'ice hurl', for: ['maw'], phase1: true },
+  howl: { mech: 'roar', windup: .9, track: .9, active: .5, recover: .45, range: [0, 7.5], damage: 1, kind: 'light', label: 'whiteout howl', for: ['maw'], reach: 7.5, phase1: true },
+  breath: { mech: 'breath', windup: .85, track: .85, active: 1.3, recover: 1.0, range: [1.5, 8.5], damage: 2, kind: 'heavy', label: 'frost breath', for: ['maw'], cone: [8.5, .52] },
+  // Phase 2 (the crown-glass collar cracks and rime spires burst from its back): a three-blow frenzy, a leap that
+  // splits the ice ahead, spires bursting under you three times, a storm of shards thrown off its back (break them
+  // from behind and it topples), a spinning whiteout whirl, and an unblockable swallowing bite.
+  frenzy: { mech: 'combo', windup: .66, track: .55, active: 1.5, recover: 1.15, range: [0, 3.8], damage: 1, kind: 'light', label: 'frenzied maul', for: ['maw'], phase: 2, swipes: [.12, .6, 1.08] },
+  glacierLeap: { mech: 'leap', windup: .9, track: .85, active: 1.0, recover: 1.25, range: [4, 15], damage: 3, kind: 'heavy', label: 'glacier leap', for: ['maw'], phase: 2 },
+  spires: { mech: 'erupt', windup: .8, track: .8, active: 1.75, recover: .95, range: [0, 16], damage: 1, kind: 'heavy', label: 'rime spires', for: ['maw'], phase: 2, marks: [0, .5, 1.0], fuse: .7 },
+  shardstorm: { mech: 'barrage', windup: .85, track: .85, active: .4, recover: .9, range: [5, 18], damage: 1, kind: 'light', label: 'shard storm', for: ['maw'], phase: 2, shards: 5, spread: .2 },
+  blizzard: { mech: 'whirl', windup: .7, track: .7, active: 1.4, recover: 1.2, range: [0, 4.8], damage: 1, kind: 'light', label: 'whiteout whirl', for: ['maw'], phase: 2, reach: 3.6 },
+  swallow: { mech: 'grab', windup: .75, track: .7, active: 1.2, recover: 1.45, range: [0, 4], damage: 3, kind: 'heavy', label: 'swallowing bite', for: ['maw'], phase: 2 }
 };
-import { LANTERNHOLD as _LH } from './world.js';
-const LH_X = _LH.x, LH_Z = _LH.z;
+/** Who may use a move: its `for` list, or the old monkey / gorilla flags. Types in OWN_MOVES use only their own. */
+const ownersOf = a => a.for || (a.monkey ? ['monkey'] : a.gorilla ? ['gorilla'] : null);
+const OWN_MOVES = new Set(['monkey', 'gorilla', 'wolf', 'imp', 'maw']);
+/** The sound and code a move uses (main.js picks its wind-up sound with this). */
+export const moveOf = name => ATTACKS[name]?.mech || name;
+/** Two-phase bosses: Garrow and the White Maw share the brute code (runGorilla, phase change, back crystals). */
+const BRUTES = new Set(['gorilla', 'maw']);
 const GORILLA_PHASE_AT = .5, PHASE_TIME = 2.8, DAZE_TIME = 1.8;
 const QUAKE_RADIUS = 5.2, SHELL_BREAK = 130;
 const PART_DAMAGE = { head: 1.3, shell: .8, belly: 2, crystal: 1.2 };
 // Taunts (owner, 2026-10-09): after landing a blow a monkey or Garrow may stop to show off. A free opening.
-const TAUNT = { monkey: [.4, 1.3], gorilla: [.45, 1.7] }, TAUNT_DAMAGE = 1.3, CRYSTAL_BREAK = .12;
+const TAUNT = { monkey: [.4, 1.3], gorilla: [.45, 1.7], wolf: [.25, 1.0], imp: [.3, 1.1], maw: [.4, 1.6] }, TAUNT_DAMAGE = 1.3, CRYSTAL_BREAK = .12;
 const healthFor = (type, k) => type === 'oldshell' ? k.health : Math.round(k.health * (1 + (level() - 1) * .15));
 const EMERGE_TIME = 1.3, ENRAGE_AT = .4, TOPPLE_TIME = 3.2, RISE_TIME = .6, REEL_TIME = 1.7, LEASH = 24;
 // The slam's shockwave: radius over time. Dashing through it is safe; dashing
@@ -141,6 +180,133 @@ function buildPrimateVisual(c) {
   c.body.updateMatrixWorld(true);
 }
 
+
+// ---- Book III's creatures (procedural, like the fallback primates above; owner, 2026-10-30: "the snow world").
+/** Fewer draw calls: the meshes sitting directly in each part (body, head, a leg...) are merged, one per material.
+ *  Groups (the joints the animation moves) are kept and merged inside in turn. */
+function mergeStatic(group) {
+  const byMat = new Map();
+  for (const o of [...group.children]) {
+    if (o.isMesh && !o.isInstancedMesh) { if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(o); }
+    else if (o.isGroup) mergeStatic(o);
+  }
+  for (const [mat, list] of byMat) {
+    if (list.length < 2) continue;
+    const geos = list.map(m => { m.updateMatrix(); const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone(); for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k); return g.applyMatrix4(m.matrix); });
+    const merged = mergeGeometries(geos); if (!merged) continue;
+    for (const m of list) group.remove(m);
+    const one = new THREE.Mesh(merged, mat); one.castShadow = one.receiveShadow = true; group.add(one);
+  }
+}
+const iceMat = () => new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x2e6f9a, emissiveIntensity: .55, roughness: .15, metalness: .1, transparent: true, opacity: .9, flatShading: true });
+const coldEye = () => new THREE.MeshStandardMaterial({ color: 0xd8f6ff, emissive: 0x58c8ff, emissiveIntensity: 1.4, roughness: .2 });
+/** Rime wolf: a lean pale wolf with frost riming its back in spikes, ice-blue eyes and a snapping jaw. */
+function buildWolfVisual(c) {
+  const fur = new THREE.MeshStandardMaterial({ color: 0xdbe5ee, roughness: .95, flatShading: true }), back = new THREE.MeshStandardMaterial({ color: 0x8ea4b8, roughness: .95, flatShading: true }),
+    face = new THREE.MeshStandardMaterial({ color: 0x4d5a68, roughness: .9, flatShading: true }), eye = coldEye(), ice = iceMat();
+  c.body.clear(); c.shellMat = fur; c.skinMat = back; c.eyeMat = eye; c.legs = []; c.tellTint = [.16, .34, .6];
+  part(c.body, sphere(), fur, 0, .95, 0, .42, .4, .85);                    // torso
+  part(c.body, sphere(), back, 0, 1.1, .05, .36, .22, .78);                // darker saddle
+  part(c.body, sphere(), fur, 0, 1.02, .5, .44, .46, .42);                 // chest ruff
+  part(c.body, sphere(), fur, 0, .95, -.5, .36, .36, .36);                 // haunches
+  for (let i = 0; i < 5; i++) { const sp = part(c.body, new THREE.ConeGeometry(.08, .34 - i * .03, 4), ice, 0, 1.33 - i * .02, .35 - i * .2); sp.rotation.x = -.5; }
+  c.neck = new THREE.Group(); c.neck.position.set(0, 1.15, .85); c.body.add(c.neck);
+  c.head = new THREE.Group(); c.neck.add(c.head);
+  part(c.head, sphere(), fur, 0, .05, 0, .26, .25, .3);
+  part(c.head, new THREE.BoxGeometry(.2, .14, .34), back, 0, -.01, .3);    // muzzle
+  part(c.head, sphere(.05), face, 0, .04, .48);                             // nose
+  c.jaw = new THREE.Group(); c.jaw.position.set(0, -.08, .12); c.head.add(c.jaw);
+  part(c.jaw, new THREE.BoxGeometry(.17, .06, .3), face, 0, -.02, .16);
+  for (const side of [-1, 1]) {
+    const ear = part(c.head, new THREE.ConeGeometry(.07, .2, 4), back, side * .14, .27, -.04); ear.rotation.z = -side * .25;
+    part(c.head, sphere(.045), eye, side * .11, .1, .22, 1, .7, .6);
+  }
+  for (const [xs, zs] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const leg = new THREE.Group(); leg.position.set(xs * .22, .8, zs * .48); c.body.add(leg);
+    part(leg, sphere(), zs > 0 ? fur : back, 0, -.3, 0, .11, .36, .12);
+    part(leg, sphere(), face, 0, -.72, .05, .1, .06, .14);
+    c.legs.push({ mesh: leg, phase: xs * zs > 0 ? 0 : Math.PI });
+  }
+  const tail = new THREE.Group(); tail.position.set(0, 1.02, -.82); c.body.add(tail);
+  for (let i = 0; i < 3; i++) { const t = part(tail, sphere(), i ? fur : back, 0, -.05 - i * .1, -.14 - i * .17, .1 - i * .015, .1, .16); t.rotation.x = .5; }
+  c.tail = tail; c.neckBase = { y: 1.15, z: .85, k: .5 };
+  mergeStatic(c.body); c.body.updateMatrixWorld(true);
+}
+/** Frost imp: a little floating knot of ice shards round a cold blue spark, with long icicle claws. */
+function buildImpVisual(c) {
+  const ice = iceMat(), core = new THREE.MeshStandardMaterial({ color: 0xeaffff, emissive: 0x7fdcff, emissiveIntensity: 2.2, roughness: .2 }),
+    dark = new THREE.MeshStandardMaterial({ color: 0x2c4a66, roughness: .4, flatShading: true }), eye = coldEye();
+  c.body.clear(); c.shellMat = ice; c.skinMat = dark; c.eyeMat = eye; c.legs = []; c.arms = []; c.tellTint = [.16, .34, .6];
+  part(c.body, new THREE.OctahedronGeometry(.32, 0), core, 0, 1.05, 0);
+  for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2, sh = part(c.body, new THREE.ConeGeometry(.12, .6, 4), ice, Math.cos(a) * .3, 1.05 + Math.sin(i * 2.1) * .14, Math.sin(a) * .3); sh.rotation.set(Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2); }
+  const wisp = part(c.body, new THREE.ConeGeometry(.2, .7, 5), ice, 0, .55, 0); wisp.rotation.x = Math.PI;
+  c.neck = new THREE.Group(); c.neck.position.set(0, 1.5, 0); c.body.add(c.neck);
+  c.head = new THREE.Group(); c.neck.add(c.head);
+  part(c.head, new THREE.IcosahedronGeometry(.22, 0), dark, 0, .05, 0);
+  for (const side of [-1, 1]) { part(c.head, sphere(.05), eye, side * .09, .08, .17); const horn = part(c.head, new THREE.ConeGeometry(.05, .26, 4), ice, side * .13, .25, -.02); horn.rotation.z = -side * .4; }
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(side * .36, 1.2, .05); c.body.add(arm);
+    part(arm, sphere(), dark, side * .04, -.16, 0, .07, .2, .07);
+    const claw = part(arm, new THREE.ConeGeometry(.05, .42, 4), ice, side * .05, -.5, .05); claw.rotation.x = Math.PI;
+    c.arms.push({ mesh: arm, side });
+  }
+  c.neckBase = { y: 1.5, z: 0, k: .3 };
+  mergeStatic(c.body); c.body.updateMatrixWorld(true);
+}
+/**
+ * The White Maw: the Frostbound Crown's keeper, a vast shaggy beast of white fur and rime with a jaw that could
+ * swallow a sledge. Ashmere's court fused a collar of crown-glass round its neck (the same violet glass as Garrow's
+ * blade); in phase 2 the collar cracks and spires of rime and crown-glass burst out of its back.
+ */
+function buildMawVisual(c) {
+  const fur = new THREE.MeshStandardMaterial({ color: 0xe9eff5, roughness: .96, flatShading: true }), under = new THREE.MeshStandardMaterial({ color: 0xaebdcc, roughness: .96, flatShading: true }),
+    face = new THREE.MeshStandardMaterial({ color: 0x4f5d6c, roughness: .85, flatShading: true }), bone = new THREE.MeshStandardMaterial({ color: 0xeae4d2, roughness: .6, flatShading: true }),
+    mouth = new THREE.MeshStandardMaterial({ color: 0x3a1f2a, roughness: .8 }), eye = coldEye(), ice = iceMat(),
+    glass = new THREE.MeshStandardMaterial({ color: 0x3b2266, emissive: 0x7a3cff, emissiveIntensity: 1.4, roughness: .2, metalness: .3, flatShading: true });
+  c.body.clear(); c.shellMat = fur; c.skinMat = under; c.eyeMat = eye; c.legs = []; c.paws = []; c.tellTint = [.14, .3, .62];
+  part(c.body, sphere(), fur, 0, 1.5, .05, .95, .85, 1.35);              // torso
+  part(c.body, sphere(), fur, 0, 1.95, .6, .92, .8, .78);                // shoulder hump
+  part(c.body, sphere(), under, 0, 1.4, -.8, .82, .76, .72);             // haunches
+  part(c.body, sphere(), under, 0, 1.05, .2, .72, .45, 1.05);            // belly
+  for (let i = 0; i < 16; i++) {                                         // shaggy tufts hanging off the flanks
+    const side = i % 2 ? 1 : -1, z = -1 + (i >> 1) * .28, tuft = part(c.body, new THREE.ConeGeometry(.2, .6, 4), i % 3 ? fur : under, side * (.82 + Math.sin(i) * .06), 1.15 + Math.cos(i * 1.7) * .12, z);
+    tuft.rotation.set(0, 0, side * 2.7);
+  }
+  for (let i = 0; i < 7; i++) { const sp = part(c.body, new THREE.ConeGeometry(.13, .55 + (i % 3) * .15, 5), ice, (i % 2 ? .12 : -.12), 2.55 - i * .1, .7 - i * .3); sp.rotation.x = -.35; }
+  c.neck = new THREE.Group(); c.neck.position.set(0, 1.85, 1.2); c.body.add(c.neck);
+  c.head = new THREE.Group(); c.neck.add(c.head);
+  part(c.head, sphere(), fur, 0, .1, .05, .62, .56, .62);
+  part(c.head, new THREE.BoxGeometry(1.0, .16, .4), under, 0, .42, .32);                  // brow ridge
+  part(c.head, sphere(), under, 0, -.05, .62, .46, .3, .5);                               // upper muzzle
+  part(c.head, sphere(.1), face, 0, .1, 1.08);                                            // nose
+  for (let i = 0; i < 6; i++) { const tooth = part(c.head, new THREE.ConeGeometry(.045, .22, 4), bone, -.3 + i * .12, -.3, .72 + Math.abs(i - 2.5) * -.06); tooth.rotation.x = Math.PI; }
+  part(c.head, sphere(), mouth, 0, -.28, .52, .36, .12, .36);
+  c.jaw = new THREE.Group(); c.jaw.position.set(0, -.3, .15); c.head.add(c.jaw);
+  part(c.jaw, sphere(), under, 0, -.1, .45, .42, .17, .52);
+  for (let i = 0; i < 5; i++) part(c.jaw, new THREE.ConeGeometry(.04, .18, 4), bone, -.24 + i * .12, .05, .62 + Math.abs(i - 2) * -.05);
+  for (const side of [-1, 1]) {
+    part(c.head, sphere(.09), eye, side * .3, .26, .5, 1.1, .7, .6);
+    const ear = part(c.head, new THREE.ConeGeometry(.13, .32, 4), under, side * .44, .5, -.12); ear.rotation.z = -side * .6;
+  }
+  // The crown-glass collar: a ring of violet glass round its neck, spiked like a crown.
+  c.collar = new THREE.Group(); c.collar.position.set(0, 1.85, 1.0); c.body.add(c.collar);
+  const ring = part(c.collar, new THREE.TorusGeometry(.62, .1, 6, 18), glass, 0, 0, 0); ring.rotation.x = Math.PI / 2 - .5;
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, sp = part(c.collar, new THREE.ConeGeometry(.07, .34, 4), glass, Math.cos(a) * .62, Math.sin(a) * .3 + .05, Math.sin(a) * .56); sp.rotation.set(Math.sin(a) * .6 - .5, 0, -Math.cos(a) * .9); }
+  c.collarMat = glass;
+  for (const [xs, zs] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const leg = new THREE.Group(); leg.position.set(xs * .62, 1.25, zs > 0 ? .8 : -.85); c.body.add(leg);
+    part(leg, sphere(), zs > 0 ? fur : under, 0, -.45, 0, .34, .62, .36);
+    part(leg, sphere(), fur, 0, -1.02, .1, .38, .2, .44);
+    for (let k = -1; k <= 1; k++) { const claw = part(leg, new THREE.ConeGeometry(.05, .24, 4), bone, k * .14, -1.08, .5); claw.rotation.x = Math.PI / 2; }
+    c.legs.push({ mesh: leg, phase: xs * zs > 0 ? 0 : Math.PI });
+    if (zs > 0) c.paws.push(leg);
+  }
+  const tail = new THREE.Group(); tail.position.set(0, 1.6, -1.45); c.body.add(tail);
+  part(tail, new THREE.ConeGeometry(.3, .8, 5), fur, 0, -.1, -.25).rotation.x = -2.2;
+  c.tail = tail; c.neckBase = { y: 1.85, z: 1.2, k: .45 };
+  mergeStatic(c.body); c.body.updateMatrixWorld(true);
+}
+
 /**
  * A creature driven by explicit states:
  *   wander → alert → approach ⇄ circle → windup(attack) → attack → recover → …
@@ -157,9 +323,10 @@ export class Creature {
     this.poise = k.poise; this.poiseDelay = 0; this.flinchMeter = 0;
     this.respawnDelay = options.respawn ?? 0;
     this.id = options.id || null; this.chapter = options.chapter || null;
-    this.isBoss = type === 'oldshell'; this.isMajorEnemy = type === 'gorilla'; this.bossBar = type === 'gorilla'; this.phase = 1; this.hits = new Set(); this.name = this.isBoss ? 'THE OLD SHELL' : this.isMajorEnemy ? 'ROOTBOUND GORILLA' : ''; this.shellDamage = 0; this.shellBroken = false;
+    this.brute = BRUTES.has(type);
+    this.isBoss = type === 'oldshell'; this.isMajorEnemy = this.brute; this.bossBar = this.brute; this.phase = 1; this.hits = new Set(); this.name = this.isBoss ? 'THE OLD SHELL' : this.isMajorEnemy ? 'ROOTBOUND GORILLA' : ''; this.shellDamage = 0; this.shellBroken = false;
     if (this.isBoss) { this.markerHeight = 3.6; this.focusHeight = 1.6; }
-    if (this.isMajorEnemy) { this.markerHeight = 4.2; this.focusHeight = 1.8; }
+    if (this.isMajorEnemy) { this.markerHeight = type === 'maw' ? 4.8 : 4.2; this.focusHeight = type === 'maw' ? 2.0 : 1.8; }
     this.heading = Math.random() * Math.PI * 2; this.speed = 0;
     this.state = 'wander'; this.t = 0; this.cooldown = 1; this.wanderTurn = 0;
     this.attack = null; this.attackYaw = 0; this.connected = false; this.enraged = false; this.combo = false;
@@ -215,6 +382,9 @@ export class Creature {
       for (let i = 0; i < 4; i++) { const leaf = part(this.body, new THREE.ConeGeometry(.28, .8, 4), thornMaterial, (i % 2 ? 1 : -1) * 1.0, 1.5, i < 2 ? -.9 : .35); leaf.rotation.z = (i % 2 ? 1 : -1) * .6; }
     }
     if(type==='monkey'||type==='gorilla')buildPrimateVisual(this);
+    if(type==='wolf')buildWolfVisual(this);
+    if(type==='imp')buildImpVisual(this);
+    if(type==='maw')buildMawVisual(this);
     // Health bar, only shown while the creature is hurt or targeted.
     this.bar = new THREE.Group(); this.bar.position.set(0, 2.9, 0); this.root.add(this.bar);
     const barBack = new THREE.Mesh(new THREE.PlaneGeometry(1.6, .12), new THREE.MeshBasicMaterial({ color: 0x14201a, transparent: true, opacity: .7, depthTest: false }));
@@ -225,10 +395,16 @@ export class Creature {
     // tracking, red marks the committed attack, pale green marks recovery.
     this.tell = new THREE.Mesh(new THREE.RingGeometry(.82, .91, 32), new THREE.MeshBasicMaterial({ color: 0xe9ad62, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
     this.tell.rotation.x = -Math.PI / 2; this.tell.visible = false; scene.add(this.tell);
-    if (type === 'gorilla') {
+    if (this.brute) {
       // A strip on the ground for Garrow's line attacks (the chop, the charge, the spike line).
       this.lineTell = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xe9ad62, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
       this.lineTell.rotation.order = 'YXZ'; this.lineTell.visible = false; scene.add(this.lineTell);
+    }
+    if (type === 'maw') {
+      // A fan on the snow for the frost breath: pale while it draws breath, white-blue while it breathes.
+      const [len, half] = ATTACKS.breath.cone;
+      this.coneTell = new THREE.Mesh(new THREE.CircleGeometry(len, 28, -Math.PI / 2 - half, half * 2), new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+      this.coneTell.rotation.order = 'YXZ'; this.coneTell.visible = false; scene.add(this.coneTell);
     }
     if (type === 'monkey') {
       // The vine it swings on, from the canopy to its hand.
@@ -238,6 +414,8 @@ export class Creature {
     this.place();
   }
   get toppled() { return this.state === 'toppled'; }
+  /** The code its current attack runs as (see `mech` in ATTACKS). */
+  get move() { return moveOf(this.attack); }
   /** Open to a Root Strike: on its back, or reeling from a parry. */
   get exposed() { return this.state === 'toppled' || this.state === 'reeling' || this.state === 'dazed'; }
   /** A parried attack: the creature recoils and is open to a riposte. */
@@ -260,7 +438,11 @@ export class Creature {
       // On its back only the belly is offered; the head is tucked against the ground.
       f.set(0, 1.0, -.2).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: 1.15 * s, part: 'belly' });
       return out;
-    } else if(this.type==='monkey'||this.type==='gorilla'){
+    } else if(this.type==='maw'){
+      // Long and low: shoulders and haunches; the ice on its back in phase 2 is the weak point.
+      for (const [y, z, r] of [[1.5, .75, 1.0], [1.4, -.65, .95]]) { f.set(0, y, z).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: r * s, part: 'body' }); }
+      if (this.phase > 1 && !this.crystalsBroken) { f.set(0, 2.35, -.15).applyMatrix4(this.body.matrixWorld); out.push({ x: f.x, y: f.y, z: f.z, r: .7 * s, part: 'crystal' }); }
+    } else if(this.type==='monkey'||this.type==='gorilla'||this.type==='wolf'||this.type==='imp'){
       // The gorilla is tall: a belly-and-hips volume where blades land, and its chest above.
       if(this.type==='gorilla')for(const [y,z,r] of [[1.0,.1,.98],[1.85,.15,.9]]){f.set(0,y,z).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:r*s,part:'body'});}
       if(this.type==='gorilla'&&this.phase>1&&!this.crystalsBroken){f.set(0,1.7,-.75).applyMatrix4(this.body.matrixWorld);out.push({x:f.x,y:f.y,z:f.z,r:.72*s,part:'crystal'});}
@@ -322,7 +504,7 @@ export class Creature {
       }
     }
     if (this.health <= 0) { this.alive = false; this.setState('defeated'); this.lastEvent = 'defeated'; out.defeated = true; return out; }
-    if (this.type === 'gorilla') { if (this.phase === 1 && this.health < this.maxHealth * GORILLA_PHASE_AT) this.pendingPhase = true; }
+    if (this.brute) { if (this.phase === 1 && this.health < this.maxHealth * GORILLA_PHASE_AT) this.pendingPhase = true; }
     else if (this.health < this.maxHealth * ENRAGE_AT && !this.enraged) { this.enraged = true; this.enragedNow = true; }
     if (onBack) { this.lastEvent = 'struck while toppled'; return out; }
     this.push = { x: dx * push * .6, z: dz * push * .6 };
@@ -332,12 +514,12 @@ export class Creature {
       out.toppled = true; return out;
     }
     const committed = this.state === 'attack';
-    if (stagger >= .6 || (this.flinchMeter >= (this.type === 'gorilla' ? 45 : 22) && !committed)) {
+    if (stagger >= .6 || (this.flinchMeter >= (this.brute ? 45 : 22) && !committed)) {
       this.flinchMeter = 0; this.staggerTime = stagger >= .6 ? .8 : .45; this.setState('stagger'); this.attack = null;
       this.lastEvent = 'staggered'; out.staggered = true;
     } else this.lastEvent = committed ? 'hit (kept attacking)' : 'flinched';
     // A struck monkey often springs back out of reach (not mid-attack, and not every time).
-    if (this.type === 'monkey' && !committed && !out.staggered && !this.remote && Math.random() < (this.enraged ? .55 : .38)) {
+    if ((this.type === 'monkey' || this.type === 'wolf' || this.type === 'imp') && !committed && !out.staggered && !this.remote && Math.random() < (this.enraged ? .55 : this.type === 'wolf' ? .3 : .38)) {
       this.hopYaw = Math.atan2(dx, dz); this.setState('hop'); this.attack = null; this.lastEvent = 'hopped back';
     }
     return out;
@@ -347,8 +529,9 @@ export class Creature {
   travel(dx, dz, grid) {
     const r = this.radius * .8, step = Math.hypot(dx, dz);
     if (step < 1e-5) return true;
-    // Lanternhold's wall: no creature steps inside (one that somehow is inside may only walk out).
-    if (inLanternhold(this.x + dx, this.z + dz, r + .3) && !(inLanternhold(this.x, this.z, r + .3) && Math.hypot(this.x + dx - LH_X, this.z + dz - LH_Z) > Math.hypot(this.x - LH_X, this.z - LH_Z))) return false;
+    // Lanternhold's and Hearthfast's walls: no creature steps inside (one that somehow is inside may only walk out).
+    const town = safeZoneAt(this.x + dx, this.z + dz, r + .3);
+    if (town && !(safeZoneAt(this.x, this.z, r + .3) === town && Math.hypot(this.x + dx - town.x, this.z + dz - town.z) > Math.hypot(this.x - town.x, this.z - town.z))) return false;
     const ok = (x, z) => canOccupy(x, z, groundY(x, z), grid, groundY, r) && Math.abs(groundY(x, z) - groundY(this.x, this.z)) < .9 * step + .12;
     // Already overlapping something (shoved into a rock): let it walk back out rather than freeze.
     if (!canOccupy(this.x, this.z, groundY(this.x, this.z), grid, groundY, r)) { this.x += dx; this.z += dz; return true; }
@@ -386,16 +569,38 @@ export class Creature {
   chooseAttack(dist, rel) {
     const behind = Math.abs(rel) > 1.3;
     const options = [];
-    const monkey = this.type === 'monkey', gorilla = this.type === 'gorilla';
+    const monkey = this.type === 'monkey', gorilla = this.type === 'gorilla', type = this.type;
     for (const [name, a] of Object.entries(ATTACKS)) {
       if (dist < a.range[0] || dist > a.range[1]) continue;
-      // Monkeys and Garrow use only their own moves; the hollowed never use theirs.
-      if (monkey ? !a.monkey : gorilla ? !a.gorilla : (a.monkey || a.gorilla)) continue;
+      // Monkeys, Garrow and the Frostbound creatures use only their own moves; the hollowed never use theirs.
+      const own = ownersOf(a);
+      if (OWN_MOVES.has(type) ? !own?.includes(type) : !!own) continue;
       if (a.phase && this.phase < a.phase) continue;
       if (a.phase1 && this.phase > 1) continue;           // phase 2 swaps these for its own
       let w = 1;
       if (monkey) {
         w = name === 'flurry' ? (behind ? .4 : 1.7) : name === 'pounce' ? 1.1 : name === 'seed' ? (this.enraged ? 1.3 : .9) : behind ? 1.5 : 1.0;
+        if (w > 0) options.push([name, w]);
+        continue;
+      }
+      if (type === 'wolf') {
+        w = { snap: Math.abs(rel) < .6 ? 1.5 : .5, maul: behind ? .3 : dist < 1.8 ? 1.8 : 1.1, pounce: dist > 4.5 ? 1.5 : .8 }[name] ?? 0;
+        if (name === this.lastAttack) w *= .5;
+        if (w > 0) options.push([name, w]);
+        continue;
+      }
+      if (type === 'imp') {
+        w = { icicle: this.enraged ? 1.6 : 1.2, scratch: behind ? .5 : 1.5 }[name] ?? 0;
+        if (w > 0) options.push([name, w]);
+        continue;
+      }
+      if (type === 'maw') {
+        const front = Math.abs(rel) < .55, side = Math.abs(rel) < 1.6;
+        w = { crunch: front ? 1.6 : 0, rake: side && !front ? 1.6 : side ? .7 : 0, rush: dist > 6.5 ? 1.5 : .5, stomp: behind ? 2 : dist < 3.4 ? 1.1 : .5,
+          hurl: dist > 8 ? 1.4 : .4, howl: this.roarRest > 0 ? 0 : this.phase > 1 ? .7 : .45, breath: Math.abs(rel) < .8 ? (dist < 7 ? 1.5 : .9) : 0,
+          frenzy: Math.abs(rel) < .9 ? 2 : 0, glacierLeap: dist > 5 ? 1.6 : 0, spires: dist > 4 ? 1.2 : .7,
+          shardstorm: this.crystalsBroken ? 0 : dist > 6 ? 1.5 : .6, blizzard: dist < 3.8 ? 1.4 : .6, swallow: Math.abs(rel) < .7 && dist < 4 ? 1.3 : 0 }[name] ?? 0;
+        if (name === this.lastAttack) w *= .3;
         if (w > 0) options.push([name, w]);
         continue;
       }
@@ -439,7 +644,7 @@ export class Creature {
     if (this.state === 'dormant') return events;
     if (this.state === 'bound' || this.state === 'calm') { this.rest(dt, time); return events; }
     if (this.state === 'defeated') {
-      this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.vine) this.vine.visible = false;
+      this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.coneTell) this.coneTell.visible = false; if (this.vine) this.vine.visible = false;
       this.body.rotation.z = damp(this.body.rotation.z, Math.PI * .92, 7, dt);
       this.body.position.y = damp(this.body.position.y, this.t > .9 ? -2.4 : .4, this.t > .9 ? 2 : 9, dt);
       if (this.t > 2.2) this.root.visible = false;
@@ -454,8 +659,8 @@ export class Creature {
     let wantHeading = this.heading, wantSpeed = 0, turn = k.turn, moveYaw = null;
     this.cooldown -= dt;
     if (!this.remote && ['approach', 'circle'].includes(this.state) && Math.hypot(this.x - this.home.x, this.z - this.home.z) > LEASH) { this.setState('return'); events.push({ type: 'leash' }); }
-    // You are safe inside Lanternhold: anything chasing you gives up at the wall.
-    if (!this.remote && ['alert', 'approach', 'circle'].includes(this.state) && inLanternhold(p.x, p.z, 1)) { this.setState('return'); events.push({ type: 'leash' }); }
+    // You are safe inside Lanternhold (and Hearthfast): anything chasing you gives up at the wall.
+    if (!this.remote && ['alert', 'approach', 'circle'].includes(this.state) && inSafeGround(p.x, p.z, 1)) { this.setState('return'); events.push({ type: 'leash' }); }
     this.roarRest = Math.max(0, (this.roarRest || 0) - dt);
     // Below half health Garrow stops, roars, and the crown-glass blade ignites (phase 2).
     if (this.pendingPhase && !this.remote && !['attack', 'toppled', 'rising', 'phase', 'defeated'].includes(this.state)) {
@@ -468,7 +673,7 @@ export class Creature {
         if (this.wanderTurn <= 0) { this.wanderTurn = 2 + Math.random() * 2.5; this.wanderHeading = this.heading + (Math.random() - .5) * 2.4; }
         if (Math.hypot(this.x - this.home.x, this.z - this.home.z) > 8) this.wanderHeading = Math.atan2(this.home.x - this.x, this.home.z - this.z);
         wantHeading = this.steer(this.wanderHeading ?? this.heading, ctx.grid); wantSpeed = k.walk; turn = 1.4;
-        if (dist < k.notice && !this.remote && !inLanternhold(p.x, p.z, 1)) { this.setState('alert'); events.push({ type: 'alert' }); }
+        if (dist < k.notice && !this.remote && !inSafeGround(p.x, p.z, 1)) { this.setState('alert'); events.push({ type: 'alert' }); }
         break;
       case 'emerge':
         // Clawing up out of the roots: no threat until it is fully out.
@@ -493,7 +698,7 @@ export class Creature {
         wantHeading = this.steer(toPlayer, ctx.grid); wantSpeed = k.chase * THREE.MathUtils.clamp((dist - k.spacing) / 1.5, .25, 1);
         if (dist < k.spacing + .3) this.setState('circle');
         if (dist > k.notice * 1.6) this.setState('wander');
-        if (this.cooldown <= 0 && dist < (this.type === 'monkey' ? 13 : this.type === 'gorilla' ? 20 : 3.4)) this.beginAttack(dist, rel, events, ctx);
+        if (this.cooldown <= 0 && dist < ({ monkey: 13, imp: 13, wolf: 9, gorilla: 20, maw: 20 }[this.type] ?? 3.4)) this.beginAttack(dist, rel, events, ctx);
         break;
       case 'circle': {
         // Hold spacing and face the explorer; turn in place when flanked.
@@ -511,14 +716,14 @@ export class Creature {
         if (this.t < tm.track) { wantHeading = toPlayer; turn = 4.5; } else turn = 0;
         if (this.t >= tm.windup) {
           // The vine swing needs somewhere to land behind you; with nowhere to go it holds off.
-          if (this.attack === 'swing' && !(this.swingPath = this.planSwing(p, dist, ctx.grid))) { this.attack = null; this.cooldown = .3; this.setState('circle'); break; }
+          if (this.move === 'swing' && !(this.swingPath = this.planSwing(p, dist, ctx.grid))) { this.attack = null; this.cooldown = .3; this.setState('circle'); break; }
           this.attackYaw = this.heading; this.connected = false; this.anyHit = false; this.swipe = -1; this.closest = 9; this.hits = new Set(); this.grabbed = false; this.struck = false; this.setState('attack'); events.push({ type: 'attack', attack: this.attack });
-          if (this.attack === 'leap') { const reach = Math.min(Math.max(0, dist - 1.2), 14); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
-          if (this.attack === 'boulder') { const fw = this.forward(); events.push({ type: 'boulder', x: this.x + fw.x * .6, y: groundY(this.x, this.z) + 3.9, z: this.z + fw.z * .6, tx: p.x, tz: p.z, flight: THREE.MathUtils.clamp(dist / 15, .7, 1.25), damage: a.damage }); }
-          if (this.attack === 'erupt') this.marks = [];
-          if (this.attack === 'roar') this.roarRest = 9;
-          if (this.attack === 'pounce') { const reach = Math.min(dist - .9, 8.5); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
-          if (this.attack === 'seed') { const hand = new THREE.Vector3(); this.head.getWorldPosition(hand); events.push({ type: 'throw', x: hand.x, y: hand.y + .2, z: hand.z, tx: p.x, ty: (p.y ?? groundY(p.x, p.z)) + 1.1, tz: p.z, speed: 17 }); }
+          if (this.move === 'leap') { const reach = Math.min(Math.max(0, dist - 1.2), 14); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
+          if (this.move === 'boulder') { const fw = this.forward(); events.push({ type: 'boulder', x: this.x + fw.x * .6, y: groundY(this.x, this.z) + 3.9, z: this.z + fw.z * .6, tx: p.x, tz: p.z, flight: THREE.MathUtils.clamp(dist / 15, .7, 1.25), damage: a.damage }); }
+          if (this.move === 'erupt') this.marks = [];
+          if (this.move === 'roar') this.roarRest = 9;
+          if (this.move === 'pounce') { const reach = Math.min(dist - .9, 8.5); this.leap = { x0: this.x, z0: this.z, x1: this.x + Math.sin(this.heading) * reach, z1: this.z + Math.cos(this.heading) * reach, landed: false }; }
+          if (this.move === 'seed') { const hand = new THREE.Vector3(); this.head.getWorldPosition(hand); events.push({ type: 'throw', x: hand.x, y: hand.y + .2, z: hand.z, tx: p.x, ty: (p.y ?? groundY(p.x, p.z)) + 1.1, tz: p.z, speed: this.type === 'imp' ? 20 : 17, ice: this.type === 'imp', label: a.label }); }
         }
         break;
       }
@@ -556,16 +761,16 @@ export class Creature {
       }
       case 'recover': {
         turn = .6;
-        if (this.type === 'monkey' && this.attack === 'swing' && !this.chained && this.t > .16 && dist < 2.9 && !this.remote) {
+        if (this.type === 'monkey' && this.move === 'swing' && !this.chained && this.t > .16 && dist < 2.9 && !this.remote) {
           this.chained = true;
           if (Math.random() < .55 && (!ctx.mayAttack || ctx.mayAttack(this))) { this.attack = 'flurry'; this.quick = true; this.setState('windup'); events.push({ type: 'windup', attack: 'flurry', chained: true }); break; }
         }
         if (this.t >= this.timing(ATTACKS[this.attack]).recover) {
           const tt = TAUNT[this.type];
-          if (tt && this.struck && !this.remote && this.attack !== 'roar' && Math.random() < tt[0] * (this.phase > 1 ? .7 : 1)) { this.struck = false; this.setState('taunt'); events.push({ type: 'taunt' }); break; }
+          if (tt && this.struck && !this.remote && this.move !== 'roar' && Math.random() < tt[0] * (this.phase > 1 ? .7 : 1)) { this.struck = false; this.setState('taunt'); events.push({ type: 'taunt' }); break; }
           this.cooldown = k.cooldown[0] + Math.random() * (k.cooldown[1] - k.cooldown[0]);
           if (this.enraged) this.cooldown *= .65;
-          if (this.attack === 'roar') this.cooldown = .15;     // the roar sets up a follow-up at once
+          if (this.move === 'roar') this.cooldown = .15;     // the roar sets up a follow-up at once
           this.setState(dist < k.spacing + 1 ? 'circle' : 'approach');
         }
         break;
@@ -620,7 +825,7 @@ export class Creature {
       this.connected = true; this.struck = true;
       events.push({ type: 'strike', attack: this.attack, label: a.label, kind: a.kind, damage: a.damage, x: this.x, z: this.z, ...extra });
     };
-    if (this.attack === 'lunge') {
+    if (this.move === 'lunge') {
       const frac = Math.min(1, this.t / a.active), prev = Math.max(0, (this.t - dt) / a.active);
       let step = ((1 - (1 - frac) ** 2) - (1 - (1 - prev) ** 2)) * 2.8;
       const ahead = dx * Math.sin(this.attackYaw) + dz * Math.cos(this.attackYaw);
@@ -633,13 +838,13 @@ export class Creature {
         if (gap <= 0 && bite.y > p.y + .1 && bite.y < p.y + 1.8) strike();
         else this.closest = Math.min(this.closest, gap);
       }
-    } else if (this.attack === 'spin') {
+    } else if (this.move === 'spin') {
       this.spinAngle += dt * 17;
       const v = this.damageVolumes()[0];
       const gap = Math.hypot(v.x - p.x, v.z - p.z) - (v.r + .34);
       if (gap <= 0 && p.y < v.y + 1.2) strike();
       else this.closest = Math.min(this.closest, gap);
-    } else if (this.attack === 'slam') {
+    } else if (this.move === 'slam') {
       // The shell hits the ground, then a shockwave ring rolls outward: dash
       // through it or jump over it.
       for (const v of this.damageVolumes()) {
@@ -649,7 +854,7 @@ export class Creature {
         else this.closest = Math.min(this.closest, v.ring ? Math.abs(d - v.r) - .45 : d - v.r - .34);
       }
     }
-    if (this.attack === 'flurry') {
+    if (this.move === 'flurry') {
       // Three swipes; between them it steps in and turns to follow you.
       const toward = Math.atan2(dx, dz);
       this.heading += THREE.MathUtils.clamp(angleTo(this.heading, toward), -3.2 * dt, 3.2 * dt); this.attackYaw = this.heading;
@@ -662,7 +867,7 @@ export class Creature {
         const v = this.damageVolumes()[0], gap = Math.hypot(v.x - p.x, v.z - p.z) - (v.r + .34);
         if (gap <= 0 && !this.connected) { strike({ swipe: n }); this.anyHit = true; } else this.closest = Math.min(this.closest, gap);
       }
-    } else if (this.attack === 'pounce') {
+    } else if (this.move === 'pounce') {
       // An arc through the air to the spot it marked; claws land at the end.
       const L = this.leap, f = Math.min(1, this.t / (a.active * .8)), e = f * f * (3 - 2 * f);
       const tx = L.x0 + (L.x1 - L.x0) * e, tz = L.z0 + (L.z1 - L.z0) * e;
@@ -672,10 +877,10 @@ export class Creature {
         const gap = Math.hypot(this.x - p.x, this.z - p.z) - 1.35;
         if (gap <= 0 && ctx.playerGrounded) strike(); else this.closest = Math.min(this.closest, gap);
       }
-    } else if (this.attack === 'seed') {
+    } else if (this.move === 'seed') {
       this.closest = 0;          // the seed itself does the hitting (main.js)
       this.connected = true;
-    } else if (this.attack === 'swing') {
+    } else if (this.move === 'swing') {
       // Round the circle it planned: wide, then in close at the side for the kick, then out behind you.
       const P = this.swingPath, u = Math.min(1, this.t / a.active), e = u * u * (3 - 2 * u);
       const th = P.th0 + P.side * P.sweep * e, r = P.r0 + (P.r1 - P.r0) * e - P.dip * Math.sin(e * Math.PI);
@@ -687,8 +892,8 @@ export class Creature {
       }
       if (u >= 1 && !P.landed) { P.landed = true; events.push({ type: 'swingLand', x: this.x, z: this.z }); }
     }
-    if (this.type === 'gorilla' && this.runGorilla(dt, p, ctx, events, dx, dz, a)) return;
-    if (this.attack === 'quake' && this.t >= .1 && !this.connected) {
+    if (this.brute && this.runGorilla(dt, p, ctx, events, dx, dz, a)) return;
+    if (this.move === 'quake' && this.t >= .1 && !this.connected) {
       // The ground breaks around it: dash through (i-frames), guard, or be out of range.
       const gap = Math.hypot(this.x - p.x, this.z - p.z) - QUAKE_RADIUS;
       if (gap <= 0 && ctx.playerGrounded) strike({ ring: true, quake: true });
@@ -706,7 +911,7 @@ export class Creature {
     const cx = p.x, cz = p.z, th0 = Math.atan2(this.x - cx, this.z - cz), r0 = Math.max(dist, 2), r1 = 2.2, sweep = Math.PI * .92;
     for (const side of Math.random() < .5 ? [1, -1] : [-1, 1]) {
       const th1 = th0 + side * sweep, x1 = cx + Math.sin(th1) * r1, z1 = cz + Math.cos(th1) * r1;
-      if (!canOccupy(x1, z1, groundY(x1, z1), grid, groundY, this.radius * .8) || inLanternhold(x1, z1, 1)) continue;
+      if (!canOccupy(x1, z1, groundY(x1, z1), grid, groundY, this.radius * .8) || inSafeGround(x1, z1, 1)) continue;
       return { cx, cz, th0, side, sweep, r0, r1, dip: Math.max(0, (r0 + r1) / 2 - 1.05), ay: groundY(cx, cz) + 7.5, landed: false };
     }
     return null;
@@ -728,10 +933,11 @@ export class Creature {
       const rx = p.x - ox, rz = p.z - oz, ahead = rx * Math.sin(yaw) + rz * Math.cos(yaw), lat = Math.abs(rx * Math.cos(yaw) - rz * Math.sin(yaw));
       return Math.max(from - ahead, ahead - to, lat - half - .34);
     };
-    switch (this.attack) {
+    switch (this.move) {
       case 'chop': {
         if (t >= .1 && once('fx:chop')) events.push({ type: 'chopImpact', x: this.x + fw.x * 2.3, z: this.z + fw.z * 2.3, yaw: this.heading, len: a.line[1] });
         if (t >= .08 && t <= .24) { const g = strip(this.x, this.z, this.heading, ...a.line); g <= 0 ? hit('chop') : miss(g); }
+        if (this.type === 'maw' && once('fx:jaw')) events.push({ type: 'swipe', n: 0, heavy: true });
         break;
       }
       case 'backhand':
@@ -796,7 +1002,7 @@ export class Creature {
       case 'barrage':
         if (t >= .05 && once('fx:barrage')) {
           const y = groundY(this.x, this.z) + 3.3;
-          events.push({ type: 'shards', x: this.x + fw.x * .4, y, z: this.z + fw.z * .4, yaw: Math.atan2(dx, dz), n: 3, spread: .26, speed: 19, ty: (p.y ?? groundY(p.x, p.z)) + 1.2, dist, damage: a.damage });
+          events.push({ type: 'shards', x: this.x + fw.x * .4, y, z: this.z + fw.z * .4, yaw: Math.atan2(dx, dz), n: a.shards || 3, spread: a.spread || .26, speed: 19, ty: (p.y ?? groundY(p.x, p.z)) + 1.2, dist, damage: a.damage, ice: this.type === 'maw' });
         }
         this.closest = 0; this.connected = true;     // the shards do the hitting (main.js)
         break;
@@ -822,6 +1028,16 @@ export class Creature {
         if (!this.grabbed && t >= .36) { events.push({ type: 'missed', attack: 'grab', label: a.label, gap: this.closest ?? 9 }); this.setState('recover'); return true; }
         break;
       }
+      case 'breath': {
+        // Frost breath: a cone ahead that follows you slowly while it lasts. Anywhere in it, you are caught once.
+        this.heading += THREE.MathUtils.clamp(angleTo(this.heading, Math.atan2(dx, dz)), -.85 * dt, .85 * dt); this.attackYaw = this.heading;
+        if (once('fx:breath')) events.push({ type: 'breath', dur: a.active - .1, len: a.cone[0], half: a.cone[1] });
+        if (t >= .12 && t <= a.active - .1) {
+          const off = Math.abs(angleTo(this.heading, Math.atan2(dx, dz))), g = Math.max(dist - a.cone[0] - .3, (off - a.cone[1]) * Math.max(1, dist));
+          if (g <= 0) hit('breath'); else miss(g);
+        }
+        break;
+      }
       case 'erupt':
         // Three marks where you stand, each bursting a moment later.
         a.marks.forEach((at, i) => {
@@ -841,32 +1057,32 @@ export class Creature {
   /** Damage volumes for the current attack (debug draws these). */
   damageVolumes() {
     const s = this.kind.size, f = new THREE.Vector3();
-    if (this.type === 'gorilla') return this.state === 'attack' ? this.gorillaVolumes() : [];
-    if (this.attack === 'swing') {
+    if (this.brute) return this.state === 'attack' ? this.gorillaVolumes() : [];
+    if (this.move === 'swing') {
       const u = this.swingU ?? 0;
       return this.state === 'attack' && u >= .36 && u <= .64 ? [{ x: this.x, y: groundY(this.x, this.z) + 1.2, z: this.z, r: 1.0 }] : [];
     }
-    if (this.attack === 'lunge') {
+    if (this.move === 'lunge') {
       this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .5 * s);
       return [{ x: f.x, y: f.y, z: f.z, r: this.kind.biteRadius }];
     }
-    if (this.attack === 'flurry') {
+    if (this.move === 'flurry') {
       this.head.getWorldPosition(f); f.addScaledVector(this.forward(), .55 * s);
       return [{ x: f.x, y: f.y - .25, z: f.z, r: .62 }];
     }
-    if (this.attack === 'pounce') {
+    if (this.move === 'pounce') {
       const g = groundY(this.x, this.z);
       return this.state === 'attack' && this.leap && this.t >= ATTACKS.pounce.active * .78 ? [{ x: this.x, y: g + .4, z: this.z, r: 1.35 }] : [];
     }
-    if (this.attack === 'spin') {
+    if (this.move === 'spin') {
       const g = groundY(this.x, this.z);
       return [{ x: this.x, y: g + .5, z: this.z, r: this.radius + .55 }];
     }
-    if (this.attack === 'quake') {
+    if (this.move === 'quake') {
       const g = groundY(this.x, this.z);
       return this.state === 'attack' ? [{ x: this.x, y: g + .1, z: this.z, r: QUAKE_RADIUS, ring: true }] : [];
     }
-    if (this.attack === 'slam') {
+    if (this.move === 'slam') {
       const fw = this.forward(), cx = this.x + fw.x * 1.0 * s, cz = this.z + fw.z * 1.0 * s, g = groundY(cx, cz);
       const out = [];
       if (this.state !== 'attack') return out;
@@ -882,16 +1098,17 @@ export class Creature {
     if (!a) return [];
     const line = (from, to, r) => { const out = []; for (let d = from; d <= to; d += r * 1.4) out.push({ x: this.x + fw.x * d, y: g + .8, z: this.z + fw.z * d, r }); return out; };
     const ahead = (d, r) => [{ x: this.x + fw.x * d, y: g + 1.2, z: this.z + fw.z * d, r }];
-    if (this.attack === 'chop') return t >= .08 && t <= .24 ? line(.5, 4.1, .6) : [];
-    if (this.attack === 'backhand') return t >= .05 && t <= .24 ? ahead(1.2, 2.1) : [];
-    if (this.attack === 'charge') return ahead(1.3, 1.45);
-    if (this.attack === 'pound') return a.rings.filter(st => t >= st && t <= st + a.ring[2]).map(st => ({ x: this.x, y: g + .1, z: this.z, r: a.ring[0] + (a.ring[1] - a.ring[0]) * Math.min(1, (t - st) / a.ring[2]), ring: true }));
-    if (this.attack === 'roar') return t < .2 ? [{ x: this.x, y: g + 1, z: this.z, r: a.reach }] : [];
-    if (this.attack === 'combo') { const n = this.swipe ?? -1, since = n >= 0 ? t - a.swipes[n] : -1; return since >= 0 && since < .16 ? (n === 0 ? line(.4, 3.6, .55) : ahead(1.4, n === 1 ? 2 : 1.4)) : []; }
-    if (this.attack === 'leap') return this.leap?.landed ? [{ x: this.x, y: g + .5, z: this.z, r: 2.4 }] : [];
-    if (this.attack === 'whirl') return [{ x: this.x, y: g + 1.2, z: this.z, r: a.reach }];
-    if (this.attack === 'grab') return !this.grabbed && t >= .06 && t < .3 ? ahead(1.9, 1.45) : [];
-    if (this.attack === 'erupt') return (this.marks || []).filter(m => t >= m.at + a.fuse && t < m.at + a.fuse + .2).map(m => ({ x: m.x, y: groundY(m.x, m.z) + .5, z: m.z, r: 1.5 }));
+    if (this.move === 'chop') return t >= .08 && t <= .24 ? line(...(a.line || [.5, 4.1, .6])) : [];
+    if (this.move === 'breath') { const [len, half] = a.cone, out = []; if (t < .12 || t > a.active - .1) return out; for (let d = 1.5; d <= len; d += 1.6) for (const k of [-1, 0, 1]) { const y = this.heading + k * half * .7; out.push({ x: this.x + Math.sin(y) * d, y: g + 1, z: this.z + Math.cos(y) * d, r: .5 + d * .14 }); } return out; }
+    if (this.move === 'backhand') return t >= .05 && t <= .24 ? ahead(1.2, 2.1) : [];
+    if (this.move === 'charge') return ahead(1.3, 1.45);
+    if (this.move === 'pound') return a.rings.filter(st => t >= st && t <= st + a.ring[2]).map(st => ({ x: this.x, y: g + .1, z: this.z, r: a.ring[0] + (a.ring[1] - a.ring[0]) * Math.min(1, (t - st) / a.ring[2]), ring: true }));
+    if (this.move === 'roar') return t < .2 ? [{ x: this.x, y: g + 1, z: this.z, r: a.reach }] : [];
+    if (this.move === 'combo') { const n = this.swipe ?? -1, since = n >= 0 ? t - a.swipes[n] : -1; return since >= 0 && since < .16 ? (n === 0 ? line(.4, 3.6, .55) : ahead(1.4, n === 1 ? 2 : 1.4)) : []; }
+    if (this.move === 'leap') return this.leap?.landed ? [{ x: this.x, y: g + .5, z: this.z, r: 2.4 }] : [];
+    if (this.move === 'whirl') return [{ x: this.x, y: g + 1.2, z: this.z, r: a.reach }];
+    if (this.move === 'grab') return !this.grabbed && t >= .06 && t < .3 ? ahead(1.9, 1.45) : [];
+    if (this.move === 'erupt') return (this.marks || []).filter(m => t >= m.at + a.fuse && t < m.at + a.fuse + .2).map(m => ({ x: m.x, y: groundY(m.x, m.z) + .5, z: m.z, r: 1.5 }));
     return [];
   }
   /** Garrow's body for the state it is in: lean, lift, twist, and where each arm (and the cleaver) points. */
@@ -948,6 +1165,84 @@ export class Creature {
     if (st === 'dazed') { P.rear = .25; P.lean = Math.sin(t * 7) * .15; P.headOut = -.2; P.L = P.R = [.2, 0]; }
     return P;
   }
+  /** The White Maw's body for the state it is in: rearing, lunging, the jaw and the front paws (P.paws [left, right]). */
+  mawPose(st, t, tm) {
+    const a = this.move, A = this.attack ? ATTACKS[this.attack] : null, w = st === 'windup' && tm ? Math.min(1, t / tm.windup) : 0;
+    const ease = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+    const kf = pts => { for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) { const [t0, v0] = pts[i - 1], [t1, v1] = pts[i]; return v0 + (v1 - v0) * ease((t - t0) / (t1 - t0)); } return pts[pts.length - 1][1]; };
+    const P = { rear: null, lift: 0, spin: 0, headOut: 0, lean: 0, jaw: st === 'alert' ? .5 : null, paws: [null, null] };
+    if (st === 'windup') {
+      P.rear = 0;
+      if (a === 'chop') { P.rear = -.28 * w; P.jaw = .95 * w; P.headOut = -.25 * w; }
+      if (a === 'backhand') { P.paws = [null, -1.5 * w]; P.spin = .5 * w; P.rear = -.15 * w; }
+      if (a === 'charge') { P.rear = .28 * w; P.lift = -.2 * w; P.headOut = .3 * w; P.jaw = .3 * w; }
+      if (a === 'pound') { P.rear = -.72 * w; P.lift = .55 * w; P.paws = [-1.2 * w, -1.2 * w]; P.jaw = .5 * w; }
+      if (a === 'boulder') { const down = ease(t / (tm.windup * .45)), up = ease((t / tm.windup - .45) / .55); P.rear = .45 * down * (1 - up) - .3 * up; P.headOut = .3 * down; P.jaw = .5; P.paws = [-.6 * up, -.6 * up]; }
+      if (a === 'roar') { P.rear = -.4 * w; P.headOut = .2 * w; P.jaw = .4 * w; }
+      if (a === 'breath') { P.rear = -.22 * w; P.jaw = .55 * w; P.headOut = -.2 * w; P.lift = .1 * w; }
+      if (a === 'combo') { P.rear = -.2 * w; P.jaw = .8 * w; P.paws = [null, -1.1 * w]; }
+      if (a === 'leap') { P.rear = .35 * w; P.lift = -.35 * w; P.paws = [.8 * w, .8 * w]; }
+      if (a === 'erupt') { P.rear = -.6 * w; P.lift = .45 * w; P.paws = [-1.5 * w, -1.5 * w]; }
+      if (a === 'barrage') { P.lean = Math.sin(t * 34) * .14 * w; P.rear = .1 * w; P.lift = -.1 * w; }
+      if (a === 'whirl') { P.rear = .1 * w; P.paws = [-.8 * w, -.8 * w]; P.spin = -.6 * w; P.lift = -.1 * w; }
+      if (a === 'grab') { P.rear = -.15 * w; P.jaw = .7 * w; P.headOut = -.3 * w; P.lift = -.2 * w; }
+    }
+    if (st === 'attack' && A) {
+      P.rear = 0;
+      if (a === 'chop') { const k = ease(t / .1); P.rear = -.28 + .55 * k; P.jaw = .95 * (1 - k) + .05; P.headOut = .45 * k; }
+      if (a === 'backhand') { const k = ease(t / .2); P.paws = [null, -1.5 + 1.4 * k]; P.spin = .5 - 1.2 * k; }
+      if (a === 'charge') { P.rear = .25; P.lift = Math.abs(Math.sin(t * 9)) * .25; P.paws = [Math.sin(t * 18) * .9, -Math.sin(t * 18) * .9]; P.headOut = .35; P.jaw = .4; }
+      if (a === 'pound') { P.rear = kf([[0, -.72], [.1, .3], [.42, -.62], [.57, -.62], [.67, .3]]); P.paws = [kf([[0, -1.2], [.1, -.1], [.42, -1.2], [.57, -1.2], [.67, -.1]]), kf([[0, -1.2], [.1, -.1], [.42, -1.2], [.57, -1.2], [.67, -.1]])]; P.jaw = .4; }
+      if (a === 'boulder') { P.rear = kf([[0, -.3], [.15, .25]]); P.headOut = kf([[0, 0], [.15, .5]]); P.jaw = .8; }
+      if (a === 'roar') { P.rear = -.5; P.headOut = .4; P.jaw = 1.15; P.lean = Math.sin(t * 30) * .04; }
+      if (a === 'breath') { P.rear = -.12; P.jaw = 1.05; P.headOut = .38; }
+      if (a === 'combo') {
+        const n = this.swipe ?? -1, since = n >= 0 ? t - A.swipes[n] : 0, k = ease(since / .12);
+        if (n === 0 || n === 2) { P.rear = -.2 + .5 * k; P.jaw = .9 * (1 - k) + .05; P.headOut = .45 * k; }
+        if (n === 1) { P.paws = [-1.3 + 1.2 * k, null]; P.spin = -.5 + 1.1 * k; P.jaw = .3; }
+      }
+      if (a === 'leap') { const f = Math.min(1, t / (A.active * .7)); P.lift = f < 1 ? Math.sin(f * Math.PI) * 3 : 0; P.paws = f < 1 ? [-1.2, -1.2] : [-.2, -.2]; P.rear = f < 1 ? -.25 : .4; P.jaw = f < 1 ? .9 : .2; }
+      if (a === 'erupt') { P.rear = .45; P.paws = [.3, .3]; P.lift = -.15; P.jaw = .5; }
+      if (a === 'barrage') { const k = ease(t / .12); P.spin = .9 * k; P.rear = .15; P.lean = (1 - k) * .2; }
+      if (a === 'whirl') { P.spin = this.spinAngle; P.whirl = true; P.paws = [-.8, -.8]; P.lift = -.1; P.jaw = .6; }
+      if (a === 'grab') {
+        if (!this.grabbed) { const k = ease(t / .18); P.headOut = .55 * k; P.jaw = 1.1 * (1 - k) + .1; P.rear = .4 * k; }
+        else { P.jaw = .25; P.headOut = .3; P.lean = Math.sin(t * 26) * .22; P.rear = kf([[0, .4], [.75, -.35], [.9, .5]]); }
+      }
+    }
+    if (st === 'phase') {
+      if (t < 1.45) { P.rear = -.4 - .2 * t / 1.45; P.jaw = .8; P.lean = Math.sin(t * 22) * .05; P.lift = .2; }
+      else if (t < 2.4) { P.rear = -.62; P.headOut = .4; P.jaw = 1.2; P.paws = [-1.2, -1.2]; P.lift = .15; }
+      else { const k = ease((t - 2.4) / .4); P.rear = -.62 * (1 - k); P.jaw = 1.2 * (1 - k); }
+    }
+    if (st === 'taunt') { P.rear = -.3; P.headOut = .3; P.jaw = .7 + Math.sin(t * 6) * .25; P.lift = Math.abs(Math.sin(t * 4)) * .06; }
+    if (st === 'dazed') { P.rear = .25; P.lean = Math.sin(t * 7) * .15; P.headOut = -.2; P.jaw = .3; }
+    return P;
+  }
+  /** The White Maw's phase 2: the crown-glass collar flares and cracks, rime spires burst from its back, its fur
+   *  goes storm-grey, its eyes burn violet, and it stands taller. The back spires are its weak point ('crystal'). */
+  rimeGlow(k, time) {
+    if (k > 0 && !this.growth) {
+      const ice = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, emissive: 0x5a7cff, emissiveIntensity: 1.3, roughness: .15, metalness: .2, transparent: true, opacity: .92, flatShading: true });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x4a2a80, emissive: 0x7a3cff, emissiveIntensity: 1.6, roughness: .2, metalness: .3, flatShading: true });
+      const geo = new THREE.ConeGeometry(.18, 1, 5); geo.translate(0, .5, 0);
+      this.growth = [];
+      const add = (x, y, z, rx, rz, size, delay, back, m) => { const mesh = new THREE.Mesh(geo, m); mesh.position.set(x, y, z); mesh.rotation.set(rx, 0, rz); mesh.visible = false; mesh.castShadow = true; this.body.add(mesh); this.growth.push({ mesh, size, delay, back }); };
+      for (let i = 0; i < 9; i++) add((i % 2 ? .22 : -.22) * (1 - i * .05), 2.35 - Math.abs(i - 3) * .07, .9 - i * .26, -.4 - i * .03, (i % 2 ? .35 : -.35), 1.25 - Math.abs(i - 3) * .1, i / 9, true, i % 3 ? ice : glass);
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) add(side * .85, 1.8 - i * .1, .5 - i * .45, (i - 1) * .3, -side * (1.1 + i * .1), .7 - i * .1, .3 + i * .1, false, ice);
+      this.furTint = [this.shellMat, this.skinMat].filter(Boolean).map(m => ({ m, color: m.color.clone() }));
+      this.aura = new THREE.PointLight(0x8f9cff, 0, 10, 2); this.aura.position.set(0, 2.2, .5); this.body.add(this.aura);
+    }
+    const violet = new THREE.Color(0xa45cff), pulse = 1 + Math.sin(time * 6) * .15 * k;
+    if (this.collarMat) this.collarMat.emissiveIntensity = (1.4 + 1.6 * k) * pulse;
+    if (!this.growth) return;
+    for (const c of this.growth) { const s = c.back && this.crystalsBroken ? 0 : c.size * Math.min(1, k * 1.25 - c.delay * .25); c.mesh.visible = s > .01; c.mesh.scale.setScalar(Math.max(.001, s)); }
+    const storm = new THREE.Color(0x56657e);
+    for (const f of this.furTint) f.m.color.copy(f.color).lerp(storm, k * .6);
+    if (this.eyeMat) { this.eyeMat.emissive.lerp(violet, k); this.eyeMat.emissiveIntensity = 1.4 + 1.6 * k; }
+    this.aura.intensity = 6 * k * pulse;
+    this.root.scale.setScalar(this.kind.size * (1 + .08 * k));
+  }
   animate(dt, time) {
     this.place();
     const s = this.kind.size * 1.1, h = this.heading;
@@ -961,17 +1256,17 @@ export class Creature {
     if (st === 'alert') { rear = -.12 * Math.sin(Math.min(1, t / .5) * Math.PI); headOut = .15; }
     if (st === 'windup') {
       const w = Math.min(1, t / tm.windup); glow = w * w;
-      if (this.attack === 'lunge') { rear = -.28 * w; headOut = -.35 * w; }
-      if (this.attack === 'spin') { headOut = -.6 * w; legsIn = w; spin = Math.sin(t * 40) * .06 * w; }    // retract and rattle
-      if (this.attack === 'slam') { rear = -.75 * w; lift = .9 * w; headOut = .2 * w; }                     // rear up high
-      if (this.attack === 'quake') { rear = -.62 * w; lift = .7 * w; headOut = -.48 * w; spin = Math.sin(t * 30) * .04 * w; }
+      if (this.move === 'lunge') { rear = -.28 * w; headOut = -.35 * w; }
+      if (this.move === 'spin') { headOut = -.6 * w; legsIn = w; spin = Math.sin(t * 40) * .06 * w; }    // retract and rattle
+      if (this.move === 'slam') { rear = -.75 * w; lift = .9 * w; headOut = .2 * w; }                     // rear up high
+      if (this.move === 'quake') { rear = -.62 * w; lift = .7 * w; headOut = -.48 * w; spin = Math.sin(t * 30) * .04 * w; }
     }
     if (st === 'attack') {
       glow = .7;
-      if (this.attack === 'lunge') { rear = .16; headOut = .45; }
-      if (this.attack === 'spin') { headOut = -.6; legsIn = 1; spin = this.spinAngle; }
-      if (this.attack === 'slam') { const k = Math.min(1, t / .07); rear = -.75 + .95 * k; lift = .9 * (1 - k); }
-      if (this.attack === 'quake') { const k = Math.min(1, t / .08); rear = -.62 + .98 * k; lift = .7 * (1 - k); headOut = .22; headLow = -.42; }
+      if (this.move === 'lunge') { rear = .16; headOut = .45; }
+      if (this.move === 'spin') { headOut = -.6; legsIn = 1; spin = this.spinAngle; }
+      if (this.move === 'slam') { const k = Math.min(1, t / .07); rear = -.75 + .95 * k; lift = .9 * (1 - k); }
+      if (this.move === 'quake') { const k = Math.min(1, t / .08); rear = -.62 + .98 * k; lift = .7 * (1 - k); headOut = .22; headLow = -.42; }
     }
     if (st === 'recover') { rear = .06; headOut = .1; headLow = -.25 + Math.sin(time * 5) * .03; legRate = .5; }
     if (st === 'stagger') { lean = Math.sin(t * 28) * .12 * Math.max(0, 1 - t / this.staggerTime); rear = .1; headOut = -.2; }
@@ -979,37 +1274,44 @@ export class Creature {
     if (st === 'toppled') { flip = 1; legRate = 3; headOut = Math.sin(time * 6) * .15; }
     if (st === 'rising') { flip = 1 - Math.min(1, t / RISE_TIME); }
     if (st === 'emerge') { const e = Math.min(1, t / EMERGE_TIME); lift = -2.6 * (1 - e) ** 2; rear = -.35 * Math.sin(e * Math.PI); legRate = 2.5; }
-    const G = this.type === 'gorilla' ? this.gorillaPose(st, t, tm) : null;
+    const G = this.type === 'gorilla' ? this.gorillaPose(st, t, tm) : this.type === 'maw' ? this.mawPose(st, t, tm) : null;
     if (G && G.rear !== null) { rear = G.rear; lift = G.lift; spin = G.spin; headOut = G.headOut; lean = G.lean; glow = st === 'phase' ? .8 : glow; }
     if (G?.whirl) this.body.rotation.y = spin;
     // Monkey poses: crouch before the pounce, an arc through the air, the hop back.
-    if (this.type === 'monkey') {
+    if (this.type === 'monkey' || this.type === 'wolf' || this.type === 'imp') {
       const w = tm ? Math.min(1, t / tm.windup) : 0;
-      if (st === 'windup' && this.attack === 'pounce') { rear = .32 * w; lift = -.22 * w; headOut = 0; }
-      if (st === 'windup' && this.attack === 'flurry') { rear = -.18 * w; headOut = 0; }
-      if (st === 'attack' && this.attack === 'pounce') { const f = Math.min(1, t / (a.active * .8)); lift = Math.sin(f * Math.PI) * 1.8; rear = .45 - f * .3; headOut = 0; }
-      if (st === 'attack' && this.attack === 'flurry') { rear = .22; headOut = 0; }
+      if (st === 'windup' && this.move === 'pounce') { rear = .32 * w; lift = -.22 * w; headOut = 0; }
+      if (st === 'windup' && this.move === 'flurry') { rear = -.18 * w; headOut = 0; }
+      if (st === 'attack' && this.move === 'pounce') { const f = Math.min(1, t / (a.active * .8)); lift = Math.sin(f * Math.PI) * 1.8; rear = .45 - f * .3; headOut = 0; }
+      if (st === 'attack' && this.move === 'flurry') { rear = .22; headOut = 0; }
       if (st === 'hop') { lift = Math.sin(Math.min(1, t / .34) * Math.PI) * .75; rear = -.35; headOut = 0; }
       if (st === 'taunt') { lift = Math.abs(Math.sin(t * 9)) * .35; rear = -.2; headOut = 0; }      // hopping and screeching
-      if (st === 'windup' && this.attack === 'swing') { rear = -.25 * w; lift = -.15 * w; headOut = 0; }     // crouch, eyes on the canopy
-      if (st === 'attack' && this.attack === 'swing') { const u = this.swingU ?? 0; lift = .5 + Math.sin(u * Math.PI) * 1.4; rear = -.3 + u * .3; headOut = 0; }
+      if (st === 'windup' && this.move === 'swing') { rear = -.25 * w; lift = -.15 * w; headOut = 0; }     // crouch, eyes on the canopy
+      if (st === 'attack' && this.move === 'swing') { const u = this.swingU ?? 0; lift = .5 + Math.sin(u * Math.PI) * 1.4; rear = -.3 + u * .3; headOut = 0; }
     }
+    if (this.type === 'imp') lift += .35 + Math.sin(time * 3 + this.home.x) * .12;     // imps hover
     this.body.rotation.x = damp(this.body.rotation.x, rear + this.jolt.pitch, st === 'attack' ? 22 : 10, dt);
     this.body.rotation.z = damp(this.body.rotation.z, lean + this.jolt.roll + flip * Math.PI, flip ? 9 : 20, dt);
-    if (!G?.whirl) this.body.rotation.y = st === 'attack' && this.attack === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
+    if (!G?.whirl) this.body.rotation.y = st === 'attack' && this.move === 'spin' ? spin : damp(this.body.rotation.y, spin, 12, dt);
     this.body.position.y = damp(this.body.position.y, lift + flip * 2.3 + Math.sin(time * 7) * .01, 12, dt);
     // A dressed monkey or gorilla (shadowmere.js) keeps its head on its own neck, moving less.
     const nb = this.neckBase || { y: 1.2, z: 1.2, k: 1 };
     this.neck.position.z = damp(this.neck.position.z, nb.z + headOut * nb.k, st === 'attack' ? 26 : 12, dt);
     this.neck.position.y = damp(this.neck.position.y, nb.y + headLow * nb.k, 10, dt);
-    const moving = st === 'attack' && this.attack === 'lunge' ? 2.2 : st === 'attack' && this.attack === 'charge' ? 2.6 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
+    const moving = st === 'attack' && this.move === 'lunge' ? 2.2 : st === 'attack' && this.move === 'charge' ? 2.6 : st === 'toppled' ? 1 : Math.min(1, (this.speed + (st === 'circle' ? .6 : 0)) / 2);
     this.legPhase += dt * (4 + this.speed * 4.5) * legRate;
     this.legs.forEach(({ mesh, phase }) => {
       mesh.rotation.x = Math.sin(this.legPhase + phase) * .5 * moving;
       mesh.scale.setScalar(damp(mesh.scale.x, 1 - legsIn * .55, 14, dt));
     });
     // The swing's kick: both feet out at the side of you.
-    if (this.type === 'monkey' && st === 'attack' && this.attack === 'swing') { const u = this.swingU ?? 0; for (const { mesh } of this.legs) mesh.rotation.x = u > .3 && u < .7 ? -1.4 : -.4; }
+    if (this.type === 'monkey' && st === 'attack' && this.move === 'swing') { const u = this.swingU ?? 0; for (const { mesh } of this.legs) mesh.rotation.x = u > .3 && u < .7 ? -1.4 : -.4; }
+    if (this.paws && G) this.paws.forEach((leg, i) => { const v = G.paws?.[i]; if (v !== null && v !== undefined) leg.rotation.x = damp(leg.rotation.x, v, st === 'attack' ? 22 : 10, dt); });
+    if (this.jaw) {
+      // The jaw: wide on a bite's wind-up and while it howls or breathes; the wolves snap theirs.
+      const bite = this.move === 'lunge' || this.move === 'flurry', open = G?.jaw ?? (st === 'windup' ? (bite ? .55 : .25) : st === 'attack' && bite ? .1 : st === 'alert' || st === 'taunt' ? .35 : .04);
+      this.jaw.rotation.x = damp(this.jaw.rotation.x, open, 16, dt);
+    }
     if (G && this.arms) {
       for (const { mesh, side } of this.arms) {
         const [x, z] = side < 0 ? G.L : G.R, fast = st === 'attack' ? 22 : 10;
@@ -1025,17 +1327,17 @@ export class Creature {
       }
       if(this.sword)this.sword.rotation.x=damp(this.sword.rotation.x,st==='windup'?.64:st==='attack'?-.48:0,st==='attack'?18:8,dt);
     }
-    if (this.type === 'monkey' && this.arms && a) {
+    if ((this.type === 'monkey' || this.type === 'imp') && this.arms && a) {
       // Arms: both cocked back for the flurry, then alternate claws; out front in the pounce; a throw for the seed.
       const w = Math.min(1, t / (tm?.windup || 1));
       for (const { mesh, side } of this.arms) {
         let x = null;
-        if (st === 'windup') x = this.attack === 'flurry' ? 1.25 * w : this.attack === 'pounce' ? .9 * w : this.attack === 'seed' && side > 0 ? 2.3 * w : this.attack === 'swing' && side > 0 ? -2.6 * w : null;
+        if (st === 'windup') x = this.move === 'flurry' ? 1.25 * w : this.move === 'pounce' ? .9 * w : this.move === 'seed' && side > 0 ? 2.3 * w : this.move === 'swing' && side > 0 ? -2.6 * w : null;
         if (st === 'attack') {
-          if (this.attack === 'flurry') { const mine = (this.swipe ?? 0) % 2 === (side > 0 ? 0 : 1), since = t - (a.swipes[this.swipe] ?? 0); x = mine ? (since < .14 ? 1.3 - since / .14 * 2.8 : -1.5) : .5; }
-          if (this.attack === 'pounce') x = -1.35;
-          if (this.attack === 'seed' && side > 0) x = -1.4;
-          if (this.attack === 'swing') x = side > 0 ? -2.9 : -.6;
+          if (this.move === 'flurry') { const mine = (this.swipe ?? 0) % 2 === (side > 0 ? 0 : 1), since = t - (a.swipes[this.swipe] ?? 0); x = mine ? (since < .14 ? 1.3 - since / .14 * 2.8 : -1.5) : .5; }
+          if (this.move === 'pounce') x = -1.35;
+          if (this.move === 'seed' && side > 0) x = -1.4;
+          if (this.move === 'swing') x = side > 0 ? -2.9 : -.6;
         }
         if (st === 'taunt') x = -2.3 + Math.sin(t * 14 + side) * .6;
         if (x !== null) mesh.rotation.x = damp(mesh.rotation.x, x, st === 'attack' ? 30 : 12, dt);
@@ -1044,7 +1346,7 @@ export class Creature {
     if(this.tail)this.tail.rotation.x=Math.sin(time*(this.type==='monkey'&&st!=='wander'?7:4)+this.home.x)*.25;
     if (this.vine) {
       // From high in the canopy above you down to its raised hand.
-      const P = this.swingPath, on = this.alive && st === 'attack' && this.attack === 'swing' && P;
+      const P = this.swingPath, on = this.alive && st === 'attack' && this.move === 'swing' && P;
       this.vine.visible = !!on;
       if (on) {
         const hand = new THREE.Vector3(); (this.arms[1] || this.arms[0]).mesh.getWorldPosition(hand); hand.y += .55;
@@ -1059,16 +1361,18 @@ export class Creature {
       this.bossAura.intensity = (1.8 + glow * 4 + Math.sin(time * 5) * .35) * (this.shellBroken ? 1.5 : 1);
       this.bossJaw.rotation.x = damp(this.bossJaw.rotation.x, st === 'windup' || st === 'attack' ? -.42 : -.08, 9, dt);
     }
-    this.shellMat.emissive.setRGB(.55 * glow + this.flash * 3, .28 * glow + this.flash * 3, .05 * glow + this.flash * 3);
+    const tint = this.tellTint || [.55, .28, .05];
+    this.shellMat.emissive.setRGB(tint[0] * glow + this.flash * 3, tint[1] * glow + this.flash * 3, tint[2] * glow + this.flash * 3);
     this.skinMat.emissive.setScalar(this.flash * 2.5);
     this.eyeMat.emissive.setRGB(.35 + glow * .8 + rage * .9, (.26 + glow * .4) * (1 - rage * .8), .13 * (1 - rage));
     if (this.type === 'gorilla') this.crownGlow(st === 'phase' ? Math.min(1, Math.max(0, (t - .8) / .65)) : this.phase > 1 ? 1 : 0, time);
+    if (this.type === 'maw') this.rimeGlow(st === 'phase' ? Math.min(1, Math.max(0, (t - .8) / .65)) : this.phase > 1 ? 1 : 0, time);
     this.tell.visible = this.alive && (st === 'windup' || st === 'attack' || st === 'recover');
     if (this.tell.visible) {
       const warning = st === 'windup', w = warning ? Math.min(1, t / tm.windup) : 1;
       // The spin's danger zone is wider than the body; size the tell to match.
       const A2 = this.attack ? ATTACKS[this.attack] : null;
-      const reach = this.attack === 'spin' ? (this.radius + .55) / this.radius : this.attack === 'quake' ? QUAKE_RADIUS / this.radius : A2?.ring ? A2.ring[1] / this.radius : A2?.reach ? A2.reach / this.radius : 1;
+      const reach = this.move === 'spin' ? (this.radius + .55) / this.radius : this.move === 'quake' ? QUAKE_RADIUS / this.radius : A2?.ring ? A2.ring[1] / this.radius : A2?.reach ? A2.reach / this.radius : 1;
       this.tell.position.set(this.x, groundY(this.x, this.z) + .065, this.z);
       this.tell.scale.setScalar(this.radius * reach * (warning ? .9 + .45 * w : st === 'attack' ? 1.42 : 1.18));
       this.tell.material.color.setHex(warning ? 0xe9ad62 : st === 'attack' ? 0xf27d56 : 0xb9d892);
@@ -1076,14 +1380,23 @@ export class Creature {
     }
     if (this.lineTell) {
       // Garrow's line attacks: amber while it winds up, red as it strikes; the spike line after a leap.
-      const A3 = this.attack ? ATTACKS[this.attack] : null, spikes = this.attack === 'leap' && st === 'attack' && this.leap?.landed && t < A3.active * .7 + .4;
-      const line = spikes ? [.6, 7, .75] : A3?.line && (st === 'windup' || st === 'attack') ? A3.line : this.attack === 'combo' && st === 'windup' ? [.4, 3.6, .55] : null;
+      const A3 = this.attack ? ATTACKS[this.attack] : null, spikes = this.move === 'leap' && st === 'attack' && this.leap?.landed && t < A3.active * .7 + .4;
+      const line = spikes ? [.6, 7, .75] : A3?.line && (st === 'windup' || st === 'attack') ? A3.line : this.move === 'combo' && st === 'windup' ? [.4, 3.6, .55] : null;
       this.lineTell.visible = this.alive && !!line;
       if (line) {
         const [from, to, half] = line, mid = (from + to) / 2, cx = this.x + Math.sin(this.heading) * mid, cz = this.z + Math.cos(this.heading) * mid, warn = st === 'windup';
         this.lineTell.position.set(cx, groundY(cx, cz) + .07, cz); this.lineTell.rotation.set(-Math.PI / 2, this.heading, 0); this.lineTell.scale.set(half * 2, to - from, 1);
         this.lineTell.material.color.setHex(warn ? 0xe9ad62 : spikes ? 0xb57cff : 0xf27d56);
         this.lineTell.material.opacity = warn ? .12 + .3 * Math.min(1, t / (tm?.windup || 1)) : .42;
+      }
+    }
+    if (this.coneTell) {
+      const on = this.alive && this.move === 'breath' && (st === 'windup' || st === 'attack');
+      this.coneTell.visible = on;
+      if (on) {
+        this.coneTell.position.set(this.x, groundY(this.x, this.z) + .08, this.z); this.coneTell.rotation.set(-Math.PI / 2, this.heading, 0);
+        this.coneTell.material.color.setHex(st === 'windup' ? 0xe9ad62 : 0xbfe8ff);
+        this.coneTell.material.opacity = st === 'windup' ? .1 + .25 * Math.min(1, t / (tm?.windup || 1)) : .38;
       }
     }
     if (this.shake > 0) { this.root.position.x += (Math.random() - .5) * .07; this.root.position.z += (Math.random() - .5) * .07; }
@@ -1142,7 +1455,15 @@ export class Creature {
     for (const { mesh } of this.legs) mesh.rotation.x = damp(mesh.rotation.x, -1.0, 4, dt);
     for (const { mesh, side } of this.arms || []) { mesh.rotation.x = damp(mesh.rotation.x, calm ? -.25 : .3, 4, dt); mesh.rotation.z = damp(mesh.rotation.z, side * .15, 4, dt); }
     if (this.sword) this.sword.visible = !calm;
-    this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; this.bar.visible = false;
+    if (this.type === 'maw') {
+      // Curled in the snow: bound, head down in its collar; freed, at rest, the collar gone.
+      this.body.position.y = damp(this.body.position.y, -.72 + Math.sin(time * 1.1) * .03, 4, dt); this.body.rotation.x = damp(this.body.rotation.x, calm ? .06 : .16, 4, dt);
+      for (const { mesh } of this.legs) mesh.rotation.x = damp(mesh.rotation.x, -1.25, 4, dt);
+      if (this.jaw) this.jaw.rotation.x = damp(this.jaw.rotation.x, .02, 4, dt);
+      if (this.collar) this.collar.visible = !calm;
+      this.rimeGlow(0, time);
+    }
+    this.tell.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.coneTell) this.coneTell.visible = false; this.bar.visible = false;
     if (this.type === 'gorilla') this.crownGlow(0, time);
     this.root.visible = true; this.root.updateMatrixWorld(true);
   }
@@ -1156,7 +1477,7 @@ export class Creature {
   }
   /** Dormant: out of the world until its chapter of the story calls it. */
   sleep() {
-    this.alive = false; this.setState('dormant'); this.root.visible = false; this.tell.visible = false; this.bar.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.vine) this.vine.visible = false;
+    this.alive = false; this.setState('dormant'); this.root.visible = false; this.tell.visible = false; this.bar.visible = false; if (this.lineTell) this.lineTell.visible = false; if (this.coneTell) this.coneTell.visible = false; if (this.vine) this.vine.visible = false;
   }
   /** Rise out of the ground at home, then notice the explorer. */
   emerge() {
@@ -1166,7 +1487,7 @@ export class Creature {
     this.maxHealth = healthFor(this.type, this.kind); this.alive = true; this.health = this.maxHealth; this.poise = this.kind.poise; this.enraged = false; this.phase = 1; this.pendingPhase = false; this.crystalDamage = 0; this.crystalsBroken = false; this.baseMax = 0;
     if (this.isBoss) { this.shellDamage = 0; this.shellBroken = false; this.shellMat.color.setHex(0x28372d); this.bossScuteMat.color.setHex(0x8e5636); this.bossScuteMat.emissiveIntensity = .55; this.shellMat.roughness = .92; }
     this.x = this.home.x; this.z = this.home.z;
-    this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); if (this.sword) this.sword.visible = true;
+    this.root.visible = true; this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); if (this.sword) this.sword.visible = true; if (this.collar) this.collar.visible = true;
     this.setState('wander'); this.cooldown = 1.5; this.push = { x: 0, z: 0 }; this.attack = null;
   }
 }
@@ -1190,6 +1511,17 @@ export function createCreatures(scene, chapters = []) {
   for(const L of GARROW_SEAL.lanterns)for(const j of [0,1]){
     const a=L.a+(j?.5:-.5),x=GARROW_SEAL.x+Math.sin(a)*11.8,z=GARROW_SEAL.z+Math.cos(a)*11.8;
     const t=new Creature(scene,x,z,'monkey',{id:`seal-thief-${L.i}-${j}`});t.name='LANTERN THIEF';t.lantern=L.i;t.sleep();list.push(t);
+  }
+  // Book III: rime wolves along the white road round Hearthfast, frost imps by the lake and the court, the White Maw
+  // in its den, and two imps sleeping in the ice at each frozen brazier (they burst out when you come).
+  // Appended after every older creature, so the co-op ids (creation order) of the others are unchanged.
+  const F=(dx,dz)=>[FROSTBOUND.x+dx,FROSTBOUND.z+dz];
+  for(const [i,[dx,dz]] of [[-12,28],[15,31],[13,4],[-11,3],[4,-6]].entries()){const [x,z]=F(dx,dz),w=new Creature(scene,x,z,'wolf',{id:`frost-wolf-${i}`,respawn:45});w.name='RIME WOLF';list.push(w);}
+  for(const [i,[dx,dz]] of [[-20,30],[-31,5],[-8,-12]].entries()){const [x,z]=F(dx,dz),m=new Creature(scene,x,z,'imp',{id:`frost-imp-${i}`,respawn:45});m.name='FROST IMP';list.push(m);}
+  const maw=new Creature(scene,FROSTBOUND.maw.x,FROSTBOUND.maw.z,'maw',{id:'frost-maw',respawn:150});maw.name='THE WHITE MAW';list.push(maw);
+  for(const B of MAW_SEAL.braziers)for(const j of [0,1]){
+    const a=B.a+(j?.5:-.5),x=MAW_SEAL.x+Math.sin(a)*11.8,z=MAW_SEAL.z+Math.cos(a)*11.8;
+    const t=new Creature(scene,x,z,'imp',{id:`seal-imp-${B.i}-${j}`});t.name='RIME IMP';t.brazier=B.i;t.sleep();list.push(t);
   }
   return list;
 }

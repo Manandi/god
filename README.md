@@ -2,6 +2,46 @@
 
 This is the shared status file for work on the game from different devices or AI assistants. **Read it before changing the game and update it after each meaningful change.** The GitHub branch is the shared source of truth; a local checkout can be behind even when another device has pushed newer work.
 
+## Latest handoff — 2026-10-30 (later) · Book III, the Frostbound Crown: the snow world (Claude)
+
+The owner asked for the "third world building the snow world". Book III opens with restart week 3 on **Sun 2026-11-15**, at **level 5**.
+
+- **The world** (`src/frostbound.js`; `FROSTBOUND`, `HEARTHFAST`, `FROST_COURT`, `MAW_SEAL` and `frostY` in `world.js`).
+  - Its own world at (−900, −55), r 54: deep snow with drifts, a packed white road, snow-laden pines, ice spires, crystal peaks in the haze and falling snow.
+  - The still lake has a frozen courtier under the ice.
+  - The ruined court of Ashmere: a broken ice palace where twelve frozen courtiers kneel to an empty throne with a crown-glass crown.
+  - The White Maw's den sits under a glacier.
+  - Lit braziers line the road. `updateAtmosphere` has a frost blend: pale fog, a cold sky and a low sun.
+- **Getting there:** a frost-blue Rootway in Lanternhold's plaza (`FROST_ROOTWAY`) or the atlas.
+  - It's shut before Sun Nov 15 at any level ("THE ROOTWAY IS FROZEN SHUT · opens SUN NOV 15"), and it needs level 5 (`opens` on the BIOMES entry, `realmDateOpen` in `profile.js`, `realmLocked` in `main.js`, the `shell.js` atlas).
+  - IGNORE LEVEL LOCKS and `?frostbound` skip both.
+  - The Rootway by the ice gate takes you home to Lanternhold.
+- **Hearthfast:** the warm camp and safe ground. Creatures never step past the hearthwood (`SAFE_GROUND` in `world.js`). Rest by the hearth; once you've met Veyra you wake there if you fall.
+- **Story** (stages after `frost_wait`, which is now the crossing; saves unchanged):
+  - `frost_meet` (Veyra) → `frost_hunt` (4 rime wolves or frost imps) → `frost_memory` (the empty throne: the court froze waiting for the Hollow Crown, who left to steal fire) → `frost_seal` (thaw three frozen braziers, rime imps at each) → `frost_guardian` (the White Maw) → `frost_report` (Veyra gives the Rime Seed: LIGHTS 3/5) → `ember_wait` ("Grow to level 9: Book IV, the Ember Wastes, opens next").
+  - New NPCs: Veyra the Hearthkeeper, Brin the ice-cutter, and Aud, a herald of the court who thawed by the fire.
+  - Five new journal pages. Maren and Ondine mention the Rootway north.
+- **Creatures** (`creatures.js`, a new `mech` field lets new moves reuse existing code): rime wolves (snap, maul, pounce, hop back) and frost imps (icicles, scratch, they hover).
+- **The White Maw:** a two-phase boss sharing Garrow's brute code, 600 base health.
+  - Phase 1: glacier bite, rime rake, avalanche rush, rearing stomp, ice hurl, whiteout howl, and frost breath (a cone shown on the ground that tracks you).
+  - Phase 2 (below 50%): the crown-glass collar cracks and rime spires burst from its back (break them to topple it). It gains frenzied maul, glacier leap, rime spires, shard storm, whiteout whirl and an unblockable swallowing bite.
+  - Boss bar, intro shot, team scaling and co-op quest sharing work like Garrow's.
+- **Dev:** → FROSTBOUND CROWN, six Frostbound teleports, ROOTWAY NORTH, WOLF and MAW IN FRONT, MAW PHASE 2, and BOOK III · WHITE MAW and BOOK IV jumps.
+- **Checks** (Playwright with `?capture` stepping, Supabase aborted):
+  - Production build.
+  - The full Book III run from `frost_wait` to `ember_wait`: hunt count, throne memory, seal refused while the imps live, the Maw wakes, phase 2, freed, report, LIGHTS 3/5.
+  - Faked-clock gate: refused Oct 30 and Nov 14 at level 5 and on Nov 15 at level 3; allowed Nov 15 at level 5 and with dev locks off.
+  - Safe camp: 0 wolf steps inside. Maw moves land.
+  - Regressions: Shadowmere and Garrow's phase 2 still work; Book II and `frost_wait` saves load. No page errors.
+  - Re-checked before deploy: the Reach, Shadowmere and the Frostbound Crown each load with no page errors, and crossing to the frost realm on 10-30 is refused.
+- **Not yet:**
+  - Feel is untested.
+  - The Maw, wolves and imps are procedural primitives, not Blender models.
+  - Book IV's `SAGA` dates still follow the old schedule (owner to decide).
+- **Found, not fixed:**
+  - Garrow's intro shot may not play, because `wake()` sets `alert` without the 'alert' event.
+  - `lanternhold.js` line ~117 has `root.add(g)` inside a comment, so the market stalls' wooden parts are never added.
+
 ## Latest handoff — 2026-10-30 · The challenge restarts at week 1 on Sunday Nov 1; hunts on Saturdays; keep-awake fixed (Claude)
 
 The owner, a day after the Wednesday schedule below: "make the schedule Nov 1 for a restart of week 1". They chose Sunday-to-Saturday weeks with the hunt on Saturday, and resetting only the schedule and the quest step. **This replaces the Wednesday weeks and Wednesday hunts in the 2026-10-29 entry.**

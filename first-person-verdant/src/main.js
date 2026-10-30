@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE, GARROW_SEAL, LANTERNHOLD, inLanternhold } from './world.js';
+import { buildWorld, groundY, SITES, GATE, HUNT, ARENA, SHADOWMERE, REALMS, realmAt, ROOTWAY, SEED_SHRINE, GARROW_SEAL, LANTERNHOLD, inLanternhold, FROSTBOUND, HEARTHFAST, inHearthfast, FROST_ROOTWAY, FROST_ROOTWAY_BACK, RIME_THRONE, MAW_SEAL, FROST_COURT, FROST_LAKE } from './world.js';
+import { createFrostbound, HEARTHFAST_SPOTS } from './frostbound.js';
 import { createLanternhold, LANTERNHOLD_SPOTS } from './lanternhold.js';
-import { createCreatures,extraHollowed,SHOCKWAVE } from './creatures.js';
+import { createCreatures,extraHollowed,SHOCKWAVE,moveOf } from './creatures.js';
 import { createAvatar,createFirstPersonHands } from './avatar.js';
 import { createDressingRoom } from './dressingRoom.js';
 import { loadExplorer } from './avatarGLB.js';
@@ -22,7 +23,7 @@ import { mechanics,equippedWeapon,movesetFor,weaponPower,devOverrides,levelDamag
 import { createGlobe } from './globe.js';
 import { createNarrator } from './narrator.js';
 import { createShell } from './shell.js';
-import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses,CLASS_WEAPON,weaponEligibility,announce,sickNow } from './profile.js';
+import { profile,stats,saveProfile,units,level,realLevel,devLevel,pathInfo,myClasses,CLASS_WEAPON,weaponEligibility,announce,sickNow,realmDateOpen,realmOpensLabel } from './profile.js';
 import { social } from './social.js';
 import {LINK_PENDING} from './identity.js';
 import {leaderboard} from './leaderboard.js';
@@ -148,14 +149,38 @@ function updateJournal(){
 function toggleJournal(open){journalOpen=open;journal.classList.toggle('hidden',!open);updateJournal();if(open){paused=true;if(document.pointerLockElement)document.exitPointerLock();}else resume();}
 // Worlds (owner, 2026-10-05): the Verdant Reach, and Shadowmere (level 3) reached through the
 // Rootway in Mossgate or the atlas. Arriving places you at that world's door.
-const REALM_LEVEL={grove:1,shadow:3};
+// Book III (owner, 2026-10-30): the Frostbound Crown (level 5, and not before Sun Nov 15), through a second Rootway in
+// Lanternhold's plaza or the atlas. IGNORE LEVEL LOCKS (dev) and ?frostbound open it whatever the level and day.
+const REALM_LEVEL={grove:1,shadow:3,frost:5},REALM_TITLE={grove:'THE VERDANT REACH',shadow:'SHADOWMERE',frost:'THE FROSTBOUND CROWN'};
 const rootway=rootwayMesh(scene,ROOTWAY.x,groundY(ROOTWAY.x,ROOTWAY.z),ROOTWAY.z,Math.PI*.5);
-const realmDoor=id=>id==='shadow'?{x:SHADOWMERE.entry.x,z:SHADOWMERE.entry.z-1.5,yaw:0}:{x:ROOTWAY.x+2.4,z:ROOTWAY.z+.4,yaw:Math.PI*.5};
-const realmLocked=id=>!dev.realms&&level()<(REALM_LEVEL[id]||1);
+const FROST_TINT={veil:0xbfe8ff,swirl:0xe6f4ff,light:0xbfe0ff};
+const frostRootway=rootwayMesh(scene,FROST_ROOTWAY.x,groundY(FROST_ROOTWAY.x,FROST_ROOTWAY.z),FROST_ROOTWAY.z,Math.atan2(LANTERNHOLD.x-FROST_ROOTWAY.x,LANTERNHOLD.z-FROST_ROOTWAY.z),FROST_TINT);
+const frostTest=params.has('frostbound');if(frostTest)window.__frostTest=true;
+// Coming home from the Frostbound Crown you step out beside its Rootway in Lanternhold, facing the plaza.
+const FROST_DOOR={x:FROST_ROOTWAY.x+(LANTERNHOLD.x-FROST_ROOTWAY.x)*.34,z:FROST_ROOTWAY.z+(LANTERNHOLD.z-FROST_ROOTWAY.z)*.34,yaw:yawOf(LANTERNHOLD.x-FROST_ROOTWAY.x,LANTERNHOLD.z-FROST_ROOTWAY.z)};
+const realmDoor=(id,from=realmAt(player.x,player.z))=>id==='shadow'?(from==='frost'?FROST_DOOR:{x:SHADOWMERE.entry.x,z:SHADOWMERE.entry.z-1.5,yaw:0}):id==='frost'?{x:FROSTBOUND.entry.x,z:FROSTBOUND.entry.z-1.5,yaw:0}:{x:ROOTWAY.x+2.4,z:ROOTWAY.z+.4,yaw:Math.PI*.5};
+const realmTestOpen=id=>dev.realms||(id==='frost'&&frostTest);
+const realmLocked=id=>!realmTestOpen(id)&&(level()<(REALM_LEVEL[id]||1)||!realmDateOpen(id));
+/** Why a world will not open yet: [toast title, detail, short label for the prompt]. */
+function realmLock(id){
+  const lv=level()<(REALM_LEVEL[id]||1),day=!realmDateOpen(id),name=titleWords(REALM_TITLE[id]||'That world');
+  if(day)return ['THE ROOTWAY IS FROZEN SHUT',`${name} opens ${realmOpensLabel(id)}${lv?`, and needs level ${REALM_LEVEL[id]} · you are level ${level()}`:''}.`,`OPENS ${realmOpensLabel(id)}${lv?` · LEVEL ${REALM_LEVEL[id]}`:''}`];
+  return ['THE ROOTWAY WILL NOT OPEN',`${name} needs level ${REALM_LEVEL[id]} · you are level ${level()}.`,`NEEDS LEVEL ${REALM_LEVEL[id]} · YOU ARE ${level()}`];
+}
+const titleWords=t=>t.toLowerCase().replace(/(^|\s)\w/g,c=>c.toUpperCase());
+/** The Rootway to take from here toward a point in another world: Reach ⇄ Shadowmere ⇄ the Frostbound Crown. */
+function doorToward(to){
+  const here=realmAt(player.x,player.z),there=realmAt(to.x,to.z);if(here===there)return null;
+  if(here==='frost')return{...FROST_ROOTWAY_BACK,title:'ROOTWAY · LANTERNHOLD'};
+  if(here==='shadow')return there==='frost'?{...FROST_ROOTWAY,title:'ROOTWAY · THE FROSTBOUND CROWN'}:{...ROOTWAY_BACK,title:'ROOTWAY · THE REACH'};
+  return{...ROOTWAY,title:'ROOTWAY · SHADOWMERE'};
+}
 function placeAt(p){player.x=p.x;player.z=p.z;player.height=0;player.velocityY=0;player.vx=player.vz=0;player.grounded=true;player.jumpCount=0;player.yaw=player.cameraYaw=combat.facing=p.yaw||0;player.pitch=0;camera.rotation.set(0,player.yaw,0,'YXZ');viewBlend=0;cameraKick=0;lockTarget=null;combat.state='move';combat.t=0;}
 function crossRealm(id,fade=true){
-  if(realmLocked(id)){toast('THE ROOTWAY WILL NOT OPEN',`${REALMS.find(r=>r.id===id)?.name||'That world'} needs level ${REALM_LEVEL[id]} · you are level ${level()}.`);return false;}
-  const door=realmDoor(id),title=id==='shadow'?'SHADOWMERE':'THE VERDANT REACH',detail=id==='shadow'?'Follow the seed lanterns. Watch the canopy.':'Back through the Rootway, in Mossgate.';
+  if(realmLocked(id)){const [t,d]=realmLock(id);toast(t,d);playTone(180,.3,.04);return false;}
+  const from=realmAt(player.x,player.z),door=realmDoor(id,from);
+  const title=id==='shadow'?(from==='frost'?'LANTERNHOLD':'SHADOWMERE'):id==='frost'?'THE FROSTBOUND CROWN':'THE VERDANT REACH';
+  const detail=id==='shadow'?(from==='frost'?'Back through the Rootway, among the lamplighters.':'Follow the seed lanterns. Watch the canopy.'):id==='frost'?'Follow the braziers up the white road. Keep moving: the cold settles on anything that stays still.':'Back through the Rootway, in Mossgate.';
   if(!fade){placeAt(door);toast(title,detail);return true;}
   travel(door.x,door.z,title,detail);setTimeout(()=>{player.yaw=player.cameraYaw=combat.facing=door.yaw;},700);return true;
 }
@@ -290,6 +315,8 @@ function pickTarget(yaw){
 const ECHO_REACH={rootwell:9,ruins:4.9,shrine:7.8};
 function nearestInteractable(){
   const d=(p)=>Math.hypot(p.x-player.x,p.z-player.z);
+  // Right at the Rootway north (in Lanternhold, near Lio), the Rootway answers before the townsfolk.
+  if(d(FROST_ROOTWAY)<1.8)return{type:'rootwayFrost'};
   const npc=Object.entries(NPCS).map(([id,n])=>({id,n,dist:d(n)})).filter(v=>v.dist<3.3).sort((a,b)=>a.dist-b.dist)[0];
   if(npc)return{type:'npc',id:npc.id,value:npc.n};
   if(warden?.state==='released'&&story.stage==='gate'&&d(warden)<8)return{type:'orrun'};
@@ -300,10 +327,14 @@ function nearestInteractable(){
   if(story.stage==='shadow_memory'&&d(SEED_SHRINE)<3.2)return{type:'shadowSeed'};
   if(story.stage==='shadow_seal'){const L=GARROW_SEAL.lanterns.find(L=>!story.tally['lit'+L.i]&&d(L)<2.8);if(L)return{type:'sealLantern',value:L};}
   if(d(ROOTWAY_BACK)<2.4)return{type:'rootwayBack'};
+  if(d(FROST_ROOTWAY)<2.4)return{type:'rootwayFrost'};
+  if(d(FROST_ROOTWAY_BACK)<2.4)return{type:'rootwayFrostBack'};
+  if(story.stage==='frost_memory'&&d(RIME_THRONE)<3.4)return{type:'rimeThrone'};
+  if(story.stage==='frost_seal'){const L=MAW_SEAL.braziers.find(L=>!story.tally['thaw'+L.i]&&d(L)<2.9);if(L)return{type:'frostBrazier',value:L};}
   if(d(HOLLOW_RIFT)<2.6)return{type:'riftHome'};
   if(d(GATE)<6)return{type:'gate'};
   // The brazier in Mossgate's square and the homestead hearth both restore you.
-  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2||d(LANTERNHOLD_SPOTS.rest)<3.2)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
+  if((d(world.city.rest)<4.2||d(world.home.rest)<4.2||d(LANTERNHOLD_SPOTS.rest)<3.2||d(HEARTHFAST_SPOTS.hearth)<3.4)&&(player.health<maxHealth()||player.flasks<mech.flasks))return{type:'rest'};
   return null;
 }
 function interact(){
@@ -329,12 +360,24 @@ function interact(){
     else toast(`THE ${L.side} LANTERN BURNS AGAIN`,`The seal cracks. ${story.objectiveText}`);
   }
   else if(nearby.type==='rootwayBack'){if(!travelling)crossRealm('grove');}
+  else if(nearby.type==='rootwayFrost'){if(!travelling)crossRealm('frost');}
+  else if(nearby.type==='rootwayFrostBack'){if(!travelling)crossRealm('shadow');}
+  else if(nearby.type==='rimeThrone'){
+    story.advance('frost_seal');frostbound.setRemembered(true);persist();playTone(620,.9,.06,'sine');playTone(930,.7,.03,'triangle');
+    toast('MEMORY FOUND · THE KNEELING COURT','The court of Ashmere came north with its ruler, the Hollow Crown. Then the Crown went away to steal fire and told them to wait. They knelt to its empty throne, kept still, and let the cold take them, so they would still be here when it came back. The circlet on the seat is crown-glass, cut from the same crown.<br><br>'+story.objectiveText);toastTimer=9;}
+  else if(nearby.type==='frostBrazier'){
+    const L=nearby.value;
+    if(impsAt(L.i).length){toast('THE IMPS ARE STILL HERE','Drive off the rime imps first.');playTone(180,.3,.04);return;}
+    story.tally['thaw'+L.i]=1;const done=story.bump('braziers');frostbound.seal.setLit(L.i,true);persist();playTone(700,.6,.08,'sine');playTone(1050,.5,.04,'triangle');
+    if(done){story.advance('frost_guardian');persist();announce('story','broke the White Maw’s seal in the Frostbound Crown');sound.erupt();shoulderCam.punch(.4);toast('THE SEAL THAWS','Fire is the one thing the court’s ice cannot hold. The White Maw rises.');}
+    else toast(`THE ${L.side} BRAZIER BURNS AGAIN`,`The ice round the den cracks. ${story.objectiveText}`);
+  }
   else if(nearby.type==='riftHome')travel(RIFT.x,RIFT.z-2.2,'MOSSGATE','Back through the rift.');
   else if(nearby.type==='gate'){
     if(story.before('gate')){toast('THE GATE IS SEALED','Roots have grown through the stone, and something beneath it is holding on. The forest has not remembered it yet.');return;}
     if(story.stage==='gate'){toast('ORRUN HOLDS THE GATE','Its roots bind the stone shut. Face it, and remember its name.');return;}
     done=true;paused=true;ending.classList.remove('hidden');if(document.pointerLockElement)document.exitPointerLock();playTone(540,1.1,.1);
-  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=mech.flasks;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':inLanternhold(player.x,player.z)?'LANTERNHOLD · THE BRAZIER':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
+  }else if(nearby.type==='rest'){player.health=maxHealth();player.flasks=mech.flasks;player.secondWindUsed=false;playTone(490,.4,.07);toast(Math.hypot(world.home.rest.x-player.x,world.home.rest.z-player.z)<4.2?'ROOTWARD HOMESTEAD':inLanternhold(player.x,player.z)?'LANTERNHOLD · THE BRAZIER':inHearthfast(player.x,player.z)?'HEARTHFAST · THE GREAT HEARTH':'THE BRAZIER RESTORES YOU','Vitality restored. Sap Flasks refilled.');}
 }
 
 // ----------------------------------------------------------------- dialogue
@@ -489,13 +532,15 @@ function updateBoss(rawDt){
   }
   // One boss bar: the Warden while it fights, otherwise the Old Shell once it is roused.
   // Garrow (Shadowmere) is a boss too: its bar shows while it is fighting you.
-  const garrow=creatures.find(c=>c.type==='gorilla'),garrowFight=garrow?.alive&&!['wander','return','dormant','defeated','bound','calm'].includes(garrow.state)&&Math.hypot(garrow.x-player.x,garrow.z-player.z)<34;
-  const boss=warden?.awake&&warden.alive?warden:garrowFight?garrow:null;
+  // The White Maw (the Frostbound Crown) too.
+  const fighting=c=>c?.alive&&!['wander','return','dormant','defeated','bound','calm'].includes(c.state)&&Math.hypot(c.x-player.x,c.z-player.z)<34;
+  const garrow=creatures.find(c=>c.type==='gorilla'),maw=creatures.find(c=>c.type==='maw');
+  const boss=warden?.awake&&warden.alive?warden:fighting(garrow)?garrow:fighting(maw)?maw:null;
   if(boss!==bossShown){bossShown=boss;bossTrail=1;$('bossBar').classList.toggle('hidden',!boss);}
   if(boss){
     const f=boss.health/boss.maxHealth;bossTrail=Math.max(f,bossTrail-rawDt*.25);
     $('bossName').textContent=boss.name;
-    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',(boss.phase||1)>1);$('bossBar').classList.toggle('crown',boss===garrow);
+    $('bossFill').style.width=`${f*100}%`;$('bossTrail').style.width=`${bossTrail*100}%`;$('bossBar').classList.toggle('phase2',(boss.phase||1)>1);$('bossBar').classList.toggle('crown',boss===garrow);$('bossBar').classList.toggle('frost',boss===maw);
   }
 }
 // Boss intro shots (Monster Hunter style): the camera swings low beside the
@@ -546,7 +591,7 @@ function updateCollisionViz(){
   collisionVizMeshes.forEach((r,i)=>{const c=near[i];r.visible=!!c;if(c){r.position.set(c.x,groundY(c.x,c.z)+.06,c.z);r.scale.setScalar(c.r+.43);}});
 }
 // Stages grouped by Book in the picker; people to teleport to come from the story's cast.
-$('devStage').innerHTML=[['BOOK I · THE VERDANT REACH',s=>!s.book],['BOOK II · SHADOWMERE',s=>s.book===2],['BOOK III · THE FROSTBOUND CROWN',s=>s.book===3]]
+$('devStage').innerHTML=[['BOOK I · THE VERDANT REACH',s=>!s.book],['BOOK II · SHADOWMERE',s=>s.book===2],['BOOK III · THE FROSTBOUND CROWN',s=>s.book===3],['BOOK IV · THE EMBER WASTES',s=>s.book===4]]
   .map(([label,f])=>`<optgroup label="${label}">${STAGES.filter(f).map(s=>`<option value="${s.id}">${s.id.toUpperCase().replace(/_/g,' ')} · ${s.objective}</option>`).join('')}</optgroup>`).join('');
 $('devPeople').innerHTML=Object.entries(NPCS).map(([id,n])=>`<button data-npc="${id}">${n.name}</button>`).join('');
 let devTab='player';try{devTab=sessionStorage.getItem('verdant-dev-tab')||'player';}catch{}
@@ -555,7 +600,7 @@ function showDevTab(tab){devTab=tab;try{sessionStorage.setItem('verdant-dev-tab'
 showDevTab(devTab);
 function updateDevTelemetry(){
   const s=stats(),w=equippedWeapon();
-  $('devTelemetry').textContent=`${realmAt(player.x,player.z)==='shadow'?'SHADOWMERE':'VERDANT REACH'}  ·  X ${player.x.toFixed(1)}  Z ${player.z.toFixed(1)}  ·  LV ${level()}${devLevel.value!==null?` (REAL ${realLevel()})`:''}\nSTAGE ${story.stage}  ·  ${story.info.objective}\nSTR ${s.strength}  SPD ${s.speed}  STA ${s.stamina}  DEF ${s.defense}  INT ${s.intelligence}  DIS ${s.discipline}\nCLASS ${mech.klass.toUpperCase()}  ·  WEAPON ${w.toUpperCase()}${devOverrides.anyWeapon?' (DEV)':''}\nHP ${player.health}/${maxHealth()}  BREATH ${Math.round(player.stamina)}  JUMP ${mech.doubleJump?'DOUBLE':'SINGLE'}`;
+  $('devTelemetry').textContent=`${REALM_TITLE[realmAt(player.x,player.z)]}  ·  X ${player.x.toFixed(1)}  Z ${player.z.toFixed(1)}  ·  LV ${level()}${devLevel.value!==null?` (REAL ${realLevel()})`:''}\nSTAGE ${story.stage}  ·  ${story.info.objective}\nSTR ${s.strength}  SPD ${s.speed}  STA ${s.stamina}  DEF ${s.defense}  INT ${s.intelligence}  DIS ${s.discipline}\nCLASS ${mech.klass.toUpperCase()}  ·  WEAPON ${w.toUpperCase()}${devOverrides.anyWeapon?' (DEV)':''}\nHP ${player.health}/${maxHealth()}  BREATH ${Math.round(player.stamina)}  JUMP ${mech.doubleJump?'DOUBLE':'SINGLE'}`;
   devPanel.querySelectorAll('[data-dev]').forEach(b=>b.classList.toggle('active',!!({invulnerable:dev.invulnerable,noclip:dev.noclip,colliders:dev.showColliders,breath:dev.breath,fps:showPerf,debug:debug.enabled,realms:dev.realms,hunt:dev.bossUnlocked,freeze:dev.freeze})[b.dataset.dev]));
   devPanel.querySelectorAll('[data-level]').forEach(b=>b.classList.toggle('active',b.dataset.level==='real'?devLevel.value===null:devLevel.value===+b.dataset.level));
   devPanel.querySelectorAll('[data-weapon]').forEach(b=>b.classList.toggle('active',b.dataset.weapon==='locks'?!devOverrides.anyWeapon:devOverrides.anyWeapon&&profile.appearance.weapon===b.dataset.weapon));
@@ -585,7 +630,10 @@ function teleport(x,z,label){
 }
 const DEV_PLACES={home:[world.home.spawn.x,world.home.spawn.z,'HOME BASE'],city:[0,45,'MOSSGATE'],trial:[1,33,'TRIAL SLOPE'],rootwell:[-52,-33,'ROOTWELL'],
   ruins:[53,-76,'MOSSWATCH'],shrine:[4,-139,'CANOPY SHRINE'],shadowmere:[SHADOWMERE.entry.x,SHADOWMERE.entry.z-1.5,'SHADOWMERE · ROOT ARCH'],
-  shadowTrail:[SHADOWMERE.x,SHADOWMERE.z+14,'SHADOWMERE · LANTERN TRAIL'],falls:[SEED_SHRINE.x+1.2,SEED_SHRINE.z+1.5,'SHADOWMERE · THE FALLS'],clearing:[SHADOWMERE.guardian.x,SHADOWMERE.guardian.z+9,"SHADOWMERE · GARROW'S CLEARING"],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW'],lanternhold:[LANTERNHOLD_SPOTS.rest.x+1.5,LANTERNHOLD_SPOTS.rest.z,'SHADOWMERE · LANTERNHOLD']};
+  shadowTrail:[SHADOWMERE.x,SHADOWMERE.z+14,'SHADOWMERE · LANTERN TRAIL'],falls:[SEED_SHRINE.x+1.2,SEED_SHRINE.z+1.5,'SHADOWMERE · THE FALLS'],clearing:[SHADOWMERE.guardian.x,SHADOWMERE.guardian.z+9,"SHADOWMERE · GARROW'S CLEARING"],hollow:[ARENA.x-2,ARENA.z+17,"WARDEN'S HOLLOW"],hunt:[HUNT.x,HUNT.z+13,'THE SCORCHED HOLLOW'],lanternhold:[LANTERNHOLD_SPOTS.rest.x+1.5,LANTERNHOLD_SPOTS.rest.z,'SHADOWMERE · LANTERNHOLD'],
+  frostRootway:[FROST_DOOR.x,FROST_DOOR.z,'LANTERNHOLD · THE ROOTWAY NORTH'],frost:[FROSTBOUND.entry.x,FROSTBOUND.entry.z-1.5,'FROSTBOUND · THE ICE GATE'],
+  frostRoad:[FROSTBOUND.x+5,FROSTBOUND.z+22,'FROSTBOUND · THE WHITE ROAD'],hearthfast:[HEARTHFAST_SPOTS.wake.x,HEARTHFAST_SPOTS.wake.z,'FROSTBOUND · HEARTHFAST'],
+  frostLake:[FROST_LAKE.x+FROST_LAKE.r+2,FROST_LAKE.z,'FROSTBOUND · THE STILL LAKE'],court:[RIME_THRONE.x,RIME_THRONE.z+5,'FROSTBOUND · THE KNEELING COURT'],den:[MAW_SEAL.x,MAW_SEAL.z+12,"FROSTBOUND · THE MAW'S DEN"]};
 // Real-life stat presets on the adult norms (profile.js): median adult, top ~5%, top 0.1%, and bottom ~5%.
 const DEV_REAL_INPUTS='hollow-roots-dev-real-inputs';
 const STAT_PRESETS={
@@ -613,7 +661,7 @@ devPanel.addEventListener('click',e=>{
   if(b.dataset.tab){showDevTab(b.dataset.tab);return;}
   if(b.dataset.teleport){const [x,z,label]=DEV_PLACES[b.dataset.teleport];teleport(x,z,label);}
   else if(b.dataset.npc){const n=NPCS[b.dataset.npc];teleport(n.x+Math.sin(n.facing||0)*2,n.z+Math.cos(n.facing||0)*2,n.name);}
-  else if(b.dataset.realmGo){placeAt(realmDoor(b.dataset.realmGo));toast('DEV · WORLD',b.dataset.realmGo==='shadow'?'SHADOWMERE':'THE VERDANT REACH');}
+  else if(b.dataset.realmGo){placeAt(realmDoor(b.dataset.realmGo,'grove'));toast('DEV · WORLD',REALM_TITLE[b.dataset.realmGo]);}
   else if(b.dataset.jump)devJumpTo(b.dataset.jump);
   else if(b.dataset.level){devLevel.value=b.dataset.level==='real'?null:+b.dataset.level;mech=mechanics();equipWeapon();player.health=Math.min(maxHealth(),Math.max(player.health,1));toast('DEV · LEVEL',devLevel.value===null?`YOUR REAL LEVEL · ${realLevel()}`:`PLAYING AT LEVEL ${devLevel.value}`);}
   else if(b.dataset.weapon){
@@ -647,6 +695,9 @@ devPanel.addEventListener('click',e=>{
     case 'revive':{let n=0;for(const c of creatures)if(c!==warden&&!c.alive&&!c.chapter){c.respawn();n++;}toast('DEV · REVIVED',`${n} creatures back on their feet.`);break;}
     case 'summon-monkey':{const m=creatures.filter(c=>c.type==='monkey').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · GREEN MONKEY','In front of you.');}break;}
     case 'summon-gorilla':{const g=creatures.find(c=>c.type==='gorilla');if(g){g.devAwake=true;bring(g);toast('DEV · GARROW','In front of you.');}break;}
+    case 'summon-wolf':{const m=creatures.filter(c=>c.type==='wolf').sort((a,b)=>(a.alive?1:0)-(b.alive?1:0))[0];if(m){bring(m);toast('DEV · RIME WOLF','In front of you.');}break;}
+    case 'summon-maw':{const g=creatures.find(c=>c.type==='maw');if(g){g.devAwake=true;bring(g);toast('DEV · THE WHITE MAW','In front of you.');}break;}
+    case 'maw-phase':{const g=creatures.find(c=>c.type==='maw');if(g){g.devAwake=true;if(!g.alive)g.respawn();g.health=Math.min(g.health,g.maxHealth*.49);g.pendingPhase=true;toast('DEV · THE WHITE MAW','Phase 2 on its next free moment.');}break;}
     case 'garrow-phase':{const g=creatures.find(c=>c.type==='gorilla');if(g){g.devAwake=true;if(!g.alive)g.respawn();g.health=Math.min(g.health,g.maxHealth*.49);g.pendingPhase=true;toast('DEV · GARROW','Phase 2 on its next free moment.');}break;}
     case 'inventory':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.inventory();return;
     case 'atlas':dev.open=false;devPanel.classList.add('hidden');paused=true;$('hud').classList.add('hidden');shell.show('map');return;
@@ -716,14 +767,14 @@ const friendsList=$('friendsList');
 function friendsOpen(on=friendsList.classList.contains('hidden')){
   friendsList.classList.toggle('hidden',!on);if(!on)return;
   const list=coop.others();
-  friendsList.innerHTML=`<h4>FRIENDS ONLINE · ${coop.code||'SOLO'}</h4>`+(list.length?list.map(o=>{const realm=realmAt(o.x,o.z),where=inHollow(o)?'IN THE HOLLOW HUNT':inLanternhold(o.x,o.z)?'LANTERNHOLD':realm==='shadow'?'SHADOWMERE':'THE VERDANT REACH';
+  friendsList.innerHTML=`<h4>FRIENDS ONLINE · ${coop.code||'SOLO'}</h4>`+(list.length?list.map(o=>{const realm=realmAt(o.x,o.z),where=inHollow(o)?'IN THE HOLLOW HUNT':inLanternhold(o.x,o.z)?'LANTERNHOLD':inHearthfast(o.x,o.z)?'HEARTHFAST':REALM_TITLE[realm];
     return `<button type="button" data-friend="${o.key}"><b>${esc(o.name)}</b>${o.level?` · LV ${o.level}`:''}${o.sick?' · 🤒 SICK':''}<small>${where}</small></button>`;}).join(''):'<p>Nobody else is in the world right now. Friends who open the link join you here automatically.</p>')+`<small>Share the link: ${esc(location.origin+location.pathname)}</small>`;
 }
 function joinFriend(key){
   const o=coop.others().find(o=>o.key===key);friendsOpen(false);if(!o||travelling)return;
   if(inHollow(o)){toast('THEY ARE IN THE HUNT','Step into the Hollow Rift in Mossgate to join them.');return;}
   const realm=realmAt(o.x,o.z);
-  if(realm!==realmAt(player.x,player.z)&&realmLocked(realm)){toast('THE ROOTWAY WILL NOT OPEN',`${o.name} is in Shadowmere · it needs level ${REALM_LEVEL[realm]} · you are level ${level()}.`);return;}
+  if(realm!==realmAt(player.x,player.z)&&realmLocked(realm)){const [t,d]=realmLock(realm);toast(t,`${o.name} is in ${titleWords(REALM_TITLE[realm])} · ${d}`);return;}
   const a=Math.random()*Math.PI*2;travel(o.x+Math.cos(a)*2,o.z+Math.sin(a)*2,`WITH ${o.name.toUpperCase()}`,'The roots carry you to your friend.');
 }
 $('friendsButton').addEventListener('click',e=>{e.stopPropagation();friendsOpen();});
@@ -781,8 +832,39 @@ function updateGarrowQuest(){
     sound.alert();cue('LANTERN THIEVES · DRIVE THEM OFF, THEN RELIGHT THE LANTERN',1.6);
   }
 }
+// Book III: the White Maw and its seal follow your story the same way. Before the seal stage it lies curled and
+// collared inside the ice; once the three braziers burn the seal thaws and it rises to fight; after it is freed it
+// rests in its den, the collar gone. Two rime imps burst out of the snow at each frozen brazier as you come.
+const ambushedFrost=new Set();let mawStage='';
+const impsAt=i=>creatures.filter(c=>c.brazier===i&&c.alive);
+function updateMawQuest(){
+  const seal=frostbound.seal,g=creatures.find(c=>c.type==='maw');if(!seal||!g)return;
+  if(mawStage!==story.stage){if(mawStage)g.devAwake=false;const first=!mawStage;mawStage=story.stage;seal.setSealed(story.before('frost_guardian'),first);if(story.before('frost_seal'))ambushedFrost.clear();frostbound.setRemembered(story.reached('frost_seal'));}
+  for(const L of MAW_SEAL.braziers)seal.setLit(L.i,!story.before('frost_guardian')||!!story.tally['thaw'+L.i]);
+  if(!g.devAwake){
+    if(story.before('frost_guardian')){if(g.state!=='bound')g.bind();}
+    else if(story.reached('frost_report')){if(g.state!=='calm'&&!(g.state==='defeated'&&g.t<2.4))g.calm();}
+    else if(['bound','calm'].includes(g.state)&&!seal.breaking){g.wake();
+      if(!g.introduced&&Math.hypot(player.x-g.x,player.z-g.z)<30){g.introduced=true;sound.roar();introShot(g,2.6);toast('BOSS · THE WHITE MAW','The Frostbound Crown’s keeper, collared in crown-glass by Ashmere’s frozen court. Watch its jaw: when it glows, the breath is coming.');}}
+  }
+  // While the Maw fights you, the wolves and imps keep off (one on one, like Garrow); they come back after.
+  const bossOn=g.alive&&!['bound','calm','wander','return','dormant','defeated'].includes(g.state)&&Math.hypot(player.x-g.x,player.z-g.z)<34;
+  for(const m of creatures){
+    if((m.type!=='wolf'&&m.type!=='imp')||m.brazier!==undefined)continue;
+    if(bossOn&&m.alive&&Math.hypot(m.x-g.x,m.z-g.z)<26){m.sleep();m.heldForBoss=true;if(!g.scattered){g.scattered=true;cue('THE WOLVES SLINK OFF INTO THE SNOW',1);}}
+    else if(!bossOn&&m.heldForBoss){m.heldForBoss=false;m.respawn();}
+  }
+  if(!bossOn)g.scattered=false;
+  if(story.stage==='frost_seal')for(const L of MAW_SEAL.braziers){
+    if(story.tally['thaw'+L.i]||ambushedFrost.has(L.i)||Math.hypot(player.x-L.x,player.z-L.z)>10)continue;
+    ambushedFrost.add(L.i);for(const t of creatures.filter(c=>c.brazier===L.i))t.emerge();
+    sound.alert();cue('RIME IMPS · DRIVE THEM OFF, THEN THAW THE BRAZIER',1.6);
+  }
+}
 function updateEncounters(){
-  updateGarrowQuest();
+  updateGarrowQuest();updateMawQuest();
+  // Book III: arriving in the Frostbound Crown moves the story on.
+  if(story.stage==='frost_wait'&&realmAt(player.x,player.z)==='frost'){story.advance('frost_meet');persist();toast('BOOK III · THE FROSTBOUND CROWN',story.info.objective);playTone(620,.35,.05,'sine');}
   // Book II: arriving in Shadowmere moves the story on.
   if(story.stage==='shadow_cross'&&realmAt(player.x,player.z)==='shadow'){story.advance('shadow_meet');persist();toast('BOOK II · SHADOWMERE',story.info.objective);playTone(620,.35,.05,'sine');}
   if(story.stage==='trial'&&creatures.some(c=>c.id==='trial'&&c.state==='defeated')){story.advance('trial_report');persist();toast('THE TRIAL IS PASSED',story.info.objective);playTone(620,.35,.05,'sine');}
@@ -841,12 +923,17 @@ function respawn(){
   // Orrun only goes back to sleep if nobody is left fighting it (a guest's copy follows the host).
   const othersHunting=coop.others().some(o=>inHollow(o));
   if(warden?.awake&&warden.alive&&!othersHunting&&!coop.guest)warden.reset();
-  const inShadow=realmAt(player.x,player.z)==='shadow';
+  const inShadow=realmAt(player.x,player.z)==='shadow',inFrost=realmAt(player.x,player.z)==='frost';
   {const g=creatures.find(c=>c.type==='gorilla');if(inShadow&&g?.alive&&story.stage==='shadow_guardian'&&!g.devAwake)g.respawn();}
-  player.defeated=0;player.health=maxHealth();const town=inShadow&&story.reached('shadow_city'),wake=town?{x:LANTERNHOLD_SPOTS.rest.x+1.2,z:LANTERNHOLD_SPOTS.rest.z}:null;
-  player.x=town?wake.x:inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=town?wake.z:inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
+  {const g=creatures.find(c=>c.type==='maw');if(inFrost&&g?.alive&&story.stage==='frost_guardian'&&!g.devAwake)g.respawn();}
+  // Falling in the Frostbound Crown, you wake by Hearthfast's hearth once you have reached it (or at the ice gate).
+  const camp=inFrost&&story.reached('frost_meet');
+  player.defeated=0;player.health=maxHealth();const town=inShadow&&story.reached('shadow_city'),wake=town?{x:LANTERNHOLD_SPOTS.rest.x+1.2,z:LANTERNHOLD_SPOTS.rest.z}:camp?HEARTHFAST_SPOTS.wake:null;
+  player.x=wake?wake.x:inFrost?FROSTBOUND.entry.x:inShadow?SHADOWMERE.entry.x:checkpoint?RIFT.x:world.home.spawn.x;player.z=wake?wake.z:inFrost?FROSTBOUND.entry.z-1.5:inShadow?SHADOWMERE.entry.z-1.5:checkpoint?RIFT.z-2.4:world.home.spawn.z;player.height=0;player.velocityY=0;player.yaw=combat.facing=0;player.cameraYaw=0;
   player.pitch=0;cameraKick=0;viewBlend=0;camera.rotation.set(0,0,0,'YXZ');resetEncounters();player.flasks=mech.flasks;player.secondWindUsed=false;
   if(town){toast('THE LANTERNS CATCH YOU','The lamplighters carried you back to Lanternhold. Nothing follows you past the wall.');return;}
+  if(camp){toast('THE HEARTH CATCHES YOU','Veyra’s people dragged you in out of the snow. Nothing follows you past the hearthwood.');return;}
+  if(inFrost){toast('THE COLD LETS GO','You wake by the ice gate. Keep moving.');return;}
   if(inShadow){toast('THE LANTERNS CATCH YOU','You wake under the root arch. The forest is still watching.');return;}
   toast('THE ROOTS RETURN YOU TO MOSSGATE',hunting&&othersHunting?'Your hunters fight on. Step back through the rift to rejoin them.':checkpoint?'You wake by the Hollow Rift.':'The memories you found remain with you.');
 }
@@ -919,6 +1006,7 @@ function landShot(h){
 const enemyShots=[],seedGeo=new THREE.IcosahedronGeometry(.13,0),seedMat=new THREE.MeshStandardMaterial({color:0x6d4a22,emissive:0x2a1a06,roughness:.6,flatShading:true});
 function throwSeed(c,ev){
   const from=new THREE.Vector3(ev.x,ev.y,ev.z),to=new THREE.Vector3(ev.tx,ev.ty,ev.tz),vel=to.sub(from).normalize().multiplyScalar(ev.speed||17);vel.y+=1.2;
+  if(ev.ice){vel.y-=.8;const mesh=new THREE.Mesh(icicleGeo,rimeMat);mesh.position.copy(from);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vel.clone().normalize());scene.add(mesh);enemyShots.push({mesh,vel,t:0,c,shard:true,gravity:2.5,label:ev.label||'icicle',attack:'icicle'});return;}
   const mesh=new THREE.Mesh(seedGeo,seedMat);mesh.position.copy(from);mesh.castShadow=true;scene.add(mesh);enemyShots.push({mesh,vel,t:0,c});
 }
 // What the cue line says as each attack winds up.
@@ -927,29 +1015,44 @@ function attackCue(ev){
     swing:'VINE SWING · IT KICKS FROM THE SIDE · TURN AND GUARD OR DASH',
     chop:'CLEAVER CHOP · STEP OUT OF THE LINE',backhand:'BACKHAND · BACK OFF OR GUARD',charge:'KNUCKLE CHARGE · SIDESTEP · TREES STOP IT',pound:'DOUBLE POUND · JUMP BOTH WAVES',boulder:'BOULDER · MOVE OFF YOUR SPOT',roar:'CHEST-DRUM ROAR · DASH THROUGH IT',
     combo:'CROWN-GLASS COMBO · GUARD ×3',leap:'LEAPING CLEAVE · DODGE SIDEWAYS',erupt:'CROWN-GLASS ERUPTS · KEEP MOVING',
-    barrage:'SHARD BARRAGE · DASH OR GUARD',whirl:'CROWN-GLASS WHIRL · BACK AWAY',grab:'CRUSHING GRAB · UNBLOCKABLE · DODGE IT'}[ev.attack]||'';
+    barrage:'SHARD BARRAGE · DASH OR GUARD',whirl:'CROWN-GLASS WHIRL · BACK AWAY',grab:'CRUSHING GRAB · UNBLOCKABLE · DODGE IT',
+    snap:'RIME SNAP · GUARD OR DASH',maul:ev.chained?'INTO THE MAUL · GUARD ×2':'FROST MAUL · GUARD ×2 OR BACK OFF',icicle:'ICICLE · DASH OR GUARD',scratch:'RIME SCRATCH · GUARD ×3 OR BACK OFF',
+    crunch:'GLACIER BITE · STEP OUT OF THE LINE',rake:'RIME RAKE · BACK OFF OR GUARD',rush:'AVALANCHE RUSH · SIDESTEP · PINES STOP IT',stomp:'REARING STOMP · JUMP BOTH WAVES',hurl:'ICE HURL · MOVE OFF YOUR SPOT',
+    howl:'WHITEOUT HOWL · DASH THROUGH IT',breath:'FROST BREATH · GET BESIDE IT OR BEHIND',frenzy:'FRENZIED MAUL · GUARD ×3',glacierLeap:'GLACIER LEAP · DODGE SIDEWAYS',spires:'RIME SPIRES · KEEP MOVING',
+    shardstorm:'SHARD STORM · DASH OR GUARD',blizzard:'WHITEOUT WHIRL · BACK AWAY',swallow:'SWALLOWING BITE · UNBLOCKABLE · DODGE IT'}[ev.attack]||'';
 }
 // Garrow's crown-glass: spikes that burst out of the ground, the marks that warn of them, and the
 // boulders it throws (they land where you stood; guard facing Garrow, dash, or move off the mark).
 const crystalGeo=new THREE.ConeGeometry(.22,1.6,5),crystalMat=new THREE.MeshStandardMaterial({color:0x6b3fb0,emissive:0x5a2ad0,emissiveIntensity:1.4,roughness:.25,metalness:.2,flatShading:true});
 const markMat=new THREE.MeshBasicMaterial({color:0xb57cff,transparent:true,opacity:.5,depthWrite:false,side:THREE.DoubleSide});
 const boulderGeo=new THREE.DodecahedronGeometry(.5,0),boulderMat=new THREE.MeshStandardMaterial({color:0x4f5a3e,roughness:1,flatShading:true});
+// The White Maw's are ice: rime spires, blocks of lake ice, shards of rime; the frost imps throw icicles.
+const rimeMat=new THREE.MeshStandardMaterial({color:0xc8ecff,emissive:0x3a78c0,emissiveIntensity:1.1,roughness:.12,metalness:.15,flatShading:true});
+const iceBlockGeo=new THREE.BoxGeometry(.85,.75,.85),icicleGeo=new THREE.ConeGeometry(.07,.55,5);
+const spikeMatFor=c=>c?.type==='maw'?rimeMat:crystalMat;
 const hazards=[];
-function spikesAt(x,z,n,spread,delay=0){
-  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*spread,px=x+Math.sin(a)*r,pz=z+Math.cos(a)*r,base=groundY(px,pz),m=new THREE.Mesh(crystalGeo,crystalMat);
+function spikesAt(x,z,n,spread,delay=0,mat=crystalMat){
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*spread,px=x+Math.sin(a)*r,pz=z+Math.cos(a)*r,base=groundY(px,pz),m=new THREE.Mesh(crystalGeo,mat);
     m.position.set(px,base-1.7,pz);m.rotation.set((Math.random()-.5)*.6,Math.random()*3,(Math.random()-.5)*.6);m.scale.setScalar(.7+Math.random()*.7);m.castShadow=true;scene.add(m);hazards.push({kind:'spike',mesh:m,t:-delay,base});}
 }
-function spikeLine(x,z,yaw,from,len){for(let d=from;d<=len;d+=.7)spikesAt(x+Math.sin(yaw)*d,z+Math.cos(yaw)*d,2,.35,(d-from)*.035);}
+function spikeLine(x,z,yaw,from,len,mat=crystalMat){for(let d=from;d<=len;d+=.7)spikesAt(x+Math.sin(yaw)*d,z+Math.cos(yaw)*d,2,.35,(d-from)*.035,mat);}
 function ringMark(x,z,r){const m=new THREE.Mesh(new THREE.RingGeometry(r*.82,r,32),markMat.clone());m.rotation.x=-Math.PI/2;m.position.set(x,groundY(x,z)+.08,z);scene.add(m);return m;}
 function markAt(x,z,r,fuse){hazards.push({kind:'mark',mesh:ringMark(x,z,r),t:0,life:fuse});}
 function throwBoulder(c,ev){
-  const m=new THREE.Mesh(boulderGeo,boulderMat);m.position.set(ev.x,ev.y,ev.z);m.castShadow=true;scene.add(m);
+  const m=c?.type==='maw'?new THREE.Mesh(iceBlockGeo,rimeMat):new THREE.Mesh(boulderGeo,boulderMat);m.position.set(ev.x,ev.y,ev.z);m.castShadow=true;scene.add(m);
   hazards.push({kind:'boulder',mesh:m,mark:ringMark(ev.tx,ev.tz,1.8),t:0,c,ev,from:new THREE.Vector3(ev.x,ev.y,ev.z),to:new THREE.Vector3(ev.tx,groundY(ev.tx,ev.tz)+.4,ev.tz)});
 }
 function updateHazards(dt){
   for(let i=hazards.length-1;i>=0;i--){
     const h=hazards[i];h.t+=dt;let done=false;
     if(h.kind==='spike'){if(h.t<0)continue;const up=Math.min(1,h.t/.1),down=Math.max(0,(h.t-.75)/.35);h.mesh.position.y=h.base-1.7+1.75*up-1.9*down;done=h.t>1.1;}
+    else if(h.kind==='breath'){
+      // Frost breath: puffs of white pour from the Maw's jaw along its heading while it breathes.
+      const c=h.c;done=h.t>=h.dur||!c.alive||c.state!=='attack';
+      if(!done&&(h.emit-=dt)<=0){h.emit=.035;const mouth=new THREE.Vector3();(c.jaw||c.head).getWorldPosition(mouth);
+        for(let k=0;k<2;k++){const yaw=c.heading+(Math.random()-.5)*h.half*1.6,s=new THREE.Sprite(breathMat.clone());s.position.copy(mouth);s.scale.setScalar(.6);scene.add(s);
+          puffs.push({s,t:0,life:.55,vel:new THREE.Vector3(Math.sin(yaw)*h.len/.55,(Math.random()-.6)*1.2,Math.cos(yaw)*h.len/.55)});}}
+    }
     else if(h.kind==='mark'){const k=h.t/h.life;h.mesh.material.opacity=.25+.5*Math.abs(Math.sin(h.t*14))*k;h.mesh.scale.setScalar(1.1-.1*k);done=h.t>=h.life;}
     else if(h.kind==='boulder'){
       const k=Math.min(1,h.t/h.ev.flight);h.mesh.position.lerpVectors(h.from,h.to,k);h.mesh.position.y+=Math.sin(k*Math.PI)*3.2;h.mesh.rotation.x+=dt*6;h.mark.material.opacity=.3+.4*k;
@@ -960,23 +1063,27 @@ function updateHazards(dt){
         scene.remove(h.mark);h.mark.geometry.dispose();h.mark.material.dispose();done=true;
       }
     }
-    if(done){scene.remove(h.mesh);if(h.kind==='mark'){h.mesh.geometry.dispose();h.mesh.material.dispose();}hazards.splice(i,1);}
+    if(done){if(h.mesh)scene.remove(h.mesh);if(h.kind==='mark'){h.mesh.geometry.dispose();h.mesh.material.dispose();}hazards.splice(i,1);}
   }
+  for(let i=puffs.length-1;i>=0;i--){const p=puffs[i];p.t+=dt;p.s.position.addScaledVector(p.vel,dt);p.vel.multiplyScalar(Math.exp(-1.2*dt));const k=p.t/p.life;p.s.scale.setScalar(.6+k*2.6);p.s.material.opacity=.7*(1-k);
+    if(p.t>=p.life){scene.remove(p.s);p.s.material.dispose();puffs.splice(i,1);}}
 }
+const puffs=[],breathMat=new THREE.SpriteMaterial({map:(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(240,250,255,.9)');gr.addColorStop(.5,'rgba(200,230,255,.35)');gr.addColorStop(1,'rgba(200,230,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;})(),transparent:true,depthWrite:false,opacity:.7});
+function frostBreath(c,ev){hazards.push({kind:'breath',c,t:0,dur:ev.dur,len:ev.len,half:ev.half,emit:0});}
 // Garrow's shard barrage (phase 2): three crystals in a fan, flying flat and fast at your chest.
 function throwShards(c,ev){
   for(let i=0;i<ev.n;i++){
     const yaw=ev.yaw+(i-(ev.n-1)/2)*ev.spread,T=Math.max(.15,ev.dist/ev.speed),vel=new THREE.Vector3(Math.sin(yaw)*ev.speed,(ev.ty-ev.y)/T,Math.cos(yaw)*ev.speed);
-    const mesh=new THREE.Mesh(crystalGeo,crystalMat);mesh.scale.setScalar(.42);mesh.position.set(ev.x,ev.y,ev.z);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vel.clone().normalize());mesh.castShadow=true;scene.add(mesh);
-    enemyShots.push({mesh,vel,t:0,c,shard:true,gravity:0,label:'crystal shard',damage:ev.damage||1});
+    const mesh=new THREE.Mesh(crystalGeo,ev.ice?rimeMat:crystalMat);mesh.scale.setScalar(.42);mesh.position.set(ev.x,ev.y,ev.z);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vel.clone().normalize());mesh.castShadow=true;scene.add(mesh);
+    enemyShots.push({mesh,vel,t:0,c,shard:true,gravity:0,label:ev.ice?'rime shard':'crystal shard',damage:ev.damage||1});
   }
 }
 function updateEnemyShots(dt){
   for(let i=enemyShots.length-1;i>=0;i--){
-    const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=(s.gravity??6)*dt;p.addScaledVector(s.vel,dt);if(!s.shard)s.mesh.rotation.x+=dt*14;
+    const s=enemyShots[i],p=s.mesh.position;s.t+=dt;s.vel.y-=(s.gravity??6)*dt;p.addScaledVector(s.vel,dt);if(!s.shard)s.mesh.rotation.x+=dt*14;else if(s.attack==='icicle')s.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),s.vel.clone().normalize());
     const feet=groundY(player.x,player.z)+player.height,hitMe=Math.hypot(p.x-player.x,p.z-player.z)<.62&&p.y>feet&&p.y<feet+1.9&&!player.defeated;
     const stop=s.t>1.6||p.y<groundY(p.x,p.z)||collisionGrid.near(p.x,p.z).some(o=>p.y<o.top&&Math.hypot(p.x-o.x,p.z-o.z)<o.r);
-    if(hitMe){const from={type:s.shard?'gorilla':'monkey',name:s.shard?'GARROW':'GREEN MONKEY',x:p.x-s.vel.x*.2,z:p.z-s.vel.z*.2,deflect:()=>true};incomingStrike(from,{attack:s.shard?'barrage':'seed',label:s.label||'seed pellet',kind:'light',damage:s.damage||1});}
+    if(hitMe){const from={type:s.c?.type||(s.shard?'gorilla':'monkey'),name:s.c?.name||(s.shard?'GARROW':'GREEN MONKEY'),x:p.x-s.vel.x*.2,z:p.z-s.vel.z*.2,deflect:()=>true};incomingStrike(from,{attack:s.attack||(s.shard?'barrage':'seed'),label:s.label||'seed pellet',kind:'light',damage:s.damage||1});}
     if(hitMe||stop){scene.remove(s.mesh);enemyShots.splice(i,1);}
   }
 }
@@ -1108,12 +1215,13 @@ const SNAP_KEYS=['x','z','heading','state','t','attack','health','maxHealth','al
 // shared, run by the host's game, only while the host and you are both within SHARE_R of it; everywhere else
 // each game runs its own creatures. Garrow and the lantern thieves follow each explorer's own story, so they
 // are shared only when the host is at the same point of that quest (do it together, or each on your own).
-const SHARE_R=36,questPart=st=>!st?'?':STAGES.findIndex(x=>x.id===st)<STAGES.findIndex(x=>x.id==='shadow_seal')?'before':st;
-const storyCreature=c=>c.type==='gorilla'||c.lantern!==undefined,sameQuest=st=>questPart(st)===questPart(story.stage);
+// Book III's White Maw and its brazier imps follow the same rule, against the Frostbound seal.
+const SHARE_R=36,sealOf=c=>c.type==='maw'||c.brazier!==undefined?'frost_seal':'shadow_seal',questPart=(st,seal='shadow_seal')=>!st?'?':STAGES.findIndex(x=>x.id===st)<STAGES.findIndex(x=>x.id===seal)?'before':st;
+const storyCreature=c=>c.type==='gorilla'||c.lantern!==undefined||c.type==='maw'||c.brazier!==undefined,sameQuest=(c,st)=>questPart(st,sealOf(c))===questPart(story.stage,sealOf(c));
 /** Guest: a story creature the host is not at the same point of the quest for (so it stays this game's own). */
-const personal=c=>storyCreature(c)&&!sameQuest(coop.hostPos()?.stage);
+const personal=c=>storyCreature(c)&&!sameQuest(c,coop.hostPos()?.stage);
 /** Host: can this other explorer share this creature with me? */
-const sharesWith=(c,o)=>nearTo(c,o)&&(!storyCreature(c)||sameQuest(o.stage));
+const sharesWith=(c,o)=>nearTo(c,o)&&(!storyCreature(c)||sameQuest(c,o.stage));
 const nearTo=(c,o,r=SHARE_R)=>!!o&&Math.hypot(c.x-o.x,c.z-o.z)<r;
 /** Guest: is this creature in a fight with the host right now? */
 function sharedHere(c){if(!coop.guest||personal(c))return false;const h=coop.hostPos();return nearTo(c,h)&&nearTo(c,player);}
@@ -1204,7 +1312,7 @@ function strikesLocal(c){
 function scaleBosses(){
   // +70% health per extra hunter, on top of its level scaling (baseMax is set when it wakes), and its poise grows too.
   const k=1+.7*(coop.teamSize-1);
-  for(const c of [warden,creatures.find(g=>g.type==='gorilla'&&g.alive&&g.remote===false&&coop.others().some(o=>nearTo(g,o)))]){if(!c)continue;c.baseMax||=c.maxHealth;c.team=1+.6*(coop.teamSize-1);const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
+  for(const c of [warden,...creatures.filter(g=>(g.type==='gorilla'||g.type==='maw')&&g.alive&&g.remote===false&&coop.others().some(o=>nearTo(g,o)))]){if(!c)continue;c.baseMax||=c.maxHealth;c.team=1+.6*(coop.teamSize-1);const want=c.baseMax*k;if(Math.abs(c.maxHealth-want)>.5){c.health*=want/c.maxHealth;c.maxHealth=want;}}
 }
 
 /** Orrun falls with you in the hollow (or you finish Book I): your class weapon is yours from now on. */
@@ -1225,6 +1333,9 @@ function creatureDefeated(c){
   // Book II: monkeys driven off count toward the hunt; freeing Garrow breaks the crown-glass.
   if(c.type==='monkey'&&story.stage==='shadow_hunt'){const done=story.bump('monkeys');persist();if(done){story.advance('shadow_memory');persist();setTimeout(()=>toast('THE TRAIL LANTERNS HOLD',story.info.objective),1200);playTone(620,.35,.05,'sine');}else toast('GREEN MONKEY DRIVEN BACK',story.objectiveText);}
   if(c.type==='gorilla'&&story.stage==='shadow_guardian'){announce('story','freed Garrow, the Rootbound, in Shadowmere');story.advance('shadow_report');persist();setTimeout(()=>toast('THE CROWN-GLASS BREAKS','Garrow sinks to one knee and its eyes clear. Take the shard to Maren.'),1400);playTone(540,1.2,.08);}
+  // Book III: wolves and imps driven off count toward the hunt; freeing the White Maw breaks its collar.
+  if((c.type==='wolf'||c.type==='imp')&&c.brazier===undefined&&story.stage==='frost_hunt'){const done=story.bump('rime');persist();if(done){story.advance('frost_memory');persist();setTimeout(()=>toast('THE WHITE ROAD IS CLEAR',story.info.objective),1200);playTone(620,.35,.05,'sine');}else toast(`${c.name} DRIVEN BACK`,story.objectiveText);}
+  if(c.type==='maw'&&story.stage==='frost_guardian'){announce('story','freed the White Maw in the Frostbound Crown');story.advance('frost_report');persist();setTimeout(()=>toast('THE COLLAR SHATTERS','The White Maw lies down in the snow and its eyes clear. The lake begins to sing. Tell Veyra.'),1400);playTone(540,1.2,.08);}
 }
 /** Strike a creature. In a team fight a guest's hit is also sent to the host, whose game decides. */
 function strikeCreature(c,params){
@@ -1278,7 +1389,7 @@ function updateHUD(){
   $('echoCount').textContent=story.reached('end')?`LIGHTS ${lightsFrom(story)} / 5`:`MEMORIES ${memories.size} / 3`;
   $('staminaFill').style.width=`${player.stamina}%`;
   let next=story.stage==='gate'&&inHollow(player)?{x:BED.x,z:BED.z,title:'ORRUN'}:story.target();
-  if(realmAt(next.x,next.z)!==realmAt(player.x,player.z)){const out=realmAt(player.x,player.z)==='shadow'?ROOTWAY_BACK:ROOTWAY;next={x:out.x,z:out.z,title:`ROOTWAY · ${realmAt(next.x,next.z)==='shadow'?'SHADOWMERE':'THE REACH'}`};}
+  {const door=doorToward(next);if(door)next=door;}
   const distance=Math.round(Math.hypot(next.x-player.x,next.z-player.z));
   $('distance').textContent=`${next.title||'CANOPY GATE'} · ${units.dist(distance)}`;
   updateWaypoint(next,distance);updateMinimap(next,1/30);
@@ -1290,7 +1401,9 @@ function updateHUD(){
   let region='VERDANT REACH';for(const s of SITES)if(Math.hypot(s.x-player.x,s.z-player.z)<18)region=s.title;
   if(Math.hypot(player.x-world.city.x,player.z-world.city.z)<world.city.radius)region=world.city.name;
   if(Math.hypot(player.x-world.home.x,player.z-world.home.z)<world.home.radius)region=world.home.name;
-  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';if(Math.hypot(SHADOWMERE.x-player.x,SHADOWMERE.z-player.z)<SHADOWMERE.r)region='SHADOWMERE';if(inLanternhold(player.x,player.z))region='LANTERNHOLD · SAFE GROUND';$('region').textContent=region;
+  if(Math.hypot(GATE.x-player.x,GATE.z-player.z)<17)region='THE CANOPY GATE';if(Math.hypot(SHADOWMERE.x-player.x,SHADOWMERE.z-player.z)<SHADOWMERE.r)region='SHADOWMERE';if(inLanternhold(player.x,player.z))region='LANTERNHOLD · SAFE GROUND';
+  if(Math.hypot(FROSTBOUND.x-player.x,FROSTBOUND.z-player.z)<FROSTBOUND.r+6){region='THE FROSTBOUND CROWN';if(Math.hypot(FROST_LAKE.x-player.x,FROST_LAKE.z-player.z)<FROST_LAKE.r+2)region='THE STILL LAKE';if(Math.hypot(FROST_COURT.x-player.x,FROST_COURT.z-player.z)<FROST_COURT.r+1)region='THE KNEELING COURT';if(Math.hypot(MAW_SEAL.x-player.x,MAW_SEAL.z-player.z)<14)region='THE MAW’S DEN';if(inHearthfast(player.x,player.z))region='HEARTHFAST · SAFE GROUND';}
+  $('region').textContent=region;
   const crit=!combat.busy&&critTarget(),nearby=nearestInteractable();
   $('interaction').classList.toggle('hidden',!!dialogue||(!nearby&&!crit&&!combat.charging));
   if(combat.charging)$('interaction').innerHTML=`CHARGING · ${'◆'.repeat(combat.chargeLevel)}${'◇'.repeat(2-combat.chargeLevel)}`;
@@ -1299,11 +1412,15 @@ function updateHUD(){
   else if(nearby?.type==='npc')$('interaction').innerHTML=`<b>E</b> · TALK TO ${nearby.value.name}${story.speaker===nearby.id?' <b>◆</b>':''} <small>${nearby.value.title}</small>`;
   else if(nearby?.type==='rift')$('interaction').innerHTML=`<b>E</b> · ENTER THE HOLLOW RIFT <small>${bossWindow().open?`HUNT · LV ${bossWindow().level}+`:`SEALED UNTIL ${huntDayName()}`}</small>`;
   else if(nearby?.type==='riftHome')$('interaction').innerHTML='<b>E</b> · RETURN TO MOSSGATE';
-  else if(nearby?.type==='rootway')$('interaction').innerHTML=`<b>E</b> · CROSS INTO SHADOWMERE <small>${realmLocked('shadow')?`NEEDS LEVEL ${REALM_LEVEL.shadow} · YOU ARE ${level()}`:'THE ROOTWAY IS OPEN'}</small>`;
+  else if(nearby?.type==='rootway')$('interaction').innerHTML=`<b>E</b> · CROSS INTO SHADOWMERE <small>${realmLocked('shadow')?realmLock('shadow')[2]:'THE ROOTWAY IS OPEN'}</small>`;
+  else if(nearby?.type==='rootwayFrost')$('interaction').innerHTML=`<b>E</b> · CROSS INTO THE FROSTBOUND CROWN <small>${realmLocked('frost')?realmLock('frost')[2]:'THE ROOTWAY IS OPEN'}</small>`;
+  else if(nearby?.type==='rootwayFrostBack')$('interaction').innerHTML='<b>E</b> · RETURN TO SHADOWMERE <small>LANTERNHOLD</small>';
+  else if(nearby?.type==='rimeThrone')$('interaction').innerHTML='<b>E</b> · TOUCH THE FROZEN CIRCLET <small>WHAT THE COURT REMEMBERS</small>';
+  else if(nearby?.type==='frostBrazier')$('interaction').innerHTML=impsAt(nearby.value.i).length?'<b>E</b> · THE BRAZIER <small>DRIVE OFF THE IMPS FIRST</small>':`<b>E</b> · THAW THE ${nearby.value.side} BRAZIER <small>THE MAW’S SEAL</small>`;
   else if(nearby?.type==='shadowSeed')$('interaction').innerHTML='<b>E</b> · TOUCH THE LANTERN SEED <small>WHAT THE FALLS REMEMBER</small>';
   else if(nearby?.type==='sealLantern')$('interaction').innerHTML=thievesAt(nearby.value.i).length?'<b>E</b> · THE LANTERN <small>DRIVE OFF THE THIEVES FIRST</small>':`<b>E</b> · RELIGHT THE ${nearby.value.side} LANTERN <small>GARROW’S SEAL</small>`;
   else if(nearby?.type==='rootwayBack')$('interaction').innerHTML='<b>E</b> · RETURN TO THE VERDANT REACH <small>MOSSGATE</small>';
-  else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':(inLanternhold(player.x,player.z)?'<b>E</b> · REST AT THE BRAZIER <small>LANTERNHOLD</small>':'<b>E</b> · REST AT THE TRAIL STONE');
+  else if(nearby)$('interaction').innerHTML=nearby.type==='echo'?`<b>E</b> · REMEMBER ${nearby.value.title}`:nearby.type==='gate'?'<b>E</b> · ENTER THE CANOPY GATE':(inLanternhold(player.x,player.z)?'<b>E</b> · REST AT THE BRAZIER <small>LANTERNHOLD</small>':inHearthfast(player.x,player.z)?'<b>E</b> · REST BY THE HEARTH <small>HEARTHFAST</small>':'<b>E</b> · REST AT THE TRAIL STONE');
 }
 // The quest tracker (top left): the act, its steps as pips, the objective, which way
 // and how far, and a thin bar for the whole story. A new objective flashes in gold.
@@ -1468,7 +1585,7 @@ function update(rawDt){
   else if(player.velocityY!==0)player.grounded=false;
 
   // The story: conversations, the active chapter's hollowed, the keepers.
-  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);rootway.update(elapsed);updateProjectiles(dt);coop.update(rawDt,elapsed);
+  updateDialogue(rawDt);updateEncounters();updateBoss(rawDt);bossEvent.update(rawDt,elapsed);rootway.update(elapsed);frostRootway.update(elapsed);updateProjectiles(dt);coop.update(rawDt,elapsed);
   if(coop.teamSize>1&&coop.authority)sendWorld(rawDt);
   if(dev.breath){player.stamina=STAMINA.max;player.winded=false;}if(dev.showColliders)updateCollisionViz();
   if(dialogue&&elapsed-dialogue.opened<.9){const n=speakerOf(dialogue.id);player.cameraYaw+=angleTo(player.cameraYaw,yawOf(n.x-player.x,n.z-player.z))*(1-Math.exp(-6*rawDt));player.pitch=THREE.MathUtils.damp(player.pitch,-.05,5,rawDt);}
@@ -1494,8 +1611,9 @@ function update(rawDt){
       if(c===warden&&handleBossEvent(c,ev))continue;
       if(ev.type==='quake'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.25);shoulderCam.punch(.55);sound.attack('slam');hitstop=Math.max(hitstop,.06);}
       else if(ev.type==='shellBroken'){sound.topple();slowMo(.4,.35);toast('THE SHELL BREAKS','Its head is exposed and it is enraged.');}
-      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':ev.attack);cue(attackCue(ev),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
-      else if(ev.type==='attack')sound.attack(ev.attack);
+      else if(ev.type==='windup'){sound.windup(c.type,ev.attack==='quake'?'slam':moveOf(ev.attack));cue(attackCue(ev),.7);debug.note(`${c.name||c.type} → TELEGRAPH ${ev.attack}`,elapsed);}
+      else if(ev.type==='attack')sound.attack(moveOf(ev.attack));
+      else if(ev.type==='breath'){frostBreath(c,ev);sound.erupt();}
       else if(ev.type==='swipe')sound.swipe();
       else if(ev.type==='pounceLand'){sound.thud();effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,1.6,.25);}
       else if(ev.type==='throw')throwSeed(c,ev);
@@ -1504,18 +1622,19 @@ function update(rawDt){
       else if(ev.type==='poundRing'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),ev.from,ev.to,ev.duration);sound.attack('slam');shoulderCam.punch(.4);}
       else if(ev.type==='boulder')throwBoulder(c,ev);
       else if(ev.type==='shards')throwShards(c,ev);
-      else if(ev.type==='taunt'){if(c.type==='gorilla'){sound.roar();cue('GARROW IS TAUNTING · PUNISH IT',1);}else{sound.windup('monkey','flurry');cue('IT’S SHOWING OFF · PUNISH IT',.9);}}
-      else if(ev.type==='crystalsBroken'){const at=new THREE.Vector3(ev.x,ev.y,ev.z);sound.erupt();sound.topple();slowMo(.35,.5);shoulderCam.punch(.5);effects.burst(at,new THREE.Vector3(0,1,0),true);effects.chips(at);spikesAt(c.x,c.z,6,1.2);toast('BACK CRYSTALS SHATTERED','Garrow is down, and it has nothing left to throw. Root Strike while it’s on its back.');}
+      else if(ev.type==='taunt'){if(c.brute){sound.roar();cue(`${c.type==='maw'?'THE WHITE MAW':'GARROW'} IS TAUNTING · PUNISH IT`,1);}else{sound.windup('monkey','flurry');cue('IT’S SHOWING OFF · PUNISH IT',.9);}}
+      else if(ev.type==='crystalsBroken'){const at=new THREE.Vector3(ev.x,ev.y,ev.z);sound.erupt();sound.topple();slowMo(.35,.5);shoulderCam.punch(.5);effects.burst(at,new THREE.Vector3(0,1,0),true);effects.chips(at);spikesAt(c.x,c.z,6,1.2,0,spikeMatFor(c));toast(c.type==='maw'?'RIME SPIRES SHATTERED':'BACK CRYSTALS SHATTERED',c.type==='maw'?'The White Maw is down, and it has no ice left to throw. Root Strike while it’s on its back.':'Garrow is down, and it has nothing left to throw. Root Strike while it’s on its back.');}
       else if(ev.type==='grabbed'){cue('CAUGHT',.8);shoulderCam.punch(.35);sound.attack('charge');}
       else if(ev.type==='grabSlam'){sound.thud();sound.attack('slam');shoulderCam.punch(.6);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.4,2,.25);effects.chips(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z));}
       else if(ev.type==='roar'){sound.roar();shoulderCam.punch(.5);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.35);}
       else if(ev.type==='chargeCrash'){sound.thud();sound.topple();shoulderCam.punch(.5);cue(`${c.name||'GARROW'} IS DAZED · ROOT STRIKE`,1.2);}
       else if(ev.type==='leapLand'){sound.attack('leap');shoulderCam.punch(.55);effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),.6,2.4,.25);}
-      else if(ev.type==='spikeLine'){spikeLine(ev.x,ev.z,ev.yaw,ev.from,ev.len);sound.erupt();}
+      else if(ev.type==='spikeLine'){spikeLine(ev.x,ev.z,ev.yaw,ev.from,ev.len,spikeMatFor(c));sound.erupt();}
       else if(ev.type==='eruptMark')markAt(ev.x,ev.z,ev.r,ev.fuse);
-      else if(ev.type==='eruptBurst'){spikesAt(ev.x,ev.z,7,ev.r*.8);sound.erupt();shoulderCam.punch(.2);}
-      else if(ev.type==='phase'){sound.roar();slowMo(.4,.5);introsSeen.delete(c);introShot(c,2.6);toast('PHASE 2 · THE CROWN-GLASS TAKES HOLD','Crystal bursts through Garrow’s back and climbs its arm. New attacks, faster, and a grab you cannot block.');}
-      else if(ev.type==='phaseBlast'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.3);shoulderCam.punch(.6);sound.attack('slam');spikesAt(ev.x,ev.z,10,ev.radius*.7);}
+      else if(ev.type==='eruptBurst'){spikesAt(ev.x,ev.z,7,ev.r*.8,0,spikeMatFor(c));sound.erupt();shoulderCam.punch(.2);}
+      else if(ev.type==='phase'){sound.roar();slowMo(.4,.5);introsSeen.delete(c);introShot(c,2.6);if(c.type==='maw')toast('PHASE 2 · THE COLLAR CRACKS','Rime and crown-glass burst out of the White Maw’s back. New attacks, faster, and a bite you cannot block. Break the spires from behind.');else toast('PHASE 2 · THE CROWN-GLASS TAKES HOLD','Crystal bursts through Garrow’s back and climbs its arm. New attacks, faster, and a grab you cannot block.');}
+      else if(ev.type==='phaseBlast'){effects.shockwave(new THREE.Vector3(ev.x,groundY(ev.x,ev.z),ev.z),1,ev.radius,.3);shoulderCam.punch(.6);sound.attack('slam');spikesAt(ev.x,ev.z,10,ev.radius*.7,0,spikeMatFor(c));}
+      else if(ev.type==='alert'&&c.type==='maw'&&!c.introduced){c.introduced=true;sound.roar();introShot(c,2.6);toast('BOSS · THE WHITE MAW','The Frostbound Crown’s keeper, collared in crown-glass by Ashmere’s frozen court. Watch its jaw: when it glows, the breath is coming.');}
       else if(ev.type==='alert'&&c.type==='gorilla'&&!c.introduced){c.introduced=true;sound.roar();introShot(c,2.4);toast('BOSS · GARROW, THE ROOTBOUND','Shadowmere’s old lamplighter. Black crown-glass is fused to its hand, and it fights for whoever put it there.');}
       else if(ev.type==='alert'){sound.alert();if(c!==warden)tip('fight','THE HOLLOWED ATTACK','Click to strike · R heavy (hold to charge) · Q lock on · Shift dashes through a blow · C guards; raise it just before a hit to parry.');}
       else if(ev.type==='strike')incomingStrike(c,ev);
@@ -1602,11 +1721,13 @@ function update(rawDt){
   player.step-=dt;if(planar>.5&&player.grounded&&player.step<=0){player.step=guarded?.38:.45;playTone(74+Math.random()*20,.06,.013,'triangle');}
   effects.update(rawDt);
   debug.update({combat,bones:avatar.bones,creatures,player:playerPos,lockTarget,animator:avatar.animator,authored:!!avatar.isAuthored});
-  world.sun.position.set(player.x-45,groundY(player.x,player.z)+95,player.z-50);
+  // A low winter sun over the Frostbound Crown: long blue shadows across the snow.
+  const lowSun=world.frost;world.sun.position.set(player.x-45-30*lowSun,groundY(player.x,player.z)+95-55*lowSun,player.z-50-12*lowSun);
   world.sun.target.position.set(player.x,groundY(player.x,player.z),player.z);
   world.sun.target.updateMatrixWorld();
-  updateLanternhold();
+  updateLanternhold();updateHearthfast();
   shadowmere.update(rawDt,elapsed,player,camera,world.updateAtmosphere(player.x,player.z,rawDt));
+  frostbound.update(rawDt,elapsed,player,camera,world.frost);
   world.animated.forEach(({mesh,type,baseY,index})=>{
     if(type==='echo'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.y+=dt*.6;}
     if(type==='ring'){mesh.position.y=baseY+Math.sin(elapsed*1.8+index)*.3;mesh.rotation.z+=dt*.7;}
@@ -1631,7 +1752,14 @@ avatar.setAppearance(profile.appearance);hands.setAppearance(profile.appearance)
 const shadowmere=createShadowmere(scene,{groundY,addCollider:c=>collisionGrid.add(c),creatures});
 // Lanternhold (lanternhold.js): the safe town in Shadowmere. Its Great Lantern burns bright once Garrow is freed.
 const lanternhold=createLanternhold(scene,{groundY,addCollider:c=>collisionGrid.add(c)});
-let insideTown=false;
+// The Frostbound Crown (frostbound.js): Book III's world, with Hearthfast, the court and the Maw's seal.
+const frostbound=createFrostbound(scene,{groundY,addCollider:c=>collisionGrid.add(c),creatures});
+let insideTown=false,insideCamp=false;
+function updateHearthfast(){
+  const inside=inHearthfast(player.x,player.z);
+  if(inside&&!insideCamp){cue('HEARTHFAST · SAFE GROUND · NOTHING FOLLOWS YOU PAST THE HEARTHWOOD',1.6);playTone(520,.4,.05,'sine');}
+  insideCamp=inside;
+}
 function updateLanternhold(){
   const here=realmAt(player.x,player.z)==='shadow';lanternhold.root.visible=here;if(!here){insideTown=false;return;}
   lanternhold.setRelit(story.reached('shadow_report'));lanternhold.update(elapsed);
@@ -1685,8 +1813,10 @@ camera.position.set(player.x,groundY(player.x,player.z)+1.65,player.z);updateHUD
 if(params.has('arena')){
   if(!profile.complete){profile.complete=true;profile.introSeen=true;saveProfile();}
   player.z=37;player.cameraYaw=0;resume();
-  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,lanternhold,crossRealm,realmAt,get travelling(){return travelling;},profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
+  window.__verdant={player,combat,creatures,camera,world,collisionGrid,hands,groundY,get avatar(){return avatar;},get lockTarget(){return lockTarget;},toggleLock,keyState,debug,attack:attackPressed,heavy:heavyPressed,evade:evadePressed,guard:guardPressed,flask:()=>combat.press('flask'),sprint:on=>{shiftDownAt=on?performance.now()-1000:-1;},get elapsed(){return elapsed;},story,npcs,talk:openDialogue,advanceDialogue,get dialogue(){return dialogue;},interact,spawned,bossEvent,huntLive,get warden(){return warden;},chronicles,chooseDialogue,coop,respawn,dev,devJumpTo,teleport,equipWeapon,shadowmere,lanternhold,frostbound,crossRealm,realmAt,realmLocked,get travelling(){return travelling;},profile,devOverrides,get mech(){return mech;},get lockTarget2(){return lockTarget;},camera,shoulderCam};
 }
 // A non-destructive encounter route for checking the new realm and its combat.
 // Unlike ?arena, this never completes the profile or writes player progression.
 if(params.has('shadowmere'))resume('shadow');
+// ?frostbound opens Book III's world directly (whatever the level or the day), without changing the story.
+if(frostTest)resume('frost');

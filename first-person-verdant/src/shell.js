@@ -1,4 +1,4 @@
-import {announce,catchUp,cohortLevel,CATCH_UP,realLevel as realLevelOf,BIOMES,METRICS,STAT_SOURCES,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,xpForLevel,weekKey,logActivity,CLASS_INFO,recommendedClass,recommendedPath,pathInfo,HYBRIDS,classUnlock,pathLocked,HYBRID_REQ,classReason,frame,weaponEligibility,myClasses,CLASS_WEAPON,WEAPON_LEVEL,CLASS_STAT,caps,claimedStats,logLift,removeLift,liftRecords,liftSummary,unlockedTitles,weeklyPlan,planWeekKey,checkPlanItem,uncheckPlanItem,sickNow,markSick,markBetter,sickDays,SICK,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
+import {realmDateOpen,realmOpensLabel,announce,catchUp,cohortLevel,CATCH_UP,realLevel as realLevelOf,BIOMES,METRICS,STAT_SOURCES,FRAMES,PERSONALITY,profile,saveProfile,loadProfile,stats,rawStats,level,xpForLevel,weekKey,logActivity,CLASS_INFO,recommendedClass,recommendedPath,pathInfo,HYBRIDS,classUnlock,pathLocked,HYBRID_REQ,classReason,frame,weaponEligibility,myClasses,CLASS_WEAPON,WEAPON_LEVEL,CLASS_STAT,caps,claimedStats,logLift,removeLift,liftRecords,liftSummary,unlockedTitles,weeklyPlan,planWeekKey,checkPlanItem,uncheckPlanItem,sickNow,markSick,markBetter,sickDays,SICK,testStatus,recordTest,growth,goalBoon,GOALS,setGoal,logWeighIn,nextWeighIn,localDay,percentile} from './profile.js';
 import {mechanicsTable,ABILITIES,unlockedAbilities} from './mechanics.js';
 import {WORKOUTS,WORKOUT_NOTE,EXERCISES,TITLES,e1rm} from './training.js';
 import {createLinkCode,claimLinkCode} from './identity.js';
@@ -32,8 +32,12 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const short={strength:'STR',speed:'SPD',stamina:'STA',defense:'DEF',intelligence:'INT',discipline:'DIS'};
 
 // Worlds you can travel to today; the rest show their level and COMING NEXT.
-const OPEN_REALMS=['grove','shadow'];
+const OPEN_REALMS=['grove','shadow','frost'];
 const devRealms=()=>!!window.__devRealms;
+// A realm opens at its level and, if it has one, on its opening day (Book III: Sun Nov 15). IGNORE LEVEL LOCKS in
+// the dev panel and ?frostbound (for the Frostbound Crown) skip both.
+const realmTest=id=>devRealms()||(id==='frost'&&!!window.__frostTest);
+const levelOpen=b=>level()>=b.level||realmTest(b.id),dayOpen=b=>realmDateOpen(b.id)||realmTest(b.id);
 export function createShell(entry,canvas,globe,{enterGame,pauseGame,onAppearance,narrator,dressingRoom,weapon,saveNow}){
   loadProfile();let socialTab='board',workoutId='A',testBefore=null,goalEdit=false,view='menu',line=0,typing=null,selected=BIOMES[0],pointer=null,notice='',reminderNote='',mind=null,quizQ=null,quizTimer=null,quizResult=null,personalityIndex=0;
   const stopTyping=()=>{if(typing){clearInterval(typing);typing=null;}if(narrator)narrator.talking=false;if(quizTimer){clearInterval(quizTimer);quizTimer=null;}};
@@ -421,9 +425,9 @@ function renderWeekly(){
     };
   }
   function renderMap(){
-    entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd></dl>${OPEN_REALMS.includes(selected.id)&&(level()>=selected.level||devRealms())?button('enter',`ENTER ${selected.name} →`,true):`<button type="button" class="primary" data-action="enter" disabled>${level()<selected.level&&!devRealms()?`LOCKED · LEVEL ${selected.level}`:'COMING NEXT'}</button>`}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${level()<b.level&&!devRealms()?`LV ${b.level}`:OPEN_REALMS.includes(b.id)?'OPEN':'SOON'}</small></button>`).join('')}</div></div></section>`;
+    entry.innerHTML=`<section class="map-shell"><div class="map-heading"><span class="eyebrow">THE HOLLOW ROOTS · ATLAS</span><h2>THE LIVING WORLD</h2><p>Drag the globe through 360° · choose a realm</p>${button('back','← TITLE')}</div><div class="map-details"><span class="eyebrow">SELECTED REALM</span><h2 style="color:${selected.color}">${selected.name}</h2><p>${selected.description}</p><dl><dt>CREATURES</dt><dd>${selected.creatures}</dd><dt>GUARDIAN</dt><dd>${selected.guardian}</dd><dt>REQUIRED LEVEL</dt><dd>${selected.level} · YOU ARE LV ${level()}</dd>${selected.opens?`<dt>OPENS</dt><dd>${realmOpensLabel(selected.id)}${dayOpen(selected)?' · OPEN':''}</dd>`:''}</dl>${OPEN_REALMS.includes(selected.id)&&levelOpen(selected)&&dayOpen(selected)?button('enter',`ENTER ${selected.name} →`,true):`<button type="button" class="primary" data-action="enter" disabled>${!levelOpen(selected)?`LOCKED · LEVEL ${selected.level}`:OPEN_REALMS.includes(selected.id)&&!dayOpen(selected)?`OPENS ${realmOpensLabel(selected.id)}`:'COMING NEXT'}</button>`}<div class="realm-list">${BIOMES.map(b=>`<button class="${selected.id===b.id?'selected':''}" data-realm="${b.id}"><i style="background:${b.color}"></i>${b.short}<small>${!levelOpen(b)?`LV ${b.level}`:!OPEN_REALMS.includes(b.id)?'SOON':!dayOpen(b)?realmOpensLabel(b.id).slice(4):'OPEN'}</small></button>`).join('')}</div></div></section>`;
     entry.querySelector('[data-action="back"]').onclick=()=>show('menu');
-    entry.querySelector('[data-action="enter"]').onclick=()=>{if(OPEN_REALMS.includes(selected.id)&&(level()>=selected.level||devRealms()))enterGame(selected.id);};
+    entry.querySelector('[data-action="enter"]').onclick=()=>{if(OPEN_REALMS.includes(selected.id)&&levelOpen(selected)&&dayOpen(selected))enterGame(selected.id);};
     entry.querySelectorAll('[data-realm]').forEach(b=>b.onclick=()=>{selected=BIOMES.find(v=>v.id===b.dataset.realm);globe.face(selected);renderMap();});
   }
   canvas.addEventListener('pointerdown',e=>{if(view!=='map')return;pointer={x:e.clientX,last:e.clientX,moved:false};canvas.setPointerCapture(e.pointerId);});

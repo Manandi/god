@@ -1,5 +1,6 @@
-import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE, LANTERNHOLD as LH } from './world.js';
+import { SITES, GATE, SHADOWMERE as SM, ROOTWAY, SEED_SHRINE, LANTERNHOLD as LH, FROSTBOUND as FB, HEARTHFAST as HF, FROST_ROOTWAY, RIME_THRONE, MAW_SEAL } from './world.js';
 const lh = (a, d, extra = {}) => ({ x: LH.x + Math.cos(a) * d, z: LH.z + Math.sin(a) * d, ...extra });
+const hf = (a, d, extra = {}) => ({ x: HF.x + Math.cos(a) * d, z: HF.z + Math.sin(a) * d, ...extra });
 
 // The Verdant Reach story: one questline that runs through every site on the
 // lantern trail. Stages are strictly ordered; each chapter follows the same
@@ -30,7 +31,8 @@ const lh = (a, d, extra = {}) => ({ x: LH.x + Math.cos(a) * d, z: LH.z + Math.si
 // Each Book ends by freeing that realm's keeper and pointing to the next world:
 //   Book I   The Verdant Reach   (Orrun, the Thursday hunt)          → Halden hears the roots pull west
 //   Book II  Shadowmere (lv 3)    (Garrow, the Rootbound Gorilla)     → a shard of crown-glass points north
-//   Book III The Frostbound Crown (lv 5) where what's left of Ashmere waits: next to be built.
+//   Book III The Frostbound Crown (lv 5)  (the White Maw, collared by Ashmere's frozen court) → the Crown went for fire
+//   Book IV  The Ember Wastes (lv 9): next to be built.
 // To add a world: append its stages after the last one (saves keep their place), give it a
 // keeper in NPCS and a Book in progress/journal, and end on the hook into the next.
 //
@@ -63,7 +65,7 @@ export const SAGA = [
     reveals: 'Ashmere bought strength without labour, through Mosswatch. The rot is its leftovers.' },
   { book: 'II', realm: 'shadow', title: 'SHADOWMERE', level: 3, weeks: 'Oct 8 – Nov 14', keeper: 'Garrow', light: 'the Lantern Seed', built: true,
     reveals: 'Ashmere did not only drink: it put the lights out to hide where it went. Its blade was cut from a crown.' },
-  { book: 'III', realm: 'frost', title: 'THE FROSTBOUND CROWN', level: 5, weeks: 'Nov 15 – 28', keeper: 'the White Maw', light: 'the Rime Seed',
+  { book: 'III', realm: 'frost', title: 'THE FROSTBOUND CROWN', level: 5, weeks: 'Nov 15 – 28', keeper: 'the White Maw', light: 'the Rime Seed', built: true, opens: '2026-11-15',
     reveals: 'Ashmere’s court froze itself here to wait for its ruler, the Hollow Crown, who left long ago to steal fire.' },
   { book: 'IV', realm: 'ember', title: 'THE EMBER WASTES', level: 9, weeks: 'Nov 5 – 25', keeper: 'the Pyreback Colossus', light: 'the Ember Seed',
     reveals: 'The Crown burned the Colossus to forge itself a body that cannot die, as long as no one knows its name.' },
@@ -73,7 +75,7 @@ export const SAGA = [
     reveals: 'Final boss, Thursday 31 December: every hunter together, five lights, one true name.' }
 ];
 /** How many of the Five Lights you carry (a keeper freed in each finished Book). */
-export const lightsFrom = story => (story.reached('end') ? 1 : 0) + (story.reached('frost_wait') ? 1 : 0);
+export const lightsFrom = story => (story.reached('end') ? 1 : 0) + (story.reached('frost_wait') ? 1 : 0) + (story.reached('ember_wait') ? 1 : 0);
 
 const site = id => SITES.find(s => s.id === id);
 const titleCase = text => text.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -110,6 +112,13 @@ export const NPCS = {
     look: { skin: 0xd9a77c, hair: 0x7a2e1e, iris: 0x355468, cloth: 0x7a3b2e, trousers: 0x3a2a20, mouthTilt: .07 } },
   lio: { name: 'LIO', title: 'LAMPLIGHTER’S CHILD', ...lh(-1.48, 4.05), facing: Math.PI / 2, scale: .72,
     look: { skin: 0xb97959, hair: 0x2b2a35, iris: 0x4d382d, cloth: 0x8a6a2a, mouthTilt: .08 } },
+  // Book III: Hearthfast, the last fire in the Frostbound Crown (owner, 2026-10-30).
+  veyra: { name: 'VEYRA', title: 'HEARTHKEEPER OF THE FROSTBOUND CROWN', ...hf(Math.PI * .8, 3.1), facing: Math.PI * .3,
+    look: { skin: 0xc48f68, hair: 0xe6e1d8, iris: 0x3b5a6e, cloth: 0x7a3328, trousers: 0x3a3430, braid: true, mouthTilt: .03 } },
+  brin: { name: 'BRIN', title: 'ICE-CUTTER', ...hf(Math.PI * 1.25, 5.2), facing: Math.PI * .7, scale: 1.06,
+    look: { skin: 0x9a6b4f, hair: 0x5a3a24, iris: 0x3b2a20, cloth: 0x4a5a66, trousers: 0x2c3038, beard: true, browTilt: .12, armTilt: .13 } },
+  aud: { name: 'AUD', title: 'THE THAWED HERALD', ...hf(.35, 3.4), facing: -Math.PI / 2, scale: .94,
+    look: { skin: 0xb8c4cc, hair: 0xcfd6dc, iris: 0x6a5a9a, cloth: 0x4b3a66, trousers: 0x2f2a3a, mouthTilt: -.02 } },
   pip: { name: 'PIP', title: 'APPRENTICE SCOUT', x: 3, z: -140.5, facing: .61, scale: .85,
     look: { skin: 0xc48f68, hair: 0x9a5638, iris: 0x385342, cloth: 0x476f59, mouthTilt: .06 } }
 };
@@ -161,8 +170,17 @@ export const STAGES = [
   { id: 'shadow_seal', book: 2, objective: 'Relight the three dark lanterns round Garrow’s seal', target: { x: SM.guardian.x, z: SM.guardian.z + 11, title: 'GARROW’S SEAL' }, count: ['lanterns', 3] },
   { id: 'shadow_guardian', book: 2, objective: 'Boss fight: free Garrow, the Rootbound Gorilla, in the clearing', target: { ...SM.guardian, title: 'GARROW' } },
   { id: 'shadow_report', book: 2, objective: 'Bring the broken shard to Maren', target: 'maren' },
-  // ---- Book III · The Frostbound Crown (level 5): the next world to be built. Its stages go after this one.
-  { id: 'frost_wait', book: 3, objective: 'Grow to level 5: Book III, the Frostbound Crown, opens next (from Sun Nov 15)', target: 'maren' }
+  // ---- Book III · The Frostbound Crown (level 5, from Sun Nov 15; owner, 2026-10-30: "the snow world"). Saves at
+  // frost_wait (the old "grow to level 5" step) carry straight on: it is now the crossing, like shadow_cross.
+  { id: 'frost_wait', book: 3, objective: 'Cross into the Frostbound Crown through the Rootway in Lanternhold (level 5, from Sun Nov 15)', target: { ...FROST_ROOTWAY, title: 'THE ROOTWAY NORTH' } },
+  { id: 'frost_meet', book: 3, objective: 'Follow the white road to Hearthfast and find Veyra the Hearthkeeper', target: 'veyra' },
+  { id: 'frost_hunt', book: 3, objective: 'Drive back the rime wolves and frost imps circling Hearthfast', target: { x: FB.x + 6, z: FB.z + 22, title: 'THE WHITE ROAD' }, count: ['rime', 4] },
+  { id: 'frost_memory', book: 3, objective: 'Find what the frozen court remembers, at the empty throne', target: { ...RIME_THRONE, title: 'THE EMPTY THRONE' } },
+  { id: 'frost_seal', book: 3, objective: 'Thaw the three frozen braziers round the White Maw’s den', target: { x: MAW_SEAL.x, z: MAW_SEAL.z + 11, title: 'THE MAW’S SEAL' }, count: ['braziers', 3] },
+  { id: 'frost_guardian', book: 3, objective: 'Boss fight: free the White Maw in its den', target: { x: MAW_SEAL.x, z: MAW_SEAL.z, title: 'THE WHITE MAW' } },
+  { id: 'frost_report', book: 3, objective: 'Tell Veyra the White Maw is free', target: 'veyra' },
+  // ---- Book IV · The Ember Wastes (level 9): the next world to be built. Its stages go after this one.
+  { id: 'ember_wait', book: 4, objective: 'Grow to level 9: Book IV, the Ember Wastes, opens next', target: 'veyra' }
 ];
 const index = id => STAGES.findIndex(s => s.id === id);
 
@@ -325,7 +343,9 @@ const DIALOGUE = {
       ['<shadow_seal', 'The falls were Garrow’s favourite place. If anything remembers what happened to it, the water does.'],
       ['<shadow_guardian', 'Crown-glass drinks light, but it cannot hold it. Those three lanterns by the clearing went dark the night Garrow was sealed. Light them again, and mind the thieves who nest there.'],
       ['<shadow_report', 'Garrow carried the light from tree to tree when I was young. Whatever is holding that sword is not Garrow. Free it, please.'],
-      ['>=frost_wait', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. Two lights of five, {name}. Come back stronger. I will keep a lantern lit for you.']
+      ['<frost_meet', 'The Frostbound Crown. I have only seen it in drawings. White, still, and very quiet. The lamplighters raised a Rootway for it in Lanternhold, by the well: it opens at level 5, from Sunday the 15th of November. Two lights of five, {name}. I will keep a lantern lit for you.'],
+      ['<ember_wait', 'Cold came down the Rootway after you, just for a breath, then it went warm again. Whatever you are doing up there, keep doing it.'],
+      ['>=ember_wait', 'Three lights. Shadowmere’s lanterns lean north now, toward the one who carries them. Wherever the Crown went for fire, you will need all the light you can carry.']
     ]
   },
   ondine: {
@@ -344,6 +364,8 @@ const DIALOGUE = {
       ['<shadow_seal', 'Maren says the falls remember what happened to Garrow. Go and listen to the water.'],
       ['<shadow_guardian', 'A seal of crown-glass around Garrow? That is not forest work. Someone came here on purpose, and wanted it to last.'],
       ['<shadow_report', 'Whatever happens in that clearing, remember that Garrow carried our light for a hundred years. Bring it home if you can.'],
+      ['<frost_wait', 'Look up, {name}. The Great Lantern is burning the way it did when I was a girl. Lanternhold will not forget who did that.'],
+      ['<frost_meet', 'We raised a Rootway in the plaza, by the well. It hums cold, and frost grows on the stones round it every morning. It will carry you north at level 5, from Sunday the 15th of November.'],
       ['>=shadow_report', 'Look up, {name}. The Great Lantern is burning the way it did when I was a girl. Lanternhold will not forget who did that.']
     ]
   },
@@ -370,6 +392,53 @@ const DIALOGUE = {
     idle: [
       ['<shadow_report', 'I had a monkey called Pim. He used to sit on our roof and hold the lantern for me. Now he only comes at night, and he takes things. I think he is sad.'],
       ['>=shadow_report', 'Pim came back! He brought a seed and put it in our lantern. You did that, didn’t you?']
+    ]
+  },
+  // Book III · the Frostbound Crown. Veyra keeps the last fire at Hearthfast; Brin cuts ice and hunts the wolves; Aud is
+  // a herald of Ashmere's court who thawed out by the hearth, and remembers it in pieces.
+  veyra: {
+    main: {
+      frost_meet: { then: 'frost_hunt', lines: [
+        'Off the snow, quickly. Into the warm. You came through the Rootway from Lanternhold? Then the lamplighters still remember us.',
+        'I am Veyra. I keep the hearth at Hearthfast, the last fire in the Frostbound Crown. Out there everything is still. In here, at least, things still move.',
+        'That is what the Hollowing looks like here: stillness. In the Reach it ate memory, in Shadowmere it ate light. Here it takes warmth first, and then the wish to move at all.',
+        'The rime wolves used to pull our sledges. The cold got into them and now they only remember hunger, and the frost imps run with them like sparks off a fire that went out.',
+        'Mind the wall: it is hearthwood, and nothing that hunts in the cold will cross it. Rest by the fire whenever you need to. If you fall out there, you will wake here.',
+        'The wolves and imps are circling the camp. Drive four of them back off the white road, so my people can reach the woodpiles before the fire runs low.'
+      ] },
+      frost_report: { then: 'ember_wait', lines: [
+        'The White Maw is free? Listen. The ice on the lake is singing. It has not made a sound since before my grandmother was born.',
+        'It was never the court’s guardian. It was ours: the keeper of the Rime Seed. Every winter it curled round the seed so the snow would come soft, and every spring it let it go.',
+        'Ashmere’s court collared it with crown-glass and made it guard their waiting instead. And they are still waiting, kneeling to an empty chair. Their ruler, the Hollow Crown, left them to steal fire. They froze themselves so they would still be there when it came back, and they took the whole realm’s warmth with them.',
+        'Here: the Rime Seed’s light. The Maw would want you to carry it. Orrun’s, Garrow’s, and now the Maw’s: three of five. There is cold in it, but it is a living cold. It will keep.',
+        'Fire, {name}. The Crown went south, to the Ember Wastes, where the ground still burns. Grow stronger first: the way there opens at level 9. Until then, Hearthfast’s fire is yours.'
+      ] }
+    },
+    idle: [
+      ['<frost_meet', 'Who is out there? Come to the fire before the cold decides you belong to it.'],
+      ['<frost_memory', 'Wolves hunt in pairs: when one circles wide, watch the other. The imps throw icicles from range, so close in fast, or guard. Four of them, {name}, and come back warm.'],
+      ['<frost_seal', 'The court is west, past the still lake. They are kneeling to an empty throne. Whatever they are waiting for, the throne remembers it.'],
+      ['<frost_guardian', 'The three braziers round the Maw’s den went out the night the court froze, and the imps nest in the ice round them. Light them again and the seal will thaw.'],
+      ['<frost_report', 'The Maw is not cruel. It is cold, and it is collared. Break the collar’s hold and bring it back to us.'],
+      ['>=ember_wait', 'Three lights of five, {name}. The fire is yours whenever you need it. Come back warm, and come back.']
+    ]
+  },
+  brin: {
+    main: {},
+    idle: [
+      ['<frost_memory', 'Rime wolves? Watch the shoulders. When one drops low it is about to leap: step aside, not back. The snap is quick, so guard it and answer.'],
+      ['<frost_guardian', 'I cut ice for the camp. The braziers by the den? That is not lake ice on them. It hums. Fire is the only thing that gets through it.'],
+      ['<frost_report', 'If you fight the Maw: when it rears up, the ground is about to break, so jump. When its jaw glows, its breath comes in a cone: get beside it, or behind. And when the ice grows out of its back, break it before it throws it at you.'],
+      ['>=frost_report', 'The lake is cracking all the way across. Spring, after all this time. I will have to find honest work.']
+    ]
+  },
+  aud: {
+    main: {},
+    idle: [
+      ['<frost_seal', 'Do not stare, child. I know what I am. Veyra’s people found me in the ice by the lake and carried me to the fire. I was a herald, once. Of the court.'],
+      ['<frost_guardian', 'We were told to wait. Kneel, keep still, and our ruler would come back with fire enough for all of us. I was the only one who could not keep still. I was cold.'],
+      ['<frost_report', 'The collar on the Maw was cut from the same glass as the crown. The court made it the night the Crown left. I carried the order. I have been sorry a long time.'],
+      ['>=frost_report', 'The Crown had a name once, before it was hollow. I heard it said, the day it left. I cannot find it: it is like a word frozen under the ice. The dead might remember it, if anyone does.']
     ]
   },
   pip: {
@@ -547,7 +616,8 @@ export function createStory(saved, memories) {
       }
       if (i < index(CHAPTERS[0].id)) return { act: 'BOOK I · PROLOGUE · THE WAYFINDER', step: i, steps: 3, overall: i / (STAGES.length - 1) };
       if (s.book === 2) { const first = index('shadow_cross'); return { act: 'BOOK II · SHADOWMERE', step: i - first, steps: index('shadow_report') - first + 1, overall: i / (STAGES.length - 1) }; }
-      if (s.book === 3) return { act: 'BOOK III · THE FROSTBOUND CROWN', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
+      if (s.book === 3) { const first = index('frost_wait'); return { act: 'BOOK III · THE FROSTBOUND CROWN', step: i - first, steps: index('frost_report') - first + 1, overall: i / (STAGES.length - 1) }; }
+      if (s.book === 4) return { act: 'BOOK IV · THE EMBER WASTES', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
       return stage === 'end' ? { act: 'BOOK I · EPILOGUE · THE FOREST REMEMBERS', step: 1, steps: 2, overall: i / (STAGES.length - 1) } : { act: 'BOOK I · FINALE · ORRUN', step: 0, steps: 1, overall: i / (STAGES.length - 1) };
     },
     /** Where the compass points. */
@@ -583,6 +653,11 @@ export function createStory(saved, memories) {
       pages.push({ title: 'THE FOURTH MEMORY · THE LAMPLIGHTERS', text: 'Garrow carried the Lantern Seed’s light from tree to tree, and the monkeys followed it like moths. Then riders in Ashmere grey came through the falls with a blade of black crown-glass. They did not drink. They fused the blade to Garrow’s hand, so the keeper’s own strength would keep the lights out for them.', open: story.reached('shadow_seal') });
       pages.push({ title: 'THE SEAL', text: 'They sealed Garrow inside a ring of crown-glass and put out the three lanterns round its clearing. Crown-glass drinks light but cannot hold it: relight the lanterns and the seal breaks. Then Garrow will fight, and the glass will fight harder once it is losing.', open: story.reached('shadow_seal') });
       pages.push({ title: 'THE SHARD POINTS NORTH', text: 'Garrow sleeps, and the crown-glass broke. Every cut face points north, to the Frostbound Crown, where whatever is left of Ashmere waits, frozen and patient. The Rootway north opens at level 5.', open: story.reached('frost_wait') });
+      pages.push({ title: 'BOOK III · THE FROSTBOUND CROWN', text: 'North of Shadowmere lies the Frostbound Crown, where the snow never melts. Here the Hollowing is stillness: it takes warmth first, then the wish to move at all. Veyra keeps the last fire at Hearthfast, and the rime wolves that once pulled her people’s sledges circle it, hungry.', open: story.reached('frost_meet') });
+      pages.push({ title: 'HEARTHFAST', text: 'A ring of hearthwood round one great fire, the last warm place in the realm. Nothing that hunts in the cold will cross its wall. Rest by the hearth; if you fall in the snow, you wake beside it.', open: story.reached('frost_meet') });
+      pages.push({ title: 'THE FIFTH MEMORY · THE KNEELING COURT', text: 'Ashmere’s court came north with its ruler, the Hollow Crown. Then the Crown left them, to steal fire, and told them to wait. They knelt to its empty throne and let the cold take them, so they would still be there when it came back. Their stillness is the Hollowing here, and they took the realm’s warmth with them.', open: story.reached('frost_seal') });
+      pages.push({ title: 'THE MAW’S SEAL', text: 'The court collared the White Maw, the Rime Seed’s keeper, with crown-glass and sealed it in its den behind three braziers they let freeze. Thaw the braziers and the seal breaks. Then the Maw will fight, and the glass will fight harder once it is losing.', open: story.reached('frost_seal') });
+      pages.push({ title: 'THE CROWN WENT FOR FIRE', text: 'The White Maw is free, and the lake is singing again. Veyra gave you the Rime Seed’s light: three of five. The Hollow Crown left its court to steal fire, in the Ember Wastes, where the ground still burns. The way there opens at level 9.', open: story.reached('ember_wait') });
       return pages;
     },
     serialize() { return { v: 2, stage, cleared: [...cleared], decisions: { ...decisions }, tally: { ...tally } }; }
